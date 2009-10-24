@@ -1,0 +1,54 @@
+YSM Convert Project.
+++++++++++++++++++++
+
+The idea of YSMConvert is to create an amount of scripts
+to allow users with other ICQ Clients to convert their contacts
+database to YSM in a fast and easy way.
+
+Using these scripts, you may dump to stdout a parsed and organized
+output of your icq contacts, that is, a list compatible with Ysm.
+Just paste that output in your YSM Config file, below the [SLAVES]
+line.
+
+
+* Trillian to Ysm * [ by GasFed ]
+--------------------
+
+Convert your trillian contact list into ysm format!
+Usage: cat Buddies.xml | perl trillian2ysm.pl
+
+* CenterICQ to Ysm * [ by SToRM NiGHT <storm@malditainternet.com> ]
+---------------------
+
+Now CENTERICQ users can translate their contact lists into 
+YSM format using this brand new wonderful perl script.
+Just run "centericq.pl" and it will look for your $HOME/.centericq/
+directory and print the results to stdout.
+
+* Licq to Ysm *	[ by A. David Weil - aweil@mail.ru - ]
+---------------
+
+Now YSM users have the chance to transform their LICQ
+contact lists to YSM format so they can easily append 
+the output of licq2Ysm to their YSM config files!.
+
+Just run licq2Ysm with the same user who's got the .licq
+directory in his home directory.
+
+Use: ./licq2Ysm
+
+the default output file is named: "APPEND-IT-TO-YSM-Config"
+
+
+* clb to Ysm *	[ by A. David Weil - aweil@mail.ru - ]
+---------------          
+
+Mirabilis(r) ICQ Client 2001 and + for Windows generates a file
+with an extension ".clb" that contains a backup of your contact
+list. Using the "clb2Ysm.sh" script, you can generate an Ysm 
+compatible slaves list.
+
+Use: ./clib2Ysm.sh file.clb > dumpfile
+
+
+$Id: README,v 1.6 2003/05/19 01:02:38 rad2k Exp $

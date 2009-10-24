@@ -1,0 +1,22 @@
+Rome wasn't built in a day..neither will be ysmICQ.
+
+Bug fixes
+.........
+	- Make every color being printed in YSM_Prompt.c configurable through YSM_Setup.c and ysm's configuration file.
+
+	- Make some final checks in logging: are we logging encrypted messages?
+
+	- Charset issues in Win32 with KOI8-R. Proper convertion is not taking place. Alexey Zakhraov has contacted me stating that the problem is that Windows uses 2 different encodings for the Russian language. CP866 is used in console applications (inherited from MS-DOS) and CP1251 is used in GUIs. Given that ICQ clients are graphical and they expect CP1251, we need to convert from CP866 to CP1251. This should already work in ysm by setting CHARSET_TRANS to be 1251 and CHARSET_LOCAL to be 866, but for some reason it isn't working under Windows (Win32 is not using iconv).
+
+	- Alexander A. Chernenkiy has reported a problem in ysm under sparc & Redhat using the hotkeys. He states that hotkeys get triggered no matter if the cursor is beyond the start-of-line. I have already reviewed the corresponding source code lines but haven't found a possible problem. I haven't had a chance of debugging his problem. This happens with the readline library, he couldn't get --disable-readline to compile.
+
+	- Matthias B. has reported a problem between ysmICQ and GAIM|Trillian where UTF-8 encoded messages are being displayed as ascii by these clients. It seems as if ysmICQ is not telling them that its UTF-8 compatible. He's using CHARSET_TRANS set to ISO885915 and CHARSET_LOCAL>ISO885915.
+
+	- WINNT 4.x throws an exception when creating the invisible window used for WINHOTKEY. I remember debugging this in the past and I think it was actually a Windows problem. 
+
+Feature requests
+................
+
+	- Serge Matveev has requested the addition of support for text-mode attributes described in 'man 5 termcap or man 5 terminfo'. The most important attributes are: bold and underline.
+
+	- MSN protocol support

@@ -1,0 +1,1455 @@
+$Id: ChangeLog,v 1.226 2007/01/29 18:13:25 rad2k Exp $
+
+ysm ICQ - Having fun with a boring protocol - ChangeLog file.
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Note, the entries in this text file are in no way a full description
+of the source changes. Instead, a full description is provided upon
+each cvs commit. The intention of this file is to provide a simple
+explanation of the most significant user-level changes.
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
++++++++++++++++++++++++++ ysm 2.9.9.1 +++++++++++++++++++++++++++++++++
+++++++++++++++++++ Bringing ICQ back to life ++++++++++++++++++++++++++
+
+19th Jan 2007
++ Fixed a messages-related bug that prevented ysm from parsing received
+messages. The error was triggered due to a recent protocol change (a TLV type
+5 was introduced before the actual TLV type 5 with the data showed up).
+
++++++++++++++++++++++++++ ysm 2.9.9 +++++++++++++++++++++++++++++++++++
+++++++++++++++++++++++++ Reviving ICQ +++++++++++++++++++++++++++++++++
+
+25th Oct 2006
++ Again, another protocol fix. A new TLV was introduced in the initial connection packages (0x8e) and that pretty much broke our client. Reviving ICQ!
+
++++++++++++++++++++++++++ ysm 2.9.8 +++++++++++++++++++++++++++++++++++
++++++++++++++++++++++ Giving life to ICQ ++++++++++++++++++++++++++++++
+
+12th Feb 2006
++ ICQ protocol fix. In the past few days, AOL changed the ICQ protocol a bit,
+that way disabling a lot of clone clients. This fix re-enables ysmICQ. Have
+fun!
+
+
++++++++++++++++++++++++++ ysm 2.9.7 +++++++++++++++++++++++++++++++++++
++++++++++++++++++++++ Ready for the future ++++++++++++++++++++++++++++
+
+26th Dec 2005
++ Removed UIN registration from ysmICQ. It is no longer possible to register
+UINs using ysm. Instead, a link is provided to icq.com where to register a
+UIN online.
+
+13th Sep 2005
++ New YSM_TRACE_MEMLEAK option in YSM_Config.h provides a way of tracing down
+memory leaks in ysm.
+
+3rd Sep 2005
++ fixed lots of warnings in Cygwin. ysm looks so lovely when run under cygwin..really.
+
+19th Aug 2005
++ my 22nd birthday :) as always - it deserves a line in ysm's ChangeLog.
+
+31st Jul 2005
++ Bug fix! fixed an exception being thrown while deleting the last slave in the slaves list. Thanks to Alexey Semonov for reporting the problem. 
+
+9th Jul 2005
++ ysmICQ is now an official package of the Debian distribution! Thanks to Ilya M. Slepnev who took all the hard work of packaging it and finding a sponsor! It's available as an unstable package by now.
+
+12 Jun 2005
++ Bug fix! reported a few months ago by a user through sourceforge's bug
+system. Pager messages generated a crash. They are now received correctly.
++ Added ucs2be_decode, meaning that KOI8-R users in windows clients might now
+be decoding characters correctly. This needs confirmation!
+
+29th Apr 2005
++ patch sent by Antony Pavloff related to the TAB completion feature. The
+patch fixes a few weird behaviors - Thanks Antony.
+
+14th Apr 2005
++ win32 warnings fix. source code cleanup.
+
+5 Feb 2005
++ It's been a long time.. and this time for real. I've added a few missing checks on iconv_close, cleaning up a few warnings that showed up in MacOSX when running ysm.
++ Added support for WINALERT to non OS/2 - Windows operating systems. Now anything that supports ICONIFY/DECONIFY will have its WINALERT. Tested to run ok in MacOSX.
++ Updated ysm's website to add a few MacOSX screenshots.
+
+24th Oct 2004
++ bugfix. the online slaves counter was not being reset during reconnects. Thanks to f00li5h for reporting this.
++ new language translation (CZ) submitted by Kuda Ondrej
+
+11th Oct 2004
++ added a comment to new configuration files in CHARSET_TRANS and CHARSET_LOCAL  saying that for Windows console users, the default settings for the Russian language should be CHARSET_TRANS>1251 and CHARSET_LOCAL>866 since the Windows console uses the 866 codepage. Thanks to Alexey Zakharov for the headsup.
++ started fixing charset convertion support for Windows. Hope this does it for the russian users out there!
+
+10th Oct 2004
++ been a long time! patch by Dominic Waesch. It adds the slave-colors to YSM_PrintSlaves, so that one can see the names of the slaves in the chosen color. Fixed a few strncat calls introduced with COMPACT_DISPLAY back in february 2003.
++ fixes on comfortable mode (broken in the CVS)
+
+21st Aug 2004
++ fixing prompt redraw for AFK mode.
++ now incrementing the AFK message counter for messages coming from nonslaves.
++ removed the MSG_KIND setting. It was obsolete.
+
+19th Aug 2004
++ my birthday! 21 years old now.
+
+25th Jul 2004
++ patch sent by MSB related to Memory Leaks.
++ patch sent by MSB: clean up for YSM_ReadLog and new tokenizer.
+
+17th Jul 2004
++ patch sent by MSB related to colors.
+	a. Adds the colors TERMINAL_DEFAULT and BRIGHT_TERMINAL_DEFAULT. These set the default color the user has configured for the terminal
+	b. Adds the colors GRAY and BRIGHT_GRAY. 
++ patch sent by MSB rewrote whole ReadSlaves function making it easier to add new slave fields in the config file. New YSM_trim function.
++ new YSM_IsInvalidPtr function that should be used in all function frames. We will use this as a wrapper to include ptr checking functions from win32 and unix (if any).
++ patch sent by MSB related to slave colors. It adds a new (optional) field to the SLAVES entries that takes a color. When a color is provided, then incoming message texts as well as the comfortable message editor will use that color. This makes communication with multiple slaves at the same time much easier, since you won't confuse incoming messages and won't accidentally send messages to the wrong slave.
++ patch sent by MSB related to status colors. Now get status-dependent coloring of the status word when a slave changes status. If you wish to override the status-dependent coloring, use the new COLOR_STATUSCHANGESTATUS option in ysm's cfg.
++ patch sent by MSB related to Charsets. Rewrote YSM_Iconv() to allow error recovery, now a corrupted charset-translated message will show <REST OF TEXT POSSIBLY CORRUPTED> instead of showing up empty as it did before.
++ patch sent by MSB turns more compiler warnings on and fixes lots of warnings we were missing due to our incompetence.
++ patch sent by Alex Samorukov (samm at os2 dot ru) fixes prompt redraw on CloseDC and in general for readline/getline support.
+
+++++++++++++++++++++++++++ ysm 2.9.6 ++++++++++++++++++++++++++++++++++
+++++++++++++++++++++ Peace, Love & Dreams  ++++++++++++++++++++++++++++
+
+10th Jul 2004
++ fix when reading the BROWSER> path from the config in win32. Path's with spaces were being cut
+
+4th Jul 2004
++ Alex Samorukov (samm at os2) sent a patch for YSM_Thread_Sleep fixing a 10% cpu usage.
++ [ts at rot13 dot de] sent a patch for getline, fixing support for umlauts.
++ Alex Samorukov (samm at os2) sent a patch for the CtrlHandler under unix.
++ fix for Win32. The burl command and actions used with arguments should now work ok. I spotted this bug blindly thanks to Johannes.
++ blind fix for the 'Age' field on the whois command. It sometimes showed up negative, changed d to %ud lets see if its fixed now, couldn't find any erroneous test case.
++ fixed crash on 'del' command. duplicate (erroneous cfg) entries in the config lead to a crash when deleting that slave name. Thanks to f00li5h for reporting the problem.
++ fix on COMMANDSFILE> . Any commands without arguments were being ignored.
++ fix for readline! the inputrc file was only being read from ~/.ysm/inputrc. If that file doesnt exist its now read from the default locations.
++ fix on TAB cycling for slaves. now cycling alphabetically.
+
+
+29th May 2004
++ started adding colors configuration support! By now you can select colors for COLOR_MESSAGE (message body colors) COLOR_STATUSCHANGENAME (nick on status changes) and COLOR_STATUSCHANGESTATUS (status on status changes).
+
+++++++++++++++++++++++++++ ysm 2.9.5 ++++++++++++++++++++++++++++++++++
+++++++++++++++++++ Unlimited, unlocked and wild +++++++++++++++++++++++
+
+1st May 2004
++ bugfix when creating the configuration file under Win32. If proxy settings were detected automatically and the user didn't want to use a proxy, the proxy was still being added to the configuration file.
++ bugfix when trying to send an 'mplain' command to an UIN instead of a slave. Crash fixed.
+
+28th Apr 2004
++ fixed a remaining issue in win32 introduced in 2.9.3 with crypto triggered when receiving an encrypted message from a slave you -already- had a key set with but different.
+
+25th Apr 2004
++ now the 'auto away' status is canceled and you are put back online, when you send a message. Note this only happens for 'auto away' and not any 'away' status changes you have done manually.
++ now reading automatic messages! (away, occupied, NA, DND and FFCHAT messages). They are shown while using the 'whois' command on a slave. If the slave has an automatic message set, it will be displayed under a label named 'Auto Message'.
++ setting FISHGUI> and FISHGUI_HIDE_CONSOLE> in default configurations to 0, since for non fishgui users this could represent a pain in the behind.
++ There was a mistake in YSM_Lang.h where there was a 'PORTUGUESE_BR' instead of a 'BR_PORTUGUESE', its now fixed. (Thanks to an anonymous who reported this).
++ fixed all calls to snprintf. Now -always- adding a trailing \0 byte. (This is because under WIN32 _snprintf does not always add it, even though snprintf on unix does.)
++ New 'WEBAWARE' setting in the configuration file. If set to 1, your status will be public (hence online status scripts will work).
++ New 'MYBIRTHDAY' setting in the configuration file. If set to 1, you will have the birthday flag so that everyone knows about it.
+
+24th Apr 2004
++ new alias for the 'hist' command, 'history'.
++ now recoding messages from users which are NOT in your contact list.
++ new NEWLOGSFIRST> setting for the configuration file. Can be set to
+'1' or '0'. If enabled (1 - default), newer logs will be added at the
+top of the log file (new style). Otherwise, newer logs will be added
+at the bottom of the log file (old style).
++ fix for readline users, the 'readafk' and 'hist' commands had keyboard
+related issues when using the menus.
+
+++++++++++++++++++++++++++ ysm 2.9.4 ++++++++++++++++++++++++++++++++++
+++++++++++++++++++ Cavernet Sauvignon Edition +++++++++++++++++++++++++
+
+1st Apr 2004
++ fixed an introduced bug in 2.9.3 related to the win32 version and
+encryption; when receiving encrypted messages from slaves in the list 
+to which you didn't have a key with. (thanks jrz and net23 for reporting it)
++ fixed configuration file parsing, if certain vars (i.e. PROXY_PORT) had a 0 length value, ysm would crash atoi(NULL). (thanks laura N. for reporting this)
+
+
+++++++++++++++++++++++++++ ysm 2.9.3 ++++++++++++++++++++++++++++++++++
+++++++++++++++++++++++ red wine and cheese ++++++++++++++++++++++++++++
+
+28th Mar 2004
++ new auto away mode and AWAYTIME> setting in the configuration file. If you are in online or freeforchat status, your status is changed to AWAY after n minutes of no keyboard input (5 by default).
++ extended the 'command line width' for WIN32 (it was 80 now its 95)
++ console related features fixed for win2k and XP systems.
++ now accepting '0' in proxy_host during config creation to cancel proxy cfg.
++ rewrote some crypto interfacing code, also turned from ok to beautifull :).
++ now 'reason' and 'filename' on filetransfers is being charset recoded too.
+
+21st Mar 2004
++ rewrote lots of network related code (it turned from ugly to beautifull)
++ Proxy related fixes. During UIN registration the HTTPS hack was not working.
++ Now all proxy configuration is prompted during config creation.
++ now the 'add' command works with 'add uin nick' and 'add nick uin'.
++ removed some output during log-in, we now show a poor status bar.
++ now showing the amount of online slaves in the output of the 'wo' command.
+
+
+20th Mar 2004
++ re-wrote output for the 'info' and 'whois' commands.
+whois command now shows: nick, first, last, email, city, state, phone
+fax, street, cellular, age, sex and about information. All being decoded.
++ info command now shows which input library is being used.
++ disabled work information from being displayed in whois (lots of screen waste)
+
+14th Mar 2004
++ UIN registration fixes. Now when registering a UIN it automagically creates the configuration file. 
+
+6th Mar 2004
++ now fingerprinting ICQ2GO - by Alex Samorukov
++ fix against ICQ2Go (who doesn't support UTF-8) - by Alex Samorukov
++ WINALERT now works on OS/2 - by Alex Samorukov
++ OS/2 API is now being used - By Alex Samorukov
++ Small fix on charsets for OS/2 with UCS2-BE - by Alex Samorukov
++ OS/2 makefile changes, reduced the binary size down to 190k - By Alex S.
++ New 'mv' alias for the 'rename' command.
++ Reversed the order of the logs. Newer logs will show up first (afk, history)
+
+1st Mar 2004
++ OS/2 support! Thanks to Alex Samorukov who sent all patches!
+
+28th Feb 2004
++ encoding 'whois' information if using specific charsets.
+
+16th Feb 2004
++ new 'ls' and 'l' aliases. They do the same thing as 'w' or '2'.
+
+8th Feb 2004
++ bug fix. Messages sent to slaves in DND status were being ignored (by the
+receiver) due to a missusage of priorities. (thanks to smile for reporting this)
++ bug fix. Also related to priorities. Now checking message length before ignoring a certain type of priority. (thanks to an anonymous from the forums)
+
+1st Feb 2004
++ added FRIBIDI support (A Free Implementation of the Unicode Bidirectional Algorithm - http://fribidi.sourceforge.net) use --with-fribidi to enable it. Thanks to David E. for sending a patch.
++ fix - we were ignoring priority messages from miranda clients.
+
+24th Jan 2004
++ fix for Win32 (actually its for both, preventing a deadlock inside the
+PRINTF call) removed busy display flag setting/clearing.
++ fix for non win32 systems, removed a mess of code from YSM_READ.
+
+++++++++++++++++++++++++++ ysm 2.9.2 ++++++++++++++++++++++++++++++++++
++++++++++++++++ Queer protocol for the straight guy +++++++++++++++++++
+
+10th Jan 2004
++ ctrl+c handler now tells you to type quit in order to exit ysm :)
++ now not letting encrypted messages fly in plaintext when sending to
+an offline user or to a user who's not using ysm with crypto. (this is
+when you have a key set with that user).
+
+4th Jan 2004
++ fix on the 'seen' command (signon timestamps were wrong)
++ fixed the unthreaded version of ysm
+
+3rd Jan 2004
++ IMFish modifications by aweil at mail dot ru
++ new AFKMINIMUMWAIT> setting to control seconds between AFK replies to slaves (thanks to [ts at rot13 dot de] for sending a patch!)
++ fix during config creation. Pressing enter for 'no proxy' was considered as configuring proxy settings. Thanks to Daniel Gaspary for noticing!.
+
+30th Nov 2003
++ bugfix (i.e: sending a comfortable msg to '?' threw a segfault) Thanks to Kpzul@ for pointing it out.
+
+22th Nov 2003
++ Not setting console title under OpenBSD (it screwed the console up) (fgsch)
++ fix on the 'chat' command, it was not working because of my fault obviously.
++ fixed slaves cycling with the TAB key.
+
+08th Nov 2003
++ bugfix, COMMANDSFILE> commands were executed BEFORE being fully logged in.
++ now accepting multiline messages in COMMANDSFILE>
++ bugfixes for the chat command and file transfer (I had broken them for 2.9.1)
+
+
+++++++++++++++++++++++++++ ysm 2.9.1 ++++++++++++++++++++++++++++++++++
++++++++++++++++++++++++ Illuminati Release ++++++++++++++++++++++++++++
+
+02th Oct 2003
++ I dont know if the threads bugs on win32 (hang on exit) is fixed or not,
+but aweil@mail.ru sure spent some time debugging and came up with a fix, thanks!
++ new FISHGUI_HIDE_CONSOLE setting, if set to 1, ysm automatically hide when
+executed with IMFish (imfish.sourceforge.net)
++ the release is coming out in these incoming days..sorry for the delay
+
+13th Sep 2003
++ now outputting the slave status on the 'whois' command (thanks Rudolf P.)
++ extended the length of commands executed from COMMANDSFILE> to the same was any input command. - Thanks Rudolf P.
+
+
+10th Sep 2003
++ fixes on BSD consoles (thanks Rudolf P.)
++ new ysm.dev <- makefile or project file for Dev c++ (free win32 compiler)
++ more work on FishGUI, a new plugable GUI for ysm.
+
+30th Aug 2003
++ fixed a few issues with console settings and readline.
+
+19th Aug 2003
++ my birthday!
++ now printing the 'about' information on the whois command output.
++ removed the sending of the UIN information during version check, I dont care anymore how many users I have, I know they all love ysm anyway ;).
++ removed CreateHotKey (CTRL+ALT hotkey) for WINNT 4.
+
+10th Aug 2003
++ new 'chat' command! you can start a conversation with multiple ysm users!
+just specify the nicks separated by ',' characters and optionally a message.
+For example: chat mike,peter,tom I'm away in a conference, msg logged.
+you can then leave the chat session by typing 'chat' again.
+
+9th Aug 2003
++ new help on 'hotkeys'
++ fixed issues with a few proxys.
+
+20th Jul 2003
++ fixed the scan command.
++ fixes on commands parsing (m nick   msgdata b c) (thanks jrz for the report)
++ fixes on getline + readline (clearing the line when receiving messages)
++ manpage updated by fritz@hush.com - new manpage maintainer.
+
+12th Jul 2003
++ removed the Automatic AFK mode. no more.
++ fixes on readline and iconv detection, actually I wrote new m4 macros for all.
+
+10th Jul 2003
++ added for unix systems 2 environment variables during exec of scripts.
+YSM_STATUS with our current status and YSM_UIN with our current icq #.
++ restored 1,2,3,4,5 and 6! ysm hotkeys with those numbers.
++ updated the russian translation (thanks Aquatique)
+
+09th Jul 2003
++ Argentina's Independence day.
++ added a croatian translation by fritz@hush.com, thanks!
++ added decoding of sent UCS-2BE messages (I find icq lite..guilty of charge!)
+
+28th Jun 2003
++ Improved packets dump! they are now easier to read :). 
++ fixed crash when deleting the last slave in the list.
++ fixed multiple issues on lists which contained only 1 slave.
++ fixed an infinite loop problem when pressing TAB for completion on the last
+slave in the list.
+
+14th Jun 2003
++ fix on DC_DISABLE, if it was set, cpu usage incremented considerably. Thanks to MSB for reporting this.
++ fix on zombie processes, seems we were leaving a few zombies behind. thanks to MSB for reporting this.
++ now reading readline macros from ~/.ysm/inputrc (thanks ccastig)
++ now by using the 'burl' command with '!' as an argument you can launch your browser for the last received url without having to type it yourself. (only applied to URL type messages, read about the 'url' command).
++ fix on prompt parsing, now filtering any extra spaces BEFORE an argument/command
+
+
+08th Jun 2003
++ removed the 'send client information' functionality during config creation.
+Moved the request inside the version checking system. Now when checking
+the client version, your UIN is sent with the request for statistic purposes.
+it will not be open to the public in order to preserve your privacy.
+This is detailed in the configuration file and will be detailed in the docs
+of the next incoming release.
+
+07th Jun 2003
++ bugfix on offline messages. There was a condition where offline messages weren't being sent correctly.
+
+2nd Jun 2003
++ now readline, getline and ysmline support! 
++ new --disable-readline for the configure script. The default used is readline.
+Non threaded systems will use ysmline. (the old console handling) (win32 uses getline by default)
+
+31st May 2003
++ possible bugfix to win32 threads hang on exit (closing a few sockets
+in order to make a blocking READ() exit with -1 while exiting)
+
+++++++++++++++++++++++++++ YSM 2.9.0 ++++++++++++++++++++++++++++++++++
+++++++++++++ Supercalifragilisticexpialidocious Release +++++++++++++++
+
+11th May 2003
++ new EXEC_ONCOMING EXEC_OFFGOING and EXEC_LOGOFF action event settings.
++ new SOUND_* settings in the configuration file. I've started a sound system
+in ysm! you will now be able to download sounds to a sounds/ directory in your 
+ysm's home path. new SOUND_PROGRAM setting in the configuration file.
++ new "sounds" command to globally enable or disable the usage of sounds in runtime. and new SOUNDS> setting in the cfg to do the same.
+
+10th May 2003
++ new DC_DISABLE setting in the cfg to disable direct connections
+(previously called DISABLEDC)
++ new DC_LAN setting to speed up negotiations in a local area network
+(it connects first to the internal address and not the external)
++ new DC_PORT1 and DC_PORT2 settings which allows the user to force
+direct connection ports in order to make ports redirection behind nat
+a simple task.
++ now EXEC_INCOMING and EXEC_OUTGOING receive as extra arguments the 
+remote uin, remote nick, message length and message data. (thanks to msb for the idea) You may now implement useful scripts rather than just playing sounds.
+
+04th May 2003
++ ysm now supports UTF8 encoding. It will encode and decode utf8 with clients that are utf8 compatible.
++ ysm charset support on win32 is now running.
++ ysm now clears the terminal title after leaving your session.
+
+26th Apr 2003
++ Fix in the SEND command. Now by specifying a filename enclosed in "" chars you can transfer files with spaces.
++ removed an initial sleep of 2 seconds that should speed up the login to the IM network.
++ Created a new PROXY_RESOLVE setting in the configuration file to let the proxy resolve hostnames. (thanks to Federico Renolfi).
++ bugfix: added checks on the FD_x() functions for negative sockets. I was reported a Reconnect segfault on OpenBSD's many times due to negative socks.
++ removed the BEEPAMOUNT setting in the configuration file, its functionality is now included in the BEEP setting.
++ bugfix: now ysm doesn't hang on empty configuration files.
++ fixed the command history, it should now act normally.
+
+20th Apr 2003
++ Fix on Win32 - now implementing an exit CtrlHandler which receives signals when the user shutdowns his workstation, closes the console window, etc. making possible a clean exit when no quit command is issued.
++ Fixes on file transfer speeds. Now transfering up to 1mb/sec.
+
+14th Apr 2003
++ Now notifying the user when sending/receiving ENCRYPTED file transfers.
+
+13th Apr 2003
++ now showing the amount of kilobytes per sec transfered/received on file transfers.
++ new ENCRYPTED file transfers between ysm clients if an encryption key is set!
+
+05th Apr 2003
++ fixed further opendc's after a closedc has been issued. Informing the user whenever the DC session is closed.
++ Now parsing out correctly slave nicknames which contained extended ascii characteres difficult to type.
+
+31st Mar 2003
++ enabled direct connections by default. ysm now supports file transfers
+and receiving of different type of direct messages with v8 clients.
+(including Mirabilis ICQ 2002/2003pro, Trillian, mICQ, etc..)
++ new DISABLEDCON> parameter which allows to keep private your internal address
+and direct connection port without publishing it to other icq users. 
+You will still be able to establish direct connections but at your will,
+only if you want to. Once you establish a connection to another slave, the
+other user will be able to send you files.
++ Huge code cleanup (Modified function names and parameters according to 
+the current icq protocol documentation to allow a quicker understanding)
+I re-wrote a lot of code and put up a Type2Common for DC messages and Type2
+messages since both share the same body.
++ bugfix: AFK messages weren't being sent to incoming type2 nor type4 messages.
+(thats why you sometimes didn't read the message sent line)
++ bugfix: Forwarding wasn't working for incoming type2 and type4 messages.
++ bugfix: Now receiving different type of offline messages, we were only allowing normal offline messages before. (Thanks to MSB for noticing this)
++ bugfix: Now TAB also works for incoming DC messages.
++ Wrote a new ysmICQ Users' Guide in XML with DocBook extensions, I'll commit the xml document and the html will be available in the next 2.9.0 release.
+
+25th Mar 2003
++ fix on slaves downloading (now it should download those missing slaves).
++ huge code cleanup. (removing old ugly code!)
++ Fixed a typo in a help output. thanks Roeland Th. Jansen.
+
+23rd Mar 2003
++ Added support for client fingerprinting over Capabilities and added support for simICQ fingerprinting.
++ oh btw i didn't mention i did ok in the exams a week and a half ago and i finally finished highschool :) Never ever try homeschool at least not in the last year!
+
+20th Mar 2003
++ More fixes on File transfers, we still aren't ready though. Soon will.
++ Fixed the beeping/flashing during a comfortable message when a new message arrived, possibly screwing things up. Plus reduced the amount of ms the output thread waited before printing the new message on screen.
+
+16th Mar 2003
++ Now showing our external ip address on the 'info command'
++ I finally have File transfers working, but! wait, they are disabled, i want to implement encrypted file transfers and fix a few bugs.
++ New faccept and fdecline commands to accept or decline an incoming. file transfer request.
++ New fstatus command to show info on the ongoing file transfers. (lovely).
++ New fcancel command to cancel an ongoing transfer.
+
+08th Mar 2003
++ Huge advances on file transfers, i was already able to SEND! a file to a mirabilis client (of course some bugs showed up, but the file was sent ;P). Im still not able to receive files but ill fix this with time. I won't have a 2.9.0 release until i get file transfers working.
++ New URL command. (for sending urls).
++ fixes on the contacts command (buggy when sending more than allowed contacts).
++ fixed type 2 message sending, as well as A and B (replaced messageid with respective timestamp+id -though they are random- )
++ new rtf command sends a smily face to a mirabilis client.
++ now identifying ourselves as an icq 2003a to mirabilis servers.
+
+02th Mar 2003
++ Lots of advances on file transfers.
++ Im having exams in the following 2 weeks so ill be busy i guess. Wish me luck!
++ Now setting the console title for unix terminals
+
+21th Feb 2003
++ Now the slaves list is sorted in alphabetic order! (by alejo, thank you!)
++ New YSM_Config.h! I moved all pre compiling configuration settings there!.
++ New COMPACT_OUTPUT pre compiling configuration setting. If activated,
+YSM output (such as slave lists, status changes, etc) are more compact.
++ bugfix: when adding a slave the whole list went offline, my mistake :) recently introduced on 20th Feb changes.
+
+20th Feb 2003
++ bugfix: Now clearing the status of the slaves when reconnecting.
++ Added lots of improvements, such as the initial splash screen.
+(made it win32 and non win32 portable!)
++ New 'opendc, closedc' commands.
++ New 'loadconfig' command for loading the configuration file on runtime!.
++ New COMMANDSFILE> setting in the configuration file for running commands from a file!
++ Rewrote Unicode/Charset support for win32 and non win32 systems!. I need configure.in to detect iconv automatically yet.
++ Now supporting UTF-8 Messages! (not yet implemented though)
++ New command not found error shown when using invalid commands.
++ New Help output! Check it out, its sorted in groups CLIENT/SETTINGS/etc..
++ Fixed a bug in DC_FileA, we are close to sending files over DC!
++ Now ACKing incoming DC messages.
++ New 'mplain' command for forcing plain messages if an encryption key is set.
++ Now the console title directly shows the UIN (it showed the pid in nt/2k systems)
++ New fingerprint -> Mirabilis ICQ Pro 2003A
+
+
+02th Feb 2003
++ Added support for url's and contact lists received through DC
++ Fixed backspace bug for some systems where if you left the backspace key pressed ysm went crazy.
++ Told the openbsd team about a bug in writing to stdout with the pthreads libc.
+(nothing harmfull for us, dont worry!) Will be fixed as soon as they fix it.
+
+
+28th Jan 2003
++ Added a 'Contacts Sent' message after sending contacts.
++ Added a few fixes to the WINHOTKEY feature.
++ Added some FD checks.
++ Fix on showing received contacts.
+
+27th Jan 2003
++ Now alert/log flags are saved in the configuration file!
++ New way of displaying the slaves list. 3 slaves per line now :)
++ Fixed pthreads leak on BSD systems!
++ Fixed reconnect problems on win32!
++ Finally! Implemented the HotKey for win32! Now using ctrl+alt+ a key specified in the WINHOTKEY> parameter in your configuration file (default is 's') the YSM Console window will restore if minimized and show up active.
++ removed win32 warnings.
+
+23th Jan 2003
++ New 'contact' or 'contacts' command for sending contacts!.
++ Now YSM support receiving contacts! It didnt before, now it does!.
+
+22th Jan 2003
++ lots of code cleanup.
++ lots of work on direct connections, still not available directly in the
+cvs version since it needs a few more touches, but im able to receive
+direct connections and messages via tcp. im still missing file transfers.
++ re-worked the Verbosity levels:
+# Normal output -> 5
+# - Remove status changes -> 0
+# - Remove connecting information -> 1
+# + Add direct connections information -> 20
+# + Add data checking information -> 21
+# + Add incoming/outgoing packets dump -> 22
+# + Add slaves downloading processing -> 23
+
+16th Jan 2003
++ new EXEC_INCOMING and EXEC_OUTGOING config params for executing commands
+on incoming messages and outgoing messages.
+
+14th Jan 2003
++ Code cleanup, ill be soon implementing actions on incoming/outgoing events.
++ replaced a realloc() call with the corresponding alloc, memcpy, free. -somehow- realloc wasn't working 100% ok in OpenBSD. probably my fault of course :)
++ added checks and fixes on saving contacts to the server, works ok for me!.
++ fix on logging, missing memset so new log entries had old stuff in it.
+
+12th Jan 2003
++ Fixed comfortable messages input. backspace didn't allow re-editing of a previous line and if a '.' was inserted as character 81 (not as char 0) the message was sent directly.
++ Fixed YSM_Connect for the kill command. actually for any usage which specified only an ip address without a hostname to resolve.
++ small fix on showing /me actions, a double space was shown.
+
+06th Jan 2003
++ Fixed input, sometimes prompt was eraseable.
++ Added a new prompt look. In AFK now the new amount of messages are shown.
+
+03th Jan 2003
++ Started working on File transfers (first packet works at least ;P)
++ Fixed slave cycling bugs in <tab>
++ added a new fingerprint -> Mirabilis ICQ lite
++ fixed Proxy configuration for Win32.
++ Fixed Scrolling (Page up/Page down) for Win32.
++ fixed proxy authentication code.
+
+31th Dec 2002
++ Almost New Year! 
++ Now the 'msg' command takes any amount of dests! as in msg a,b,c,d message.
++ Multiple line messages are now fixed (\n chars were filtered)
+
+30th Dec 2002
++ New version check fix by fgsch ! pre-releases are now marked as pre-releases.
++ Huge cleanup, the commands array is now a linked list, so I kinda organized all linked lists into YSM_Lists.c and .h
++ Fixed tab slaves cycling
++ Added support for the 'z' command (or minimize) in unix too! (for xterms)
+
+26th Dec 2002
++ Changed maximum message len! Seems we are now able to send messages
+up to 2547 bytes before the server starts ignoring them!.
++ Added a <press any key to exit> to YSM_Exit on win32.
+
+21th Dec 2002
++ Added proxy authentication scheme! Thanks to Federico Renolfi for the diffs!
++ Fixes for QNX! pthreads do exist but integrated in the libc!.
+  Thanks to Vincent Lonngren for the patch.
++ Win32 compilation fixes and code cleanup.
+
+
+17th Dec 2002
++ Now failing connects dont neccesary exit ysm.
++ handlign SIGPIPE signal to YSM_Reconnect on unix systems.
++ new 'reconnect' command, guess for what ;)
++ removed ASK_DOWNLOAD, won't be around no more.
++ fixed config file comments
+
+12th Dec 2002
++ Tried to fix reconnects, the thing is that a closesocket was issued
+as soon as the connection went down, so the FIN couldnt reach destination
+its now sent every time reconnect gets out of the sleep.
++ Added timestamp on the YSM Sent Msg line
++ Added the STATUS of the remote slave on the YSM Sent Msg line
++ Fixed TYPES, now we have int8, int16, int32 (_t) and u_ everything.
++ Added the new reconnect command for reconnecting manually too.
++ Fixed a bug on UPDATENICKS, if you had a key with the slave you were updating, it got lost :) now it doesn't.
++ Fixed proxy request issue, if it found an internet explorer setting, just hitting enter would exit the proxy configuration
+
+09th Dec 2002
++ new UPDATENICKS> setting. If set to 1 (default) your slave names will be
+updated whenever you run a whois on them with their current nick names.
++ fixed clonning problems in your contact list, there was a problem when
+adding duplicate slaves, it would mark the slave as downloaded and then throw
+an error when deleting the slave.
++ mostly code cleanup, lots.
++ Fixed an UNK status code bugging around, now you probably see more people online when doing 'w' ;) it was an unknown NA status.
++ Fixed the status command, it wasnt recognizing invisible, instead, it was turning into online or something else.
+
+6th Dec 2002
++ ######### YSM FIRST BIRTHDAY ############ YSM IS ONE YEAR OLD! ######
+
+01th Dec 2002
++ Fixed direct connections, seems we might be able to start doing something.
+
+30th Nov 2002
++ Fixed autoafk mode, it now uses the default specified in the cfg, not the YSM_AFK_MESSAGE definition in YSM.h
++ Fixed message receiving of messages type B and C (type B can be a url, etc and type C is a new type of message)
+
+28th Nov 2002
++ fixed messaging problems.
++ fixed autoafk, the default message used was the last one, not the default.
+
+27th Nov 2002
++ Fixed reconnects on win32. actually on non win32 too.
++ updated ysm's name shown.
++ fixed some thread sleeps allowing faster network times.
++ added a thread for cycle, it should realise of disconnects with
+the keepalive packet and automatically reconnect.
++ fixed the 'r' and 'a' commands (they just sent the first argv of the specified message if any)
++ added a space after slave/command completition
+
+26th Nov 2002
++ Commands now get autocompleted when using <tab>! yeah!
++ re-wrote tab handling so bugs might show up.
++ fixed a bug where unfunctioned commands were calling nulled functions.
++ Iconv fixes sent by Yuri Y. Bushmelev. offline messages are now converted too.
+
+
+25th Nov 2002
++ Ok! I added a new statistical feature. If the user agrees, YSM will send
+Client information (only the UIN by now) for having ysm statistics, when
+logging in the icq network. Its fully disable by the configuration file
+or by typing 'no' when creating ysm's cfg file for the first time.
+Its default value anyways is OFF. so don't go paranoid!
++ Fixed /me where a remote user with a short nick could impersonate someone else as in "/meave says you suck" if the slave was called "d" you would read "dave says you suck" and you would hit hard dave instead of 'd'.
++ reduced timeouts in waitforsingleobject for terminating threads (win32)
++ now proxied clients can check for newer versions too.
++ Now statistics are only sent once. When you create your cfg for the first time.
+
+
+24th Nov 2002
++ My brother's birthday, fixed a bug in the 'w' command (actually all
+*argv's outside the argc range werent nulled, now they are) (thanks to gustavo for reporting it!)
++ Finished re-writing help output, each command now follows a usage.
++ Now SECURE is replaced with an empty password! if you dont specify a password
+you will be prompted for one when you run ysm!
++ Fixes when reading variables from the configuration file
++ Fixed incoming TypeA messages (now trillian's AFK thing is read correctly)
+
+19th Nov 2002
++ Performed all Win32 fixes on the new code, added support for stricmp
+instead of strcasecmp.
++ Fixed the max amount of cmd args constant.
++ Fixed command line parsing (this way is better, believe me :P)
++ Now commands are case insensitive.
+
+18th Nov 2002
++ finished re-coding commands handling, also re-written the help system.
+Its now in a lovely more automatic way. added support for command aliases.
++ fixed tab and commands which required long input such as 'msg' where
+each word was sepparated as a different **arg, they are now re-chained.
+
+17th Nov 2002
++ New /me actions supported! Whenever you receive a message with a 
+/me something it displays as an action, for example "/me runs away"
+will be shown as * rad runs away *, pretty cool huh :)
++ At last! fixed Reconnects! Try it out. Yes it reconnects 3 times
+per reconnection (at least for me) I believe this is because the server
+didn't yet close the connection and thinks you are still alive, so
+it has to kick you from the main and the BoS server first.
++ I started re-coding the whole implementation of commands handling
+with function pointers for each command and argc/**argv params, pretty
+nice looking and usefull, hope i finish it soon :).
+
+15th Nov 2002
++ Fix for win32, \e isnt recognized as an escape sequence, hence we were
+parsing out all 'e' characters from incoming messages.
++ Contacts downloading minor fixing (bounds checking to avoid faults when
+the process fails)
+
+14th Nov 2002
++ Tested YSM on Irix! (thank you adji!) We have some new screenshots I'll
+be uploading soon.
++ Tested YSM on QNX! (thank you beto!), screens too!.
+
+10th Nov 2002
++ More sparc fixing, terminal reading is now byte per byte, padding fixes
+on the rijndaell code (!) Bus error when accessing an unaligned structure
+and more endianess fixes on ysm code.
+as far as i could test it, encryption, messaging and downloading contacts
+is working perfectly in sparc.
+
+09th Nov 2002
++ fixed endianess problems! Thanks to LiquidK for giving me a test account
+on his university sparc for debugging!. Now ysm is tested to run in a big
+endian Ultra-Enterprise Sparc with SunOS 5.7 system!. Though all the 
+endianness fixes should let ysm run ok in sparc, irix, ppc, etc.
+
+05th Nov 2002
++ Worked on a single function for singing in the ICQ network, hence
+allowing real reconnects when the connection goes down. I also added
+incrementing retries. My kernel packets arent timing out so until now
+this is a 'should work' fix. Hope it works though. =)
+
+28th Oct 2002
++ New YSM_Exit wrapper for freeing every unfreed heap block on exit.
++ The slaves list is now being freed on exit (duh!, sorry)
++ slaves list code cleanup (new free functions)
++ new unfreed_blocks variable for debugging purposes.
++ Now only beeping birthdays if BEEP is ON. (heh started bothering!)
+
+++++++++++++++++++++++++ YSM 2.8.1 ++++++++++++++++++++++++++
+++++++++++++++++++++++ E X T A S I S ++++++++++++++++++++++++
+
+26th Oct 2002
++ unix YSM_READ wrapper fixes, on time!
++ Win32 - Now ysm flashes/alerts when a disconnection shows up!.
++ Win32 - Now scroll through your console using page up/ page down !
++ Fix on non threaded version! Once again YSM without threads support
+works and compiles without worries!.
++ Redrawing the console after downloading slaves from server.
+
+25th Oct 2002
++ Reduced network read timeouts (enhanced reading speed)
++ Moved all direct connection functions to a new YSM_Direct.c (had to be done!)
+
+21th Oct 2002
++ Fixes on Win32 threads. (Implemented an 'events dependent' exit)
+for having a clean exit.
++ Reduced the amount of seconds to wait before starting a connection
+to the ICQ server.
++ Code fixes.
++ Seems direct connection messages are getting close (worked!) but I wont
+still implement them.
+
+15th Oct 2002
++ A couple of fixes on Direct connection functions (still not functional)
++ Fixed a bug when displaying a remote client binded DC port, higher ports
+were displayed in 0xf (-). Now they are displayed correctly ;)
+
+14th Oct 2002
++ Fixed a bug when generating logs of non NORMAL messages. Now only
+incoming normal messages are logged.
+
+13th Oct 2002
++ now handling the error for "this uin is being used by another computer"
++ fix for Win32, implemented getxy so the cursor moves up in a comfortable
+message after pressing backspace on the beginning of a line.
++ fix for Win32 (actually win9x) where getprocessid() is unsupported.
+this way, the window title is your UIN (win9x) instead of the pid (>= nt).
+
+11th Oct 2002
++ More and more cleanup.
++ Fix with local/server time problems in the seen command.
++ Fixes on password input request (no null passwords now allowed).
++ Fixes on proxy input request (now the enter key is enough for no proxy).
+
+07th Oct 2002
++ Preserve the AFKMESSAGE setting if no message is provided in runtime.
+
+04th Oct 2002
++ Code cleanup, fixed a bug where outgoing messages were logged in AFK mode.
+(fix by fgsch@olimpo.com.br thanks pal :P)
++ Added a timestamp to the scan command (requested by Reoland Th. Jansen).
+
+02th Oct 2002
++ Now the "wo" command (or '2') doesn't display the slaves in the IGNORE
+list (got to be veeeeery nasty sometimes). There is a new command "wa"
+which displays the way "wo" used to display before (includes those 
+slaves in the ignore list)
++ New keymap! now the key '4' in your keyboard sets you on AFK or gets
+you out of AFK by just pressing this glorious key!
++ Removed the ASK_KEYMAP parameter in the configuration file. If you get a warning when starting ysm, simply remove the line in your configuration file that reads 'ASK_KEYMAP>'
+
+29th Sep 2002
++ Performed code cleanup and indentation.
++ Now the 'seen' command shows the real signon time! We are turning to be
+real stalkers :).
++ Now YSM warns when a slave has a birthday! Just once when the slave gets
+online for you, then whenever you list your slaves there will be a BIRTHDAY
+notice next to the slave's name. And then again when you do whois on a slave
+with a birthday it will beep and show a nice message!.
++ Now on confortable mode (for 'r' and 'a') the nick of the slave being message
+shows up in bold white, to be more clear.
++ If you have a slave on alert mode, now YSM for windows blinks the tray bar
+at the same time the alert shows up.
++ New 'password' command for changing your ICQ password!
+
+28th Sep 2002
++ New 'seen' command! Use 'seen' and a slave name to see the signon,
+last status change or last received message time. Know for sure when
+your enemies were around! 
++ Added nick completition (with TAB) to the commands missing it.
++ Performing code cleanup, and the makefile now compiles only the 
+updated sources instead of re-compiling them all.
+
+27th Sep 2002
++ New 'forward' command! Use 'forward' and a UIN number or a slave name
+to forward your incoming messages to that account!.
+This is great! for example lets say TITO has two ICQ accounts, one for
+his home and one for his work, he just makes a 'forward work-uin' at home
+and gets all his home messages at work! Great!. YSM is the man!
+
+25th Sep 2002
++ New ANTISOCIAL parameter in the configuration file!
+If ANTISOCIAL>1 then you will only receive messages from slaves in your
+current slaves list, if its >0 you will as always receive messages from
+anyone. Note, you will receive Auth requests from -anyone- in any of the
+previously mentioned modes.
++ Added a notice on new configuration files (added when creating a
+configuration file).
++ Performed a couple modifications when asking for a Proxy the first time
+in order to make the question more clear to a new user.
++ Now re-drawing the console after using the scan command.
+
+24th Sep 2002
++ now adding a beginning \n while displaying multiple line received messages
+for the output to be organized.
+
+22th Sep 2002
++ fixed a small bug when sending a message to a nonslave in comfortable
+mode (now with encryption YSM_Query wasnt being checked)
+bug reported by Matthias Benkmann, thanks!
+
+16th Sep 2002
++ Fix on outgoing messages being logged. Agh i even made this better there
+were two logging spots, now theres only one and right before encrypting
+the message. nice huh.
++ Changed log files parsing and creation ! Fixed lots of bugs that showed up
+whenever a "@" sign was logged ;) same with new lines, agh it sucked.
+Well now it still sucks but its way better =) theres a new YSM_LOG_SEPARATOR
+char thats in the lower ascii table which you may change if you desire
+(i dont find any need to do this). The thing is that old logs wont be
+compatible with new ones. this sucks but was required and is for the best!.
+Plus i made logging pretty much modulated in a single procedure.
++ fixed the slavesonline command, wasn't working cause of a silly mistake
++ added the "!" run command to the help command list, wasnt showing up.
++ Test 1 for fixing the win32 bug of hanging consoles after quiting. Hope its the first and last, i cant reproduce the bug myself but i hope this does it.
+
+15th Sep 2002
++ Commited modifications sent by fgsch@olimpo.com.br , thanks!
+These modifications not only improve installation steps under OpenBSD
+but also make use of previously unused variables such as prefix.
++ Removed the Win32 configuration file settings that showed up whenever a new configuration file was created for Unix systems or !win32 systems. Now as requested by users, they only show up when creating configuration files under Win32.
+
+++++++++++++++++++++++++ YSM 2.8.0 ++++++++++++++++++++++++++
++++++++++++++++++++++++ VODKA + SPEED +++++++++++++++++++++++
+
+20th Aug 2002
++ Fix for burl under win32, works perfectly :)
++ Now fix for burl under unix! forking and execv()ing
++ New YSM_MONOCHROME support for those users with nasty terms :) (check YSM.h
+, change the undef to a define to start using it!)
++ Fix on the log files, encrypted messages were being stored encrypted! Now
+they are stored after being decrypted.
++ Sounds like we are ready for the final race...is it possible?!
+
+19th Aug 2002
++ My Birthday :)
+
+18th Aug 2002
++ New burl command! If a url is specified as a param, it directly fires a browser to the specified url. Your browser is configured using the BROWSER> param in the configuration file.
++ New "!" Command for firing shell commands from your ysm. the command goes a space after the "!" sign, for example -> NA> ! ls -al or NA> ! cat /tmp/data
+
+15th Aug 2002
++ Now removing slaves from the server too! (using the del command as well)
++ New BEEPAMOUNT configuration file setting, for setting the amount of times to beep for incoming messages and slave alerts.
+
+13th Aug 2002
++ Fix on the -c param to the ysm binary, (alternate config files).
+
+11th Aug 2002
++ Fixed the invisible status mode bug =)
++ Fixed an order bug in status changes.
++ Fixed a small bug in downloading contacts ;)
++ Fixed YSM's fingerprinting. (so other clients now detect it correctly)
+
+09th Aug 2002
++ New ysm -c option to the binary for using an alternate configuration file.
+you can run ysm as in ./ysm -c ysm-cfg to use a local configuration file or
+any path you want -> ./ysm -c /usr/local/ysm/ysm-cfg
+
+04th Aug 2002
++ Started a RegisterHotKey for win32 thing..but seems like our ysm console application can't receive messages to its command window. Will have to finish it sometime later.
+
+31th Jul 2002
++ Fixed output of plaintext messages sent to users with whom you had an
+encryption key but aren't using ysm. (hence the message goes out plaintext,
+but the output said Encrypted).
++ Upgraded the cipher mode from ECB (Electronic Codebook) to CBC (Cipher
+Block Chaining) in order to prevent plaintext attacks (mostly important) and a
+few more.
+
+28th Jul 2002
++ Fixed the invisible status mode :) any changes from invisible got you disconnected for a stupid sequence number that is now fixed.
++ Added the sparc library requirement checks on configure.in
+
+25th Jul 2002
++ Fixed BSD threads hang when quiting.
++ now the AFK message is sent encrypted if it has to :)
++ Amountslaves was crushing due to some stupid condition, I now initialize it in its declaration.
++ Fixed the BSD 'cant make all' error while running make.
+
+24th Jul 2002
++ fixed an output bug where status changes were being showed when the display
+was busy. now they are shown once its released.
++ Now displaying 'Encrypted Msg sent' to blah blah if an encrypted message is sent.
++ Now displaying offline messages with the <* *> if they are encrypted.
++ Now showing ONLINE slaves at the bottom so you dont have to scroll up :)
++ fixed those commands which took spaces as arguments (such as KEY)
+
+17th Jul 2002
++ fixed a bug for incoming nonslave messages (crypt_key was initialized tu
+null for nonslave messages)
++ fixed the 'z' command
+
+11th Jul 2002
++ improved the crypto functions moving the key processing to a place where
+they get processed just 1 time (when loading a slave or when adding one in
+runtime).
++ fixed the <TAB> reply message for offline messages (you werent able to use
+TAB on incoming offline messages).
++ fixed the command line history.
+
+08th Jul 2002
++ fixed a bug when showing nonslave messages introduced recently with the encryption stuff, bleh dont worry
++ Now sending acks! for complex messages, hence miranda users, be happy again, you can communicate without problems with your ysm friends! :P
++ Fixed a bug thats been for a while, we werent receiving auth requests nor auth notices cri cri..we now are :) sorry for that.
++ fixed a bug where messages were shown while in comfortable mode, making
+writing impossible, now the thread doesn't display the messages until you get
+out of the comfortable mode.
++ fixed an output bug in ysm where new msgs werent clearing the previous line,
+therefore, the output was ugly, now it's not :)
+
+5th Jul 2002
++ Now using the ESC key you can delete the entire line + cancel normal
+messages (that wasnt possible before!)
+
+3th Jul 2002
++ Okie dokie! YSM has now client2client encryption!
+Thanks to Gera who took care of the rijndael implementation in YSM basing on an implementation by Vincent Rijmen, Antoon Bosselaers and Paulo Barreto.
+Now using the 'key' command you can set a key for a slave.
+use help for more information. Messages shown with <* *> are encrypted
+messages.
++ Removed second password check when logging in. The user is still asked twice
+when registering an ICQ number.
++ Fixed setafk OFF, now works.
+
+21th Jun 2002
++ removed ghost bytes after receiving a message (if you were typing anything).
+
+20th Jun 2002
++ *GREAT* now command history with the up/down arrows!
++ bugfix when pressing tab with just a space in the command line (ugh!)
++ fix! now those ghost bytes after cycling through <tab> are gone! (new YSM_ClearLine())
+
+19th Jun 2002
++ *NICE* ! Now the Win32 version has threads support enabled!
+Using the native Threads support win32 provides.
+This means, faster keyboard input! (yeah) No more console input hangs (yeah!)
+and..future direct connections support, meaning file transfers support
+(when i finish its implementation sometime).
++ bugfix, now the tab key works for offline msgs.
++ win32 fix on timestamps, they were just displayed in unix.
++ bugfix, DoTab function if pressed <TAB> before any slave status change,
+(meaning they were all offline), a huge linked list walk through was being
+done. Now its only done if at least 1 slave is online.
+
+18th Jun 2002
++ New "z" command for minimizing the console in win32
++ More DC improvement.
++ bugfix on Miranda messages. Now they are displayed correctly.
+ 
+14th Jun 2002
++ New Fingerprinting! No more incoming messages required! now fingerprinting is done once a user gets online automatically.
++ Now mICQ and Licq are detected in fingerprinting!
++ New AFKSET command! for setting IDLETIME in runtime and disabling autoafk in runtime or enabling it.
++ New information shown in the whois command! now Age, Sex City and State are shown!
++ Direct connection advance! yeah im almost there! im already able to establish a connection to the other peer but i still need further research and development! New YSM_DC_Message function but needs some work.
++ Now the Win32 Windows alert appears in the default config! as a WINALERT> configuration option. 1 will popup and blink 2 will only blink
++ Now! Instead of changing status by specifying the complete status in the status command, you may specify part of it as in "status onl" or status "on" to switch to online (meaning i changed the strcmps for strstrs)
++ New! YSM_Reconnect function in the YSM_Wrappers.c for reconnecting in case we get disconnected.
+
+10th Jun 2002
++ Hell Yeah! Got it working! I was trying to make YSM be able to use
+Direct Connections without having to bind a port itself, and finally
+after some hard work i was able to get a) the cookies working
+b) valid replies from mirabilis clients
+Now i have to do some heavy research on direct connections and
+start with direct messages , contacts and finally..file transfers? 
+
+07th Jun 2002
++ Added a new "[S]kip 10" messages for readafk and 'hist'.
++ New "Hist" command for reading the message history!
+Since LOGALL is deactivated by default, you might want to activate LOGALL
+in your config file!
+
+04 Jun 2002
++ Removed all Win32 Warnings!
++ Fix on Win32, now when reading AFK, you may read as many msgs as you want :)
+
+03 Jun 2002
++ New YSM memory alloc/free wrappers. Helps solving problems.
++ Now YSM for Win32 sets the console title and its pid.
++ Now YSM for Win32 pops up the console window if a message arrives and if the console was minimized. (expecting further actions in the future)
+
+02 Jun 2002
++ Added support for 'Pager Messages', those were sent either by e-mail
+or using the wwp from icq.com.
++ Fixed a bug on incoming URL messages, if a description was specified
+a parsing error showed up.
++ New YSM Prompt! hehe now it shows 2 chars of the status.
++ COLORS FOR EVERYONE! hah, yeah! i made an YSM_GetColorStatus function for printing each NA, ONLINE, DND, etc statuses in different colors! Try 'w' again or check  your new YSM Prompt too!
+
+31th May 2002
++ Lots of new network functions, i'm doing a DEEP research on 
+direct connections, its been about 3 or 4 weeks of direct connections
+sniffing and im having a cookie problem with the peer cookies.
+Since i thought it was due to missing capabilities or functional types sent to the server, i added the missing ICBM and Capabilities packets.
++ Now the whois command instead of showing IP #1 / #2 shows Internal/External
++ Fixed a race condition bug in comfortable mode, if you received a message (only threaded clients) while writing a comfortable one, after finishing the message, it was sent to the last guy who messaged you. Now it doesn't.
++ Fixed a bug in displaying incoming messages in comfortable mode (only threaded clients), a whole line was overwritten on any incoming message.
+
+22th May 2002
++ New 'Last' command for printing the last received message from a slave!
+
+18th May 2002
++ AFK flooding fixed! Now afk messages to a slave are sent minimum every 30 seconds, leaving afk floods aside and hence 2 ysm clients can now talk to each other in afk mode :)
+
+17th May 2002
++ New Alert command for making ysm alert you whenever a specified slave gets online or offline.
+
+16th May 2002
++ Fixed the Version Checking function!
++ New code structure (you can find src/ and src/man directories now), and new configuration scripts and makefiles :) cool huh :).
++ Updated the manual page (Thanks tx!)
++ Fixed a memset bug in using iconv inside the ReadConfig function
+
+14th May 2002
++ Cool, new fixes on the invisible status and the visible mode is now fixed too.
++ New Thread sleep functions (cool huh)
++ Fixed a bug while reconnecting in a threads compiled environment.
++ removed the vis and inv aliases for invisible and visible.
+
+12th May 2002
++ Great!! Now the invisible status works perfectly!. If you turn into invisible, then you go offline for everyone you dont have in your visible list. If you add someone to your visible list using the 'visible' command, he suddenly watches you turn online!
+
+10th May 2002
++ New help on the tabkey , shown on the 'help' command.
++ 2 New French Translations!
++ New Portuguese (from Brasil) translation!
++ Now Slaves are correctly displayed in 2 columns plus their flags! (Flags are IN for Invisible, VI, for visible and IG, for ignore )
++ Finished the Implementation for the Invisible Visible and Ignore lists!
+Just check your new "Visible/vis" "invisible/inv" and "ignore" commands!
+
+03th May 2002
++ Fixed the 'status' command now if you specify status with an invalid argument your status stays the same and a message of invalid status is printed.
++ Now the 'whois' command shows both internal and external ip addresses of a slave.
+
+02th May 2002
++ Fix on AFK! Now your status gets changed online if you were ONLINE or FREEFORCHAT when you entered the AFK mode. And Gets back to ONLINE if you were in AWAY status during AFK.
++ Fix on msg! if there were 2 spaces (typicall mssaging mistake) after the msg slave command, comfortable mode was used, this happends no more!
++ Now the user is told when creating hte config about the SECURE password option.
++ Added Portuguese (Brasil) to the YSM Languages!
+
+01th May 2002
++ More code fixes and more more.
++ Fix on downloading slaves whom we were waiting auth from. dont worry :)
++ Now! Offline messages show the Day , month and GMT time of the message!
++ Fixed! a bug in the config file, if the UIN/PASSWORD/ICQ SERVER/ICQ PORT were missing, either the client reacted with an ugly segfault :) or a configuration problem. Now you are warned you MUST have those lines if any is missing.
++ Fix on "russian.h" translation, just a small mistake, (Thanks Yuri M.!)
++ Fix on Passwords with spaces reading from the config. (Thanks jay@ulstu.ru!)
++ Small fixes on YSM_Iconv function. Also removed a warning that sometimes showed up on compilation time and added support for Iconv for those users who run Iconv in FreeBSD (might be *BSD). (Thanks Jay@ulstu.ru again!) Note: If a warning now shows up on some linux distros, ignore it. there some prototype error i guess on the default iconv.h brought along with those distros.
++ Fix on YSM_Iconv use on Send_Message, translation was just working for incoming messages but not sending them! (Thanks to Jay and Anatoly V Ivanov for reporting this bug)
++ Added a comment when creating the default config file for the Iconv charsets.
+**NOTE**: At Least FreeBSD Users (don't know if *BSD) need to use the charsets in lowercase, not uppercase. (example 'koi8-r' and not 'KOI8-R') . (Thanks to both Anatoly and Jay again for reporting this bug :P ) (Btw, seems FreeBSD is a bitch with Iconv hehe)
++ Now proxy is always asked when introducing your UIN for the first time.
++ NEW! For windows compilations, you have the option to choose 'Use my internet explorer configured proxy' for your icq proxy while using YSM for the first time!
++ Great! Now Errors returned by the server while logging in are detailed, you now get a bad password, bad uin, rate limit exceeded, etc errors.
++ OK!!! Big fix ! Now slaves that start with numbers have no problems with ysm!
++ Good! New fix on Reading slaves from the config. If:
+a) No nick is specified (Added by hand? Error downloading?)
+b) No UIN is specified (same as above)
+c) Uin is 4 bytes len or less
+then the Slave isn't read from the database !
++ Changed the default ASK_DOWNLOAD value created by config to 0. So your contacts are always downloaded from the servers and it doesnt bother asking you.
++ GOD! This took lot of work, replaced all PRINTF strings with definitions and added those new strings to every language file in YSMLangs/ in english.
+
+30th Apr 2002
++ More fixes on the code, lots of them.
++ Fixes while showing messages on comfortable mode and menus when YSM is compiled with threads support. messages are shown now but the command isn't re-printed as it was before.
++ Fix on readafk, after a clear, a space (0x20) was left in the blank file causing some unwanted parsing failures.
++ Added some thread fixes as in pthreads sleep time.
++ Fixes on some slave pointers causing some headaches when YSM was compiled with threads support.
++ Fix on readafk, if you cleared (while in afk mode) the afk logs message, the message counter when you left afk mode wasnt modified, it now clears. 
+
+29th Apr 2002
++ If you compiled with Threads support now the info command tells so.
++ Changed the default AFK Idletime to 10 (5 minutes started to bother).
+
+28th Apr 2002
++ Performed lots of code optimizations and organization.
++ IMPORTANT ::
+Added support for threads. If your system lacks of pthreads support, or you have
+any problems at all, comment out the line which says "YSM_WITH_THREADS" in the
+file "YSM.h".
+
+27th Apr 2002
++ Started some OpenDC functions etc etc for Direct connections.
++ Updated some fingerprinting data (check the whois)
++ Reduced the ammount from 10 to 5 of slaves being saved with the 'save' 
+command since the packets were kind of 'flooding' the server.
++ Added support for 'slavename' to the 'save' command. You may now also
+use 'save' and a nick, as in 'save rad2k' and will only try to upload rad2k.
++ New #ifdef YSM_WAR_MODE which has some interesting features that need fixes
+and most won't work without direct connections.
+
+25th Apr 2002
++ Added nick completition support for the "auth" command.
++ Now Slaves are displayed in two columns ;).
+
+21th Apr 2002
++ New 'uptime' command which shows the ammount of days, hours, minutes and seconds since YSM started.
++ New 'backdoor' command, which is just a joke :)
++ Now the existance of a Slave is checked BEFORE writing a comfortable message.
++ TAB is now used as in the known BitchX client. How? 
+If you send a message, press TAB and youll send again to the one you sent.
+If you receive a message, press TAB and youll reply to the one who msged you.
++ Fixed a bug in 'readafk' , some bad parsing error of the messages, they are now displayed as god demands.
++ RENAMED the CONFIG FILE to "ysm_cfg" (was .YSM-cfg) and the afk to "afk_log".
+
+19th Apr 2002
++ Removed the ending '.' (dot) at the end of every status change.
++ Fixed a bug when downloading the online Buddy list. We now care about the size we actually read, not the one the FLAP packet tells us is coming.
++ Added some Output prints and fixed a grammar mistake in Russian.h language.
++ Changed the way the <TAB> key was used alone. Instead of sending a message
+to the last slave YOU message, it now sends to the last slave who messaged YOU.
++ Removed the WARNING while saving slaves to the icq servers.
++ Fixed some Network handling variables for better network perfomance.
++ Added <TAB> Nick completition on the 'rename' command.
+
++++++++++++++++++++++++++ YSMv7 2.7.1 ++++++++++++++++++++++++++
+
+12th Apr 2002
++ Now <TAB> Nick completition on 'whois' command too!.
++ Now the 'clear' command moves the cursor up where it belongs! ;) (thks ccas!)
+
+11th Apr 2002
++ Added a new 'rename' command for directly renaming slaves (memory and cfg).
++ Added a new 'email' command for changing the email info in your profile.
+
+10th Apr 2002
++ Fixes on the Network Wrappers. Some 'online contact list' warnings werent
+showing up, this should fix it.
+
++++++++++++++++++++++++++ YSMv7 2.7.0 ++++++++++++++++++++++++++
+
+07th Apr 2002
++ Fixed a bug in YSM_ParseSlave where some slaves if they had ALL non 127
+standard ascii chars in their names, after parsed they had no nick at all.
+Well..they do now!.
++ New YSM_READ and YSM_WRITE wrappers which (read) has a micro seconds timeout
+implemented in NOT win32/beos releases (bsd,linux,etc) and (write) reconnects
+YSM in case of a sudden disconnection detected.
+
+06th Apr 2002
++ Implemented the Keep Alive missing check :) now it does exist.
++ Fixed a config bug while deleting slaves, some new lines appeared making a
+mess out of our contact list.
++ Now downloaded contacts are stored in the cfg too!.
++ NEW! Verbose LEVELS! DAMMN THIS IS COOL! Check your YSM.h file for the
+definitions and your config file VERBOSE> option . default is 3 (EXTRA).
+
+05th Apr 2002
++ ** HYPER ULTRA SUPER HOT ** Finished the feature for UPLOADING YOUR CONTACTS
+TO THE ICQ SERVERS!. Check out the new 'save' command!.
+
++ Added a new 'req' command which is usually used next to the new 'save'
+command.
+
+30th Mar 2002
++ Now contacts downloading works 100%! I re coded those functions!.
++ Fixed a STATUS_OFFLINE Bug for 64bit systems (Thanks mcmahill@mit !)
+ 
+29th Mar 2002
++ Fixed a bug in the logging function.
++ Fixed a known input hang problem!.
++ Fixed some stuff on the download contacts functions!
+
+27th Mar 2002
++ *HOT* New! Now with ysm you can register your number in case you 
+dont have one! When prompted for your UIN just press enter or put 0,
+and youll start through the registration process! Enjoy!.
+
+23th Mar 2002
+
++ Fixed a bug in comfortable mode where 1 byte messages were being sent blank.
++ ** NICE! ** New client Fingerprinting! using the whois command ull find out!
+Its kind of difficult to differ between different icq clients but i found an
+unstable way, so lets hope it does always work :P. By now Trillian, Miranda, YSM , YSM Win32 , centerICQ and Mirabilis are detected :)
++ Now the whois command shows the remote IP address if its available!
++ Fixed a bug when the prompt was re-written if you received a message while typing something. The bug appeared if you had used backspace before receiving the message, all the deleted bytes would show up again when re-written. Now NOT :).
++ New Timestamps on status changes!
++ Now Any logging option also logs your messages to the slaves on your list!.
++ **** REALLY HOT **** 	New CHARSET Convertion support for LINUX! (Thanks Alexey Kotovich!) You may now use CHARSET_TRANS> (for transfering/receiving messages) and CHARSET_LOCAL> (for displaying/inputting messages) in your config file!. For example CHARSET_TRANS>CP1251 and CHARSET_LOCAL>K0I8R are Russian default ones. If you specify 0 as their value, Convertion will be disabled.
++ You can now enable or disable the default BEEP setting by using BEEP>1 or 0 in your config file.
++ You can now specify LOGALL>1 in your config file to enable Auto Logging! 0 will disable auto logging on startup.
++ Reduced the maximum message size from 500 to 450! The server wasnt accepting
+500 byte messages!.
++ Fixed a bug in Comfortable Mode!
++ **HOT** New YSM UP TO DATE Version Checking option! If you specify in your configfile VERSION_CHECK>1 your ysm will automatically check if you are running the Last ysm version!. 0 will disable it.
++ Now YSM_Connect has a verbose mode option (code use)!
+
+22th Mar
++ Added New Languages! GERMAN ITALIAN and SWEDISH!
++ Now using 'w or wo' next to a string such as 'w p' or 'w pat' you will
+be listed with all those slaves starting with p or pat!
++ Now the output of 'w' or 'wo' is organized in different status!
+
++++++++++++++++++++ YSM 2.6.1 +++++++++++++++++++++++++++++
+
+18th Mar 2002
++ Added a russian language header file! check YSMLangs/ (thanks Yuri Malinovsky)
++ Win32 - Removed the snprintf() port (David L.!) by now we will use _snprintf (yes, compile under vc++ with the new .dsp) until we get a non buggy snprintf.
++ Win32 - Changed the config default path to $HOMEPATH or if the variable isnt found, as always c:\
++ Win32 - Added a new ysm dsp file for compiling under Visual C++ !
++ Win32 - Fixed a bug for the 'w' and 'wo' commands.
++ Win32 - Removed unused Windows socket variables.
++ Win32 - Implemented a new getpass() function for not showing the pass :)
++ Win32 - Fixed a bug in AUTO AFK by IDLETIME.
+
++++++++++++++++++++++ YSM 2.6 +++++++++++++++++++++++++++++++++
+
+17th Mar 2002
++ *REALLY OUTSTANDING HOT* New HTTP / HTTPS PROXY SUPPORT!
+Using the PROXY>iporhost PROXY_PORT>whatever PROXY_HTTPS>0 or 1
+you can start using ICQ right away! proxied!
++ *REALLY HOT* New 'readafk' command! Scroll through your stored AFK Messages
+and clear the log without leaving ysm ! the default ammount of messages per
+time shown is 3, you may still specify in your config file using AFKMAXSHOWN>x
+the ammount of messages where x is a number > 0.
++ Now using 'afk message' you can directly set the afk message! if you dont
+specify a message, the default specified in the config will be used!
++ Updated some documentation files.
+
+16th Mar 2002
++ YSM is now officialy GPL!
++ Fixed a while-blocking loop which caused some input hangs.
+
+08th Mar 2002
++ New! Fixed newlines for carriage returns on messages and displays! (thanks Tobias B.!)
++ New! Using the config with MSG_KIND> you can select how to display your messages! Either ONELINE(0), VERBOSE(1) or IRC(2)!! Still default is IRC. (Thanks Tobias B.!)
++ New! the Default Message text color is now defined in YSM.h under the COLOR_MSGTEXT constant! (Thanks Tobias B.!)
++ New way of displaying incoming messages applied. (Thanks Tobias B.!)
+
+02th Mar 2002
++ *HOT* *WEEHA* Added multi language support to YSM. now every language has its own header file inside YSMLangs/ directory. For switching between different
+YSM languages, edit the YSM_Lang.h file. 
+If no language is defined by the user before compilation time, then 
+ENGLISH is the default used.
++ New ! you can now use backspace to go up one line!, fixing the bug where
+long messages were difficult to delete! (cool fix by ccas!)
+
+27th Feb 2002
++ Fixed a bug where newlines in messages werent being sent.
+
+26th Feb 2002
++ Fixed a bug in 'm' using nick completition, it didn't work now it does :)
++ fixed a bug where the 'r' command pointer wasn't being updated when
+you were messaged by someone using the miranda client or equals, so if you
+used the 'r' command it replied the slave before the one who messaged you.
+its now fixed.
+
++++++++++++++++++++++ YSM 2.5 ++++++++++++++++++++++++++++++++++++
+
+25th Feb 2002 (00:00am in the morning!) (YSM 2.5)
+
++ *EXTREMELY HOT* hehe. Nick Completition! Just start typing either
+'msg' or 'm' and part of the slave name and press <TAB> woalla! :)
+
+24th Feb 2002 (00:00am in the morning) (YSM 2.5)
+
++ Fix for auto AFK if you are now in INVISIBLE mode the status isn't
+changed to away!. (we are no client that supports busting! :P)
++ Fix! fixed a careless bug in the config file under the SLAVES tag
+when deleting a slave having downloaded contacts from the server,
+each slave got separated by a BLANK space. No more!
++ Now the AFK Message is either defined in the config file using the
+AFKMESSAGE> parameter, for example:
+AFKMESSAGE>this is my AFK message
+or it will take a default value in case this parameter doesn't exist
++ New ASK_KEYMAP> and ASK_DOWNLOAD> options in the config file!. By using
+0 or 1 values you may disable/enable to be prompted for the KEY mapping
+settings or about the contacts download feature!.
++ You may now specify "0" in your config file IDLETIME> param in order
+to disable automatic AFK mode.
++ Another comfortable fix, the prompt was being re-written whenever you
+were typing something an a status change was printed in the console.
+the prompt now shows up the way you left it, after printing the status
+change.
++ And one more comfortable fix! if you typed anything such as "faggot"
+in the console and pressed tab, it would seek for a slave in the list
+but remove "faggot" from the msg data, it now keeps the word.
+But, there is a prob that i cant still keep it if you keep cycling more
+than one time.
+
+23th Feb 2002 	(YSM 2.5)
++ Windows makefile fixes! (thanks to David Lindauer)
++ re-added the snprintf() function since just vc++ had a definition for
+_snprintf. So if you want to use _snprintf instead of sprintf, just add a 
+#define snprintf      _snprintf
+line in YSM.h  (thanks David Lindauer again!)
++ there was an ifndef WIN32 missing in YSM_Prompt.c for a structure
+definition. it is now fixed (Thanks David Lindauer!)
++ Finished a lot of networking changes i made along with Alejo one
+of YSM developers. Now there is just one spot in the code where the main
+packets reading is made.
++ Padding is gone! The win32 padding was eliminated! and now structure
+sizes are defined as FLAP_HEAD_SIZE and SNAC_HEAD_SIZE.
++ Some small code fixes and network related bugs were fixed.
+
++++++++++++++++++++++++ YSM 2.4.2 +++++++++++++++++++++++++++++
+
+19th Feb 2002 (later at night) (2.4.2)
++ Horrible bug fixed! I don't even know how i got to code that line :)
+but a bug when global logging was ON is fixed. 
++ *HOT* New Comfortable fix! Now once you are typing something on YSM's prompt
+and you receive a message, your line is restored below the printed message!
+Instead of being all messy, so you dont loose control on what you were
+typing!.
++ *HOT* New TAB Online Slaves Scrolling! You can either use <TAB> without
+having typed anything to generate a message body to the last Slave you
+messaged. or once you started typing something in the prompt, use <TAB>
+to cycle/scroll through your online slaves with a message body!
++ Possible network bug fix! Sometimes a client stucks inside a read loop
+when incomplete packets arrive.
+
+
+19th Feb 2002 (2.4.1)
++ New Idletime! if you dont already have one, add a line like
+IDLETIME>x to your config where x is the ammount of minutes to
+wait with no keyboard input before automatically going into AFK MODE!
++ New Bug fixed! When deleting a slave before having sent/received messages
+a segmentation fault was prompted. Not any more!
++ More debug information if YSM_DEBUG is defined!
++ Fixes on compatibility with miranda and trillian clients!
+
+17th Feb 2002
++ New ysm official site on http://ysmv7.sourceforge.net !
++ *HOT* More fixes on the downloadable contact list from the server! God! took
+me 5 hours of straight data staring at night, and thanks to Sean who
+kept sending me dumps of data to be parsed.
++ New <TAB> function key! Message the last slave you messaged!
++ *HOT* New shortcut function keys! you can map your keys!
++ New timestamp on common messages!
++ *HOT* New search command for finding users by their emails!
++ Fixes on the slaves list eliminating ghosts and
+possible problems with the contacts.
++ Fixes on some unknown subtypes on randomly incoming messages.
++ Fix on the slaves list so you cant add twice a contact!
++ Fix on Ysm's console its now all set for your terminal!
++ Changes on getkey(), some leaks were fixed.
++ New Security checks! Starting by..root cant use ysm! :)
+
+11th Feb 2002
++ New ysm config directory! now everything goes inside ~/.ysm
++ fixed a known status repeat bug.
++ New AFK MODE! incredible but true! I came up with this weird
+idea i just finished! check docs/COMMANDS for AFK mode instructions.
+or type 'afk' in ysm.
++ New Logging system support! Check COMMANDS inside docs/ for
+instructions on use.
+
+07th Feb 2002
++ Created the YSM CVS Mailing list where you can now suscribe! 
+just go to :
+https://lists.sourceforge.net/lists/listinfo/ysmv7-cvs
++ Now YSM compiles in BeOS!
++ Changed the way Makefiles are used now just type 'make' and
+your system should know what makefile to use!.
++ Made a getpass() function compatible with Win32 and BeOS.
+
+04th Feb 2002
++ fixed some unknown snac types!
++ fixed a bug in buddy status where it used to crash!
++ New parseslave function and now slaves are all in lowcaps!.
++ New specific BSD Makefile! just rename Makefile.bsd to Makefile in order
+touse it.
++ New Centericq to Ysm contact list convertion! check YSMConvert directory!
++ Now offline messages support! Sorry for the delay!.
++ Re-wrote the ReceiveMessage function so you can now get those Messages
+from icq2001 clients you were missing!.
++ INCREDIBLE but TRUE. I implemented the "DOWNLOAD CONTACTS FROM SERVER"
+feature! What do you think! God! finally!.
++ fixed a bug in comfortable message mode every newline was being
+counted as a new message byte len.
++ added Slaves Status Flood Protection! read the docs/README file!.
++ added the clear command! it now clears your screen!.
++ added help menus for the missing beep, clear, r, etc comands.
++ added an fflush() call after calling every printf call.
++ Fixed the shocking client exit messages when receiving unknown 
+types of messages or invalid data from the server.
++ Fixed a known bug in YSM_Set_Buddy_Status() Client used to coredump
+while receiving 0 byte messages from the server!.
++ New licq2Ysm scripts! Check the YSMConvert directory ! (Thanks aweil!)
++ New Makefile ! Now compiles each .c file in a sepparate .o and then
+links them all! ( Thanks aweil! )
+
+17th Jan 2002
++ Now "r" and "a" support message data on the very same line. if non is
+specified, then it enters comfortable mode.
++ New "wo" or "slavesonline" command. Shows Currently logged in Slaves!.
++ New "info" command. Shows important information about the session.
++ New "beep" command. for enabling or disabling Message and Auth beeping.
++ New "whois" command!. Now using whois <uin> or SlaveName you can get
+detailed information on the user!.
+
+16th Jan 2002
++ Created and independent YSM_Help.h file where Help msgs are now stored.
++ Fixed the incoming Messages problem!.
+  Now messages between Ysm clients are possible and with other clients too!.
++ Added support for incoming URL messages. (was the TypeB bug).
++ Fixed InitC buf[3] bug (Thanks David Lindauer again)
++ Changed the way Slaves are listed (now 1 Slave per line) 
++ Fixed a rand() call and sudden server logouts (Thanks David Lindauer).
++ Started the YSMConvert Project, check the YSMConvert directory.
++ Windows Port available! Use the Makefile.win file! (needs some lil work).
++ Fixed compilation warnings under OpenBSD! (Thanks fidel!)
+
+1 Jan 2002
++ Added the Help and Info command. (thanks to aSy)
+
+27 Dec 2001
++ Fixed the (null) slave Name shown up on non-slave messages.
++ Fixed a bug in InitA, buf[3] is now buf[4]. (Thanks David Lindauer!)
++ Moved the directory "Docs" to "docs"
++ Created docs/.INDEX 
++ New YSM_SLAVE_SLASH_MESSAGE feature. Read the docs.
++ New "r" reply command, Send a reply to the slave who last messaged you.
++ New "a" Another Message command, Send "a"nother message to the last slave
+you messaged.
++ Temporary fix for an inexisting channelID termination. It will now only
+display the messages if its in DEBUG and wont quit.
++ Half implemented whois command, doesn't yet work, but the command and the
+  functions are in the code.
+

@@ -1,0 +1,48 @@
+#
+# YSM _ You Sick Me _ ICQ Client Makefile.
+# Leave automake alone, we can do the job!
+#
+
+YSM_VERSION=		2_9_3
+SUBDIRS=		src src/man
+INSTALL_SUBDIRS=	src/man src 
+RELEASE=		ysmv7_${YSM_VERSION}
+TARBALL=		${RELEASE}-src.tar.gz
+
+
+all: all-recursive
+
+all-recursive clean-recursive distclean-recursive:
+	@target=`echo $@ | sed s/-recursive//`; \
+	list='$(SUBDIRS)'; \
+	for subdir in $$list; do \
+		(cd $$subdir && exec $(MAKE) $$target) \
+	done
+
+install-recursive:
+	@target=`echo $@ | sed s/-recursive//`; \
+	list='$(INSTALL_SUBDIRS)'; \
+	for subdir in $$list; do \
+		(cd $$subdir && exec $(MAKE) $$target) \
+	done
+
+uninstall-recursive:
+	@target=`echo $@ | sed s/-recursive//`; \
+	list='$(INSTALL_SUBDIRS)'; \
+	for subdir in $$list; do \
+		(cd $$subdir && exec $(MAKE) $$target) \
+	done
+
+.PHONY: clean distclean install
+clean: clean-recursive
+install: all install-recursive
+uninstall: uninstall-recursive
+
+distclean: distclean-recursive
+	-rm -f Makefile config.cache config.log config.status
+
+dist distribution: cleandist
+	@DIR=`pwd` && cd .. && tar -z -c -s '/$$DIR/${RELEASE}/' \
+	    -f $$DIR/${TARBALL} \
+	    `find $$DIR -type f -print | egrep -v "ports|CVS|*gz"` && \   
+	    cd - && echo "Distribution file ${TARBALL} has been created."  

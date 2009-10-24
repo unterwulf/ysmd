@@ -1,0 +1,44 @@
+#	$Id: Makefile.BeOS,v 1.2 2002/02/11 03:34:19 rad2k Exp $
+UNAME:=$(shell uname)
+ifeq ($(UNAME),Cygwin)
+CC = gcc
+else
+CC = cc
+endif
+CFLAGS = -O2 -Wall -DBEOS -g 
+PREPFLAGS = -C
+YSM=ysm
+INSTALLDIR=/boot/home/config/bin
+OBJSDIR=objs
+FILES:=$(shell find . -name \*.c)
+SRCS = $(FILES)
+OBJS = $(patsubst %.c,%.o,$(wildcard *.c))
+PREP = $(patsubst %.c,%.pre,$(wildcard *.c))
+.SUFFIXES: .c .o .pre
+
+all: $(YSM)
+
+.c.o:
+	$(CC) $(CFLAGS) -c $<
+
+.c.pre:
+	$(CC) $(CFLAGS) -E $(PREPFLAGS) $<  | egrep . | sed "s/^ *$$//g" > $@
+
+pre: $(PREP)
+	@echo All files preprocessed to .pre!
+
+$(YSM): $(OBJS)
+	rm -rf $(OBJSDIR)
+	$(CC)  /boot/beos/system/lib/libbind.so $(OBJS) -o $(YSM) ${CFLAGS}
+	@echo "Moving obj files to $(OBJSDIR)/"
+	mkdir $(OBJSDIR) ; mv $(OBJS) $(OBJSDIR)/
+	@echo "YSM for "$(UNAME)" <Finished Compiling>."
+	@echo "You are free to run the YSM binary."
+
+install:
+	install -g root -o root -m 755 $(YSM) $(INSTALLDIR)
+
+clean:
+	rm -f $(PREP)
+	rm -rf $(OBJSDIR)
+	rm -f $(YSM)

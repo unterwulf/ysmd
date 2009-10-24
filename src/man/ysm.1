@@ -1,0 +1,221 @@
+.\" $Id: ysm.1,v 1.8 2007/01/29 19:18:07 rad2k Exp $
+.TH Ysm 1 "Version 2.9.1" "Ysm" "Ysm manual"
+.Dd July 12, 2003
+.Dt YSM 1
+.Sh NAME
+.Nm (Y)OU (S)ICK (M)E
+.br
+An Original Multi-Platform ICQ console client that requires no external libraries.
+.Sh SYNOPSIS
+.Nm ysm
+.Sh DESCRIPTION
+.Nm You Sick ME
+is a portable open source console ICQ client written in the C language, under the GPL license.
+.br
+YSM is one of the new generation clients due to the sudden modifications the ICQ protocol suffered after Mirabilis joined the dark-side of the force (AOL). This is the reason why most ICQ clients ended up with malfunctions or unable to use the IM network at all.
+.Pp
+YSM was (proudly) the first ICQ clone to download and upload server-side contact lists.
+.Pp 
+The idea behind ysm is to have a portable-quickcompiling console client which lacks of strict library dependencies. The environment around ysm is ment to be fun and comfortable. 
+.Sh NOTICE
+For more information on ysm and its usage please refer to the documentation
+section in ysm's website.
+.Pp
+.Nm [http://ysmv7.sourceforge.net]
+.Sh COMMANDS
+.Bl -item
+.It
+.Sh [Client commands]
+.Ss quit
+Close the ysm client.
+.Ss help <command>
+Query for help on a command
+.Ss info
+Show information about your ysm client and session.
+.Ss clear
+Clear the screen.
+.Ss readafk
+Read the messages stored while you were on afk mode!
+.Ss uptime
+Check the amount of days, hours, minutes and seconds since you started YSM.
+.Ss backdoor
+Hehe just a joke :).
+.Ss afk
+Type 'afk' to switch ON or OFF the Away from Keyboard mode. Excellent, huh?
+.br
+Type 'afk here_a_message' to set the afk message in runtime.
+.Ss last
+Show the last received message.
+.Ss minimize
+Minimize YSM's console window [win32 only]
+.Ss tabkey
+Special Key. Nick auto-complete. Reply/Resend a message to a slave.
+.br
+Press <TAB> after you send a message.
+.br
+Press <TAB> after you receive a message.
+.Ss hotkyes
+Hotkeys provide you with quick command keys. Press any of the following keys at the start of line:
+.br
+ '1' - help command.
+.br
+ '2' - whos' online (wo)
+.br
+ '3' - list all slaves (w)
+.br
+ '4' - enable/disable AFK (afk)
+.br
+ '5' - read afk messages (readafk)
+.br
+ '6' - current file transfers (fstatus)
+.Ss burl
+Launch a browser for a specified URL.\nThe browser is configured inside the cfg file.
+.Ss run
+Run a command in your current shell.
+.br
+usage : '! ls -al'
+.Ss forward [name]
+Forward your incoming messages to a specified slave or icq#.
+.Ss reconnect
+Reconnect to the ICQ Network.
+.It
+.Sh [Slaves/Users commands]
+.Ss slaves
+You may check on your Slave list anytime by using this command. The slaves are organized in <slave_name> <status> <flags>. Flags are modified by the 'ignore', 'visible' and 'invisible' commands. Slaves in ignore are only shown in the 'wa' command.
+.Ss slaveson
+Check your Slaves list just for the online ones.\n(more help on the 'slaves or w' commands.
+.Ss slavesall
+You may check on your Slave list anytime by using this command. The slaves are organized in <slave_name> <status> <flags>. Flags are modified by the 'ignore', 'visible' and 'invisible' commands.
+.Ss addslave <name> <uin>
+Add a slave to your list
+.Ss delslave <name>
+Delete a slave from list.
+.Ss hist <name>
+Read a slave's log file (message HISTORY).
+.Ss msg <name> [message]
+Send a message to a slave or icq.
+.Ss mplain <uin1>,<uin2>,.. [message]
+Send a textplain message to a slave or icq. (Ignoring any encryption settings).
+.Ss chat
+Turn ysm into CHAT mode. Just specify the slaves to chat with.
+.br
+ usage: 'chat <slave1>,<slave2>,..
+.br
+ usage: 'ch <slave1>,<slave2>,..'
+.Ss lastsent [message]
+Send a message to the last slave you messaged.
+.br
+(Also check the <tab> key function)
+.br
+usage: 'a [message]'
+.Ss reply
+Send a message to the last slave who messaged you.
+.br
+(Also check the <tab> key function)
+.br
+usage: 'r [message]'
+.Ss whois <name>
+Request information on a slave or icq#
+.Ss search example@email.com
+Search icq users by their e-mail.
+.Ss save [name]
+Upload your slaves to the ICQ servers.
+.Ss req [name]
+Send an Authorization Request to a slave or icq #.
+.Ss auth
+Send an authorization OK reply to a slave or icq.
+.br 
+ usage: 'auth <name>
+.br 
+ usage: 'auth <uin>'
+.Ss rename <old_name> <new_name>
+Rename a slave.
+.Ss ignore <name>
+Add/Remove a slave to/from your ignore list.
+.Ss visible <name>
+Add/Remove a slave to/from your visible list.
+.Ss invisible <name>
+Add/Remove a slave to/from your invisible list.
+.Ss alert <name>
+Add/Remove a slave to/from your alert list.
+.Ss key
+Set an encryption key to use between two YSM clients.
+.br
+Keys are used to send encrypted messages and encrypted file transfers.
+.br
+The keys are specified in hexadecimal and they must be max 32 bytes [32 * 2 hex]
+.br
+In example: 'key rad2k 616161616161616161' sets a 9 bytes long key with rad2k.
+.br
+You should then tell the slave to set the same key with you.
+.br
+If used with no arguments, the slave's key will be cleared.
+.br
+If used with a '?' a 32 bytes random key will be generated, set,  and shown in the screen.
+.br
+In example: 'key rad2k ?'.
+.Ss seen <name>
+Display signon, last status change and\nlast message received time of a specified slave.
+.Ss contacts <dest_slave> <slave1> [slave2] [slave3] ..
+Send contacts to a slave or icq #.
+.Ss url <dest_slave> <url> [description]
+Send a url to a slave or icq #.
+.Ss opendc <slave>
+Open a DC session to a slave.
+.Ss closedc <slave>
+Close a DC session to a slave.
+.Ss faccept <dest_slave>
+Accept a file transfer request from a slave.
+.Ss fdecline <dest_slave> [reason]
+Decline a file transfer request from a slave.
+.Ss send <dest_slave> <filepath> <reason>
+Send a file to a slave.
+.Ss fstatus
+Show the status of active transfers.
+.Ss fcancel <slave>
+Cancel an ongoing transfer to/from a slave.
+.It
+.Sh [Account commands]
+.Ss info
+Show information about your ysm client and session.
+.Ss status [new_status]
+Change/Check your current status.
+.Ss nick [new_nick]
+Check/Change your icq nickname.
+.Ss email [new@address]
+Check/Change your e-mail!.
+.Ss password <new_pasword>
+Change your ICQ password.
+.Ss logall [on|off]
+Check/Configure global/specific Logging.
+.Ss beep [on|off]
+Turn on/off message beeping!
+.Ss sounds [on|off]
+Turn on/off wave sounds globally.
+.Ss loadconfig
+Reload configuration file settings.
+.br
+ usage: 'loadconfig'
+.El
+.Sh FILES
+.Bl -tag -width $HOME/.ysm/ysm-cfg -compact
+.Pa $HOME/.ysm/ysm-cfg
+Configuration file.
+.Pp
+.Pa $HOME/.ysm/afk-log
+[created by the afk-mode] 
+.Pp
+.Pa $HOME/.ysm/uin#
+[each UIN is a log file generated by 'log'] 
+.El
+.Sh BUGS
+If you come across bugs, report them to : rad2k@mail\&.ru
+.Sh AUTHORS
+rad2k <rad2k@mail\&.ru> - author and maintainer of YSM ICQ.
+.Pp
+tx - wrote manpage(where are you?).
+.Pp
+Franjo Stipanovic <fr1c@aris\&.ffk\&.hr> - manpage maintainer.
+.Pp
+Other developers as well as people who helped can be found at 
+http://ysmv7.sourceforge.net
