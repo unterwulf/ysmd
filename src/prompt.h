@@ -28,21 +28,6 @@ For Contact information read the AUTHORS file.
 #ifndef _PROMPT_H_
 #define _PROMPT_H_
 
-#ifdef HAVE_LIBREADLINE
-int32_t YSM_ConsoleIsHotKey(int count, int key);
-#else
-int32_t YSM_ConsoleIsHotKey(int32_t key);
-#endif
-
-void YSM_ConsoleRedrawPrompt(int8_t redrawbuf);
-void YSM_ConsoleRestore(void);
-void YSM_ConsoleSetup(void);
-void YSM_ConsoleReadInit(void);
-void YSM_ConsoleTab( int8_t *string, int32_t *size, int32_t maxsize );
-void YSM_ConsoleClearLine(int8_t redrawprompt, int32_t cmdlen);
-void YSM_ConsoleTabCommand(int32_t argc, int8_t **argv, int32_t *pos, size_t msize);
-void YSM_ConsoleTabSlave(int32_t argc, int8_t **argv, int32_t *pos, size_t msize);
-
 void YSM_SendMessage(
     uin_t      r_uin,
     int8_t    *data,
@@ -51,11 +36,10 @@ void YSM_SendMessage(
     u_int8_t   verbous );
 
 void YSM_PasswdCheck(void);
-void YSM_ConsoleRead(void);
+void YSM_ConsoleRead(int fd);
 void YSM_ParseCommand(int8_t *_input, int32_t *argc, int8_t *argv[]);
 void YSM_DoCommand(char *cmd);
 void YSM_DoChatCommand(int8_t *cmd);
-int8_t * YSM_ReadLongMessage(void);
 
 void YSM_DisplayMsg(
     int16_t   m_type,

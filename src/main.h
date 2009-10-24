@@ -35,9 +35,8 @@ static void start_network(void);
 static void prompt_thread(void);
 static void network_thread(void);
 static void dc_thread(void);
-static void YSM_Start_Cycle(void);
+static void cycle_thread(void);
 
-int YSM_SignIn(void);
 void YSM_CycleChecks(void);
 
 #endif

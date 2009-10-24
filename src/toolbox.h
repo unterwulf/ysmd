@@ -28,30 +28,14 @@ For Contact information read the AUTHORS file.
 #ifndef _TOOLBOX_H_
 #define _TOOLBOX_H_
 
-struct YSM_EVENTS
-{
-    /* path to the binary used to play sounds */
-    int8_t    sbinpath[MAX_PATH];
-    /* event definitions */
-#define EVENT_INCOMINGMESSAGE        0
-    int8_t    execincoming[MAX_DATA_LEN+1];
-    int8_t    insound;
-#define EVENT_OUTGOINGMESSAGE        1
-    int8_t    execoutgoing[MAX_DATA_LEN+1];
-    int8_t    outsound;
-#define EVENT_ONCOMINGUSER        2
-    int8_t    execoncoming[MAX_DATA_LEN+1];
-    int8_t    onsound;
-#define EVENT_OFFGOINGUSER        3
-    int8_t    execoffgoing[MAX_DATA_LEN+1];
-    int8_t    offsound;
-#define EVENT_LOGOFF            4
-    int8_t    execlogoff[MAX_DATA_LEN+1];
-    int8_t    logoffsound;
-#define EVENT_PREINCOMINGMESSAGE     5
-};
+#define YSM_ERROR(x,y) ysm_error((x), (y), __FILE__, __LINE__)
 
-extern struct YSM_EVENTS g_events;
+#define EVENT_INCOMINGMESSAGE     0
+#define EVENT_OUTGOINGMESSAGE     1
+#define EVENT_ONCOMINGUSER        2
+#define EVENT_OFFGOINGUSER        3
+#define EVENT_LOGOFF              4
+#define EVENT_PREINCOMINGMESSAGE  5
 
 void YSM_Event( int8_t    event_t,
     uin_t        r_uin,
@@ -60,16 +44,12 @@ void YSM_Event( int8_t    event_t,
     int8_t        *m_data,
     u_int8_t    m_flags );
 
-int32_t YSM_PlaySound( int8_t *filename );
-
-void YSM_Error( int32_t level, int8_t *file, int32_t line, int8_t verbose );
+void ysm_error(int32_t level, int8_t verbose, int8_t *file, int32_t line);
 
 int32_t YSM_LookupStatus( int8_t *name );
 void YSM_WriteFingerPrint( int client, char *buf );
 void YSM_WriteStatus(u_int16_t status, int8_t *buf);
 int32_t YSM_IsValidStatus(u_int16_t status);
-int8_t * YSM_GetColorStatus(int8_t *status, int8_t *override);
-int8_t * YSM_GetColorByName(int8_t *color);
 
 FILE *YSM_OpenFile( char *fname, char *attr );
 
@@ -80,11 +60,11 @@ int8_t * YSM_trim(int8_t *str);
 ssize_t YSM_tokenize(char *str, const char *sep, char **arr, ssize_t count);
 
 void YSM_GenerateLogEntry(
-	int8_t *nick,
-	uin_t   uinA,
-	uin_t   uinB,
-	int8_t *message,
-	int32_t mlen);
+    int8_t *nick,
+    uin_t   uinA,
+    uin_t   uinB,
+    int8_t *message,
+    int32_t mlen);
 
 int32_t YSM_DumpLogFile(int8_t *fname, int8_t *data);
 void YSM_Print_Uptime(void);
@@ -94,7 +74,6 @@ u_int32_t Chars_2_DW(u_int8_t *buf);
 u_int32_t Chars_2_DWb(u_int8_t *buf);
 u_int16_t Chars_2_Word(u_int8_t *buf);
 u_int16_t Chars_2_Wordb(u_int8_t *buf);
-
 void DW_2_Chars(u_int8_t *buf, u_int32_t num);
 void DW_2_Charsb(u_int8_t *buf, u_int32_t num);
 void Word_2_Chars(u_int8_t *buf, const int num);
@@ -110,14 +89,13 @@ void FD_Init(int8_t whichfd);
 void FD_Timeout(u_int32_t sec, u_int32_t usec);
 void FD_Add(int32_t sock, int8_t whichfd);
 void FD_Del(int32_t sock, int8_t whichfd);
-int  FD_IsSet(int32_t sock, int8_t whichfd);
-int  FD_Select(int8_t whichfd);
+int FD_IsSet(int32_t sock, int8_t whichfd);
+int FD_Select(int8_t whichfd);
 
 long YSM_GetMicroTime(long input);
 
 void YSM_Thread_Sleep(unsigned long seconds, unsigned long ms);
 
 char * YSM_gettime(time_t Time, char *Buffer, size_t Length);
-void YSM_CheckCommandsFile(void);
 
-#endif /* _TOOLBOX_H_ */
+#endif

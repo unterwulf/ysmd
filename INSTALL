@@ -5,10 +5,6 @@
 You may disable threads support by adding '--disable-threads'
 i.e: "./configure --disable-threads".
 
-You may force using the getline library instead of readline by
-disabling readline using '--disable-readline':
-i.e.: "./configure --disable-readline".
-
 
 1.1 Compiling
 #############
@@ -20,5 +16,5 @@ i.e.: "./configure --disable-readline".
 
 		as root, execute 'make install'
 
-For more information refer to the documentation section in ysm's website.
-[ http://ysmv7.sourceforge.net ] 
+For more information refer to the documentation section in ysmd's website.
+[ http://ysmd.sourceforge.net ] 

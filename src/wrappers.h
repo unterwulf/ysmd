@@ -1,8 +1,4 @@
-/*	$Id: YSM_Wrappers.h,v 1.12 2005/04/14 18:45:59 rad2k Exp $	*/
 /*
--======================== ysmICQ client ============================-
-		Having fun with a boring Protocol
--======================== YSM_Wrappers.h ===========================-
 
 YSM (YouSickMe) ICQ Client. An Original Multi-Platform ICQ client.
 Copyright (C) 2002 rad2k Argentina.
@@ -27,33 +23,27 @@ For Contact information read the AUTHORS file.
 
 #ifndef _WRAPPERS_H_
 #define _WRAPPERS_H_
-int YSM_WRITE( int32_t sock, void *data, int32_t data_len );
 
-int
-YSM_READ( int32_t sock,
-	void	*buf,
-	int	read_len,
-	char	priority
-	);
-	
-size_t
-YSM_READ_LN(int32_t sock, int8_t *obuf, size_t maxsize);
+#define YSM_MALLOC(x)    ysm_malloc((x), __FILE__, __LINE__)
+#define YSM_CALLOC(x, y) ysm_calloc((x), (y), __FILE__, __LINE__)
+#define YSM_FREE(x)      ysm_free((x), __FILE__, __LINE__)
 
+void * ysm_malloc(size_t size, char *file, int line);
+void * ysm_calloc(size_t nmemb, size_t size, char *file, int line);
+void ysm_free(void *what, char *file, int line);
 
-int32_t
-YSM_WRITE_DC( slave_t *victim, int32_t sock, void *data, int32_t data_len);
+int YSM_READ(int32_t sock, void	*buf, int read_len, char priority);
+size_t YSM_READ_LN(int32_t sock, int8_t *obuf, size_t maxsize); 
+int YSM_WRITE(int32_t sock, void *data, int32_t data_len);
+int32_t YSM_WRITE_DC(slave_t *victim, int32_t sock, void *data, int32_t data_len);
 
-void * ysm_malloc( size_t size, char *file, int line );
-void * ysm_calloc( size_t nmemb, size_t size, char *file, int line );
-void ysm_free( void *what, char *file, int line );
-
-void YSM_Exit( int32_t status, int8_t ask );
+void YSM_Exit(int32_t status, int8_t ask);
 
 void YSM_Reconnect(void);
 
-
-FILE * YSM_fopen(const char *path, const char *mode);
-int YSM_fclose(FILE *stream);
+FILE * ysm_fopen(const char *path, const char *mode);
+int ysm_fclose(FILE *stream);
 
 int YSM_IsInvalidPtr(void *ptr);
-#endif
+
+#endif /* _WRAPPERS_H_ */

@@ -1,8 +1,4 @@
-/*    $Id: YSM_Setup.c,v 1.147 2005/12/26 23:44:58 rad2k Exp $    */
 /*
--======================== ysmICQ client ============================-
-        Having fun with a boring Protocol
--========================== YSM_Setup.c ============================-
 
 YSM (YouSickMe) ICQ Client. An Original Multi-Platform ICQ client.
 Copyright (C) 2002 rad2k Argentina.
@@ -40,12 +36,8 @@ For Contact information read the AUTHORS file.
 
 int8_t YSM_cfgfile[MAX_PATH];
 int8_t YSM_cfgdir[MAX_PATH];
-int8_t YSM_AFKMessage[MAX_DATA_LEN+1];
-int8_t YSM_CHATMessage[MAX_DATA_LEN+1];
-int8_t YSM_DefaultAFKMessage[MAX_DATA_LEN+1];
+static int8_t YSM_DefaultAFKMessage[MAX_DATA_LEN+1];
 int8_t YSM_DefaultCHATMessage[MAX_DATA_LEN+1];
-int8_t YSM_BrowserPath[MAX_DATA_LEN+1];
-int8_t YSM_CommandsFile[MAX_DATA_LEN+1];
 
 extern short  YSM_AFKCount;
 extern time_t YSM_AFK_Time;
@@ -54,26 +46,16 @@ extern struct YSM_MODEL YSM_USER;
 void init_default_config(ysm_config_t *cfg)
 {
     cfg->verbose = 0x5;
-    cfg->beep = 1;
-    cfg->sounds = TRUE;
     cfg->logall = FALSE;
     cfg->newlogsfirst = TRUE;
     cfg->spoof = FALSE;
     cfg->awaytime = 5;
     cfg->afkmaxshown = 3;
     cfg->afkminimumwait = MINIMUM_AFK_WAIT;
-    cfg->winalert = 0x3;
-    cfg->version_check = TRUE;
-    cfg->antisocial = 0;
+    cfg->antisocial = FALSE;
     cfg->updatenicks = TRUE;
     cfg->dcdisable = FALSE;
     cfg->dclan = FALSE;
-
-    cfg->color_message            = GREEN;
-    cfg->color_text               = NORMAL;
-    cfg->color_statuschangename   = BLUE;
-    cfg->color_statuschangestatus = NULL;
-    cfg->color_text2              = MAGENTA;
 
     cfg->dcport1 = 0;
     cfg->dcport2 = 0;
@@ -81,60 +63,61 @@ void init_default_config(ysm_config_t *cfg)
     /* needs to store a 4 bytes UIN */
     cfg->forward = 0;
 
-    cfg->hot_key_maximize = 's';
+    memset(&cfg->AFKMessage,   0, sizeof(cfg->AFKMessage));
+    memset(&cfg->CHATMessage,  0, sizeof(cfg->CHATMessage));
+    memset(&cfg->BrowserPath,  0, sizeof(cfg->BrowserPath));
 }
 
-int YSM_Initialize(void)
+int initialize(void)
 {
     signal(SIGPIPE, SIG_IGN);
     signal(SIGINT, CtrlHandler);
 
     memset(&YSM_USER, 0, sizeof(YSM_USER));
-    memset(&g_events, 0, sizeof(g_events));
 
-    /* Commands Initialization */
-    YSM_Init_Commands();
+    /* Commands initialization */
+    init_commands();
 
-    /* Network Initialization */
-    YSM_NetworkInit();
+    /* Network initialization */
+    init_network();
+
+    /* Default configuration initialization*/
+    init_default_config(&g_cfg);
+
+    /* Setup the config and dir path only if -c was not used before */
+    if (YSM_cfgfile[0] == '\0' || YSM_cfgdir[0] == '\0')
+    {
+        PRINTF(VERBOSE_MOATA, "Setting up Config. file Path.");
+        YSM_SetupHomeDirectory();
+    }
+
+    PRINTF(VERBOSE_MOATA, "Reading config file.");
+    init_config();
+
+#ifdef YSM_USE_CHARCONV
+    /* Initialize CodePage/Charsets */
+    init_charset();
+#endif
+
+    PRINTF(VERBOSE_MOATA, "Retrieving dlave data from config.");
+    init_slaves();
 
     return 0;
 }
 
-void YSM_SetupConfigurationFile(void)
+void init_config(void)
 {
     FILE *fd = NULL;
 
-    if ((fd = YSM_fopen(YSM_cfgfile,"r")) != NULL)
+    if ((fd = ysm_fopen(YSM_cfgfile, "r")) != NULL)
     {
         YSM_ReadConfig(fd, 0);
-        YSM_fclose(fd);
+        ysm_fclose(fd);
     }
     else
     {
-        YSM_PrintWizardBox("<<< ysmICQ Configuration Wizard >>>");
-
-        PRINTF(VERBOSE_BASE,
-            "As this is your first time running YSM"
-            ", you will be\nprompted to fill some "
-            "information required to create your\n"
-            "configuration file. This file will be"
-            " stored in your home\n"
-            "directory, or the local directory (in "
-            "case you used the '-c'\nparameter.) "
-            "The filename will be " BROWN "'%s'" NORMAL ".\n"
-            "In case you may want to change/update "
-            "any of this information\njust do it "
-            "directly in the configuration file."
-            "\n\n", YSM_cfgfile);
-
-        PRINTF(VERBOSE_BASE, "So, lets start!:\n");
-        YSM_CreateConfig();
-        /* read the configuration file settings now */
-        if ((fd = YSM_fopen(YSM_cfgfile,"r")) != NULL) {
-            YSM_ReadConfig(fd, 0);
-            YSM_fclose(fd);
-        }
+        PRINTF(VERBOSE_BASE, "Couldn't open config file.\n");
+        exit(1);
     }
 }
 
@@ -175,55 +158,31 @@ void YSM_SetupHomeDirectory(void)
         YSM_CFGFILENAME,
         sizeof(YSM_cfgfile) - strlen(YSM_cfgfile) - 1);
 
-    ysm_free(homep, __FILE__, __LINE__);
-    homep = NULL;
-
-    ysm_free(homep2, __FILE__, __LINE__);
-    homep2 = NULL;
+    YSM_FREE(homep);
+    YSM_FREE(homep2);
 }
 
-void YSM_SetupSlaves(void)
+void init_slaves(void)
 {
     FILE *fd;
 
-    if ((fd = YSM_fopen(YSM_cfgfile, "r")) != NULL)
+    if ((fd = ysm_fopen(YSM_cfgfile, "r")) != NULL)
     {
         YSM_ReadSlaves(fd);
-        YSM_fclose(fd);
+        ysm_fclose(fd);
     }
     else
     {
         PRINTF( VERBOSE_BASE,
             "Contact list couldn't be read!. "
             "File not found.\n" );
-            YSM_Error(ERROR_CRITICAL, __FILE__, __LINE__, 0);
+            YSM_ERROR(ERROR_CRITICAL, 0);
     }
-}
-
-void YSM_Setup(void)
-{
-    init_default_config(&g_cfg);
-    /* Setup the config and dir path only if -c was not used before */
-    if (YSM_cfgfile[0] == '\0' || YSM_cfgdir[0] == '\0')
-    {
-        PRINTF(VERBOSE_MOREDATA, "Setting up Config. file Path.");
-        YSM_SetupHomeDirectory();
-    }
-
-    PRINTF(VERBOSE_MOREDATA, "Reading or Creating Config file.");
-    YSM_SetupConfigurationFile();
-    PRINTF(VERBOSE_MOREDATA, "Retrieving Slave DATA from Config.");
-    YSM_SetupSlaves();
 }
 
 void YSM_ReadConfig(FILE *fd, char reload)
 {
-int8_t    YSM_CFGEND = FALSE, buf[MAX_PATH], *auxb = NULL, *aux = NULL;
-
-    memset(&YSM_AFKMessage,0, MAX_DATA_LEN+1);
-    memset(&YSM_CHATMessage,0, MAX_DATA_LEN+1);
-    memset(&YSM_BrowserPath,0, MAX_DATA_LEN+1);
-    memset(&YSM_CommandsFile,0, MAX_DATA_LEN+1);
+    int8_t YSM_CFGEND = FALSE, buf[MAX_PATH], *auxb = NULL, *aux = NULL;
 
     strncpy( YSM_DefaultAFKMessage,
         YSM_AFK_MESSAGE,
@@ -290,13 +249,6 @@ int8_t    YSM_CFGEND = FALSE, buf[MAX_PATH], *auxb = NULL, *aux = NULL;
                 g_cfg.updatenicks =
                         atoi(strtok(NULL," \n\t"));
 
-            else if(!strcasecmp(aux,"COMMANDSFILE")) {
-                if ((aux=strtok(NULL,"\n\t")) != NULL)
-                    strncpy( YSM_CommandsFile,
-                        aux,
-                        sizeof(YSM_CommandsFile) - 1);
-            }
-
             else if (!strcasecmp(aux,"DC_DISABLE")) {
                 if ((aux=strtok(NULL," \n\t"))!= NULL)
                     g_cfg.dcdisable = atoi(aux);
@@ -322,11 +274,6 @@ int8_t    YSM_CFGEND = FALSE, buf[MAX_PATH], *auxb = NULL, *aux = NULL;
                     g_cfg.verbose = atoi(aux);
             }
 
-            else if(!strcasecmp(aux,"BEEP")) {
-                if ((aux=strtok(NULL," \n\t"))!= NULL)
-                    g_cfg.beep = atoi(aux);
-            }
-
             else if(!strcasecmp(aux,"LOGALL")) {
                 if ((aux=strtok(NULL," \n\t"))!= NULL)
                     g_cfg.logall = atoi(aux);
@@ -335,16 +282,6 @@ int8_t    YSM_CFGEND = FALSE, buf[MAX_PATH], *auxb = NULL, *aux = NULL;
             else if(!strcasecmp(aux,"NEWLOGSFIRST")) {
                 if ((aux=strtok(NULL," \n\t"))!= NULL)
                     g_cfg.newlogsfirst = atoi(aux);
-            }
-
-            else if(!strcasecmp(aux,"WINALERT")) {
-                if ((aux=strtok(NULL," \n\t"))!= NULL)
-                    g_cfg.winalert = atoi(aux);
-            }
-
-            else if(!strcasecmp(aux,"WINHOTKEY")) {
-                if ((aux=strtok(NULL," \n\t"))!= NULL)
-                    g_cfg.hot_key_maximize = *aux;
             }
 
             else if (!strcasecmp(aux, "AWAYTIME")) {
@@ -468,537 +405,79 @@ int8_t    YSM_CFGEND = FALSE, buf[MAX_PATH], *auxb = NULL, *aux = NULL;
 
             else if (!strcasecmp(aux,"BROWSER")) {
                 if ((aux=strtok(NULL,"\n\t"))!= NULL)
-                    strncpy( YSM_BrowserPath, aux,
-                        sizeof(YSM_BrowserPath) - 1);
+                    strncpy( g_cfg.BrowserPath, aux,
+                        sizeof(g_cfg.BrowserPath) - 1);
             }
-
-            else if (!strcasecmp(aux,"SOUNDS")) {
-                if (atoi(strtok(NULL," \n\t")) > 0)
-                    g_cfg.sounds = TRUE;
-                else
-                    g_cfg.sounds = FALSE;
-            }
-
-#ifndef WIN32
-            else if (!strcasecmp(aux,"SOUND_PROGRAM")) {
-                if ((aux=strtok(NULL,"\n\t")) != NULL)
-                    strncpy( g_events.sbinpath, aux,
-                    sizeof(g_events.sbinpath) - 1);
-            }
-#endif
-
+/*
             else if (!strcasecmp(aux,"EXEC_INCOMING")) {
                 if ((aux=strtok(NULL," \n\t")) != NULL)
-                    strncpy( g_events.execincoming, aux,
+                    strncpy(g_events.execincoming, aux,
                     sizeof(g_events.execincoming) - 1);
             }
 
             else if (!strcasecmp(aux,"EXEC_OUTGOING")) {
                 if ((aux=strtok(NULL," \n\t")) != NULL)
-                    strncpy( g_events.execoutgoing, aux,
+                    strncpy(g_events.execoutgoing, aux,
                     sizeof(g_events.execoutgoing) - 1);
             }
 
             else if (!strcasecmp(aux,"EXEC_ONCOMING")) {
                 if ((aux=strtok(NULL," \n\t")) != NULL)
-                    strncpy( g_events.execoncoming, aux,
+                    strncpy(g_events.execoncoming, aux,
                     sizeof(g_events.execoncoming) - 1);
             }
 
             else if (!strcasecmp(aux,"EXEC_OFFGOING")) {
                 if ((aux=strtok(NULL," \n\t")) != NULL)
-                    strncpy( g_events.execoffgoing, aux,
+                    strncpy(g_events.execoffgoing, aux,
                     sizeof(g_events.execoffgoing) - 1);
             }
 
             else if (!strcasecmp(aux,"EXEC_LOGOFF")) {
                 if ((aux=strtok(NULL," \n\t")) != NULL)
-                    strncpy( g_events.execlogoff, aux,
+                    strncpy(g_events.execlogoff, aux,
                     sizeof(g_events.execlogoff) - 1);
             }
+*/
 
-            else if(!strcasecmp(aux,"SOUND_INCOMING")) {
-                if (atoi(strtok(NULL," \n\t")) > 0)
-                    g_events.insound = 1;
-                else
-                    g_events.insound = 0;
-            }
+            else if(!strcasecmp(aux,SLAVES_TAG))
+                YSM_CFGEND=TRUE;
 
-            else if(!strcasecmp(aux,"SOUND_OUTGOING")) {
-                if (atoi(strtok(NULL," \n\t")) > 0)
-                    g_events.outsound = 1;
-                else
-                    g_events.outsound = 0;
-            }
-
-            else if(!strcasecmp(aux, "COLOR_MESSAGE")) {
-                if ((aux=strtok(NULL," \n\t")) != NULL) {
-                    g_cfg.color_message =
-                        YSM_GetColorByName(aux);
-                }
-            }
-
-            else if(!strcasecmp(aux, "COLOR_TEXT")) {
-                if ((aux=strtok(NULL," \n\t")) != NULL) {
-                    g_cfg.color_text =
-                        YSM_GetColorByName(aux);
-                }
-            }
-
-            else if(!strcasecmp(aux, "COLOR_STATUSCHANGENAME")) {
-                if ((aux=strtok(NULL," \n\t")) != NULL) {
-                    g_cfg.color_statuschangename =
-                        YSM_GetColorByName(aux);
-                }
-            }
-
-            else if(!strcasecmp(aux, "COLOR_STATUSCHANGESTATUS")) {
-                if ((aux=strtok(NULL," \n\t")) != NULL) {
-                    g_cfg.color_statuschangestatus =
-                        YSM_GetColorByName(aux);
-                }
-            }
-
-            else if(!strcasecmp(aux, "COLOR_TEXT2")) {
-                if ((aux=strtok(NULL," \n\t")) != NULL) {
-                    g_cfg.color_text2 =
-                        YSM_GetColorByName(aux);
-                }
-            }
-
-            else if(!strcasecmp(aux,"SOUND_ONCOMING")) {
-                if (atoi(strtok(NULL," \n\t")) > 0)
-                    g_events.onsound = 1;
-                else
-                    g_events.onsound = 0;
-            }
-
-            else if(!strcasecmp(aux,"SOUND_OFFGOING")) {
-                if (atoi(strtok(NULL," \n\t")) > 0)
-                    g_events.offsound = 1;
-                else
-                    g_events.offsound = 0;
-            }
-
-            else if(!strcasecmp(aux,"SOUND_LOGOFF")) {
-                if (atoi(strtok(NULL," \n\t")) > 0)
-                    g_events.logoffsound = 1;
-                else
-                    g_events.logoffsound = 0;
-            }
-
-                    else if(!strcasecmp(aux,SLAVES_TAG)) YSM_CFGEND=TRUE;
-
-            else if( *aux ) {
+            else if( *aux )
+            {
                 PRINTF( VERBOSE_BASE,
-                    RED "UNKNOWN cfg directive '%s' , "
-                    "ignoring...\n" NORMAL,
+                    "UNKNOWN cfg directive '%s' , "
+                    "ignoring...\n" ,
                     aux );
             }
         }
     }
 
-
     /*    Before leaving check there's at least the    */
     /*    minimum required fields */
 
-    if ( !YSM_USER.Uin ) {
-        PRINTF( VERBOSE_BASE,
-        "\nMissing UIN in config. Can't continue.\n"
-        "If you want a new account, remove the cfg file.\n");
+    if (!YSM_USER.Uin)
+    {
+        PRINTF(VERBOSE_BASE,
+            "\nMissing UIN in config. Can't continue.\n");
         exit(0);
-
-    } else if ( YSM_USER.network.auth_host[0] == '\0' ) {
-
-        PRINTF( VERBOSE_BASE,
+    }
+    else if (YSM_USER.network.auth_host[0] == '\0')
+    {
+        PRINTF(VERBOSE_BASE,
             "\nMissing ICQ Server in config. Can't continue.\n");
         exit(0);
-
-    } else if (!YSM_USER.network.auth_port) {
-        PRINTF( VERBOSE_BASE,
-        "\nMissing ICQ Server port in config. Can't continue.\n");
+    }
+    else if (!YSM_USER.network.auth_port)
+    {
+        PRINTF(VERBOSE_BASE,
+            "\nMissing ICQ Server port in config. Can't continue.\n");
         exit(0);
     }
-
-    /* Initialize CodePage/Charsets */
-#ifdef YSM_USE_CHARCONV
-    YSM_CharsetInit();
-#endif
 }
 
-void YSM_CreateConfig(void)
-{
-    char  YSM_tmpa[MAX_PWD_LEN+1], YSM_tmpb[MAX_UIN_LEN+1];
-    char *p_passwd;
-    int   tries = 0;
-
-    strncpy(YSM_USER.network.auth_host,
-        YSM_DEFAULTSRV,
-        sizeof(YSM_USER.network.auth_host) - 1) ;
-
-    YSM_USER.network.auth_port = YSM_DEFAULTPORT;
-    YSM_USER.Uin = 0;
-
-    memset(YSM_tmpb, 0, MAX_UIN_LEN+1);
-
-    PRINTF( VERBOSE_BASE,
-        "\nYour " RED "UIN" NORMAL " [use 0 for new]#: " );
-
-    YSM_fgets(YSM_tmpb, MAX_UIN_LEN, 0);
-
-    YSM_USER.Uin = atoi(YSM_tmpb);
-
-    /* Ask proxy configuration once */
-    YSM_AskProxyConfiguration();
-
-    if (YSM_USER.Uin == 0) {
-
-    PRINTF( VERBOSE_BASE, "\nRegister a new ICQ Number.\n");
-    PRINTF( VERBOSE_BASE,
-        "Unfortunately, registering an ICQ number with ysmICQ is no longer possible.\n");
-
-    PRINTF(VERBOSE_BASE, "Please head to http://www.icq.com/register/ to register a UIN.\n");
-
-    PRINTF(VERBOSE_BASE, "After you have registered a UIN, come back and type it in again.\n");
-
-        PRINTF( VERBOSE_BASE,
-        "\nYour " RED "UIN" NORMAL "#: " );
-
-    YSM_fgets(YSM_tmpb, MAX_UIN_LEN, 0);
-    YSM_USER.Uin = atoi(YSM_tmpb);
-
-
-    } else    {
-        PRINTF(VERBOSE_BASE,
-        "\nMaximum password length is set to %d.\n", MAX_PWD_LEN);
-        PRINTF(VERBOSE_BASE,
-        "You may just press the ENTER key\n"
-        "to be prompted for your password everytime you start YSM.\n");
-    }
-
-    do {
-        p_passwd = YSM_getpass("Password: ");
-        if (strlen(p_passwd) >= 1) tries++;
-    } while(!tries && YSM_USER.Uin == 0);
-
-    strncpy( YSM_USER.password, p_passwd, sizeof(YSM_USER.password) - 1);
-
-    do {
-        p_passwd = YSM_getpass("Again?[verify]: ");
-        if (strlen(p_passwd) >= 1) tries--;
-    } while(tries && YSM_USER.Uin == 0);
-
-    strncpy( YSM_tmpa, p_passwd, sizeof(YSM_tmpa)-1 );
-
-    if (!strcasecmp( YSM_USER.password , YSM_tmpa )) {
-
-        YSM_SaveConfig();
-
-        PRINTF(VERBOSE_BASE,
-            "\nConfiguration file created.\n");
-        return;
-    }
-
-    PRINTF( VERBOSE_BASE,
-        "\n%s<WRONG>%s - Passwords did not match.\n", RED, NORMAL );
-
-    YSM_Error(ERROR_CRITICAL, __FILE__, __LINE__, 0);
-}
-
-#define YSMOPENCONFIG(rwx)    (fd = YSM_fopen(YSM_cfgfile,rwx))
-#define YSMCLOSECONFIG()    YSM_fclose(fd)
-
-__inline void CFGWRITE(FILE *fd, const u_int8_t *foo, ...)
-{
-va_list    args;
-    va_start(args, foo);
-    vfprintf(fd, foo, args);
-    fprintf(fd, "\n");
-    va_end(args);
-}
-
-void YSM_SaveConfig(void)
-{
-time_t    YSM_tmpdate;
-FILE    *fd;
-
-    /* mkdir returns 0 if success */
-    if (mkdir(YSM_cfgdir,0700)) {
-        if (errno != EEXIST) {
-            PRINTF(VERBOSE_BASE,
-                "\nmkdir() directory %s error",YSM_cfgdir);
-            YSM_Error(ERROR_CRITICAL, __FILE__, __LINE__, 1);
-        }
-    }
-
-        if (YSMOPENCONFIG("w") != NULL) {
-
-        /* Initial COMMENTS and NOTES */
-
-        CFGWRITE(fd,"# %s%s .", YSM_INFORMATION, YSM_INFORMATION2);
-
-                YSM_tmpdate = time(NULL);
-        CFGWRITE(fd,"# YSM CFG FILE - Created -> %s", ctime(&YSM_tmpdate));
-
-        CFGWRITE(fd,"# VALUES ARE SPECIFIED AFTER A '>' SYMBOL. ");
-        CFGWRITE(fd,"# COMMENTS ARE PRECEEDED BY A '#' SYMBOL.");
-        CFGWRITE(fd,"# '0' means NO and '1' means YES.\n");
-
-
-        CFGWRITE(fd, "# #######################"
-            "###############################################\n");
-
-        /* Settings and COMMENTS */
-
-        CFGWRITE(fd, "# Default Status - When logging in.");
-        CFGWRITE(fd, "# Options are: "
-                "ONLINE, "
-                "AWAY, "
-                "DND, "
-                "FREECHAT, "
-                "NA,"
-                " OCCUPIED "
-                "and INVISIBLE.");
-
-        CFGWRITE(fd, "STATUS>%s\n", "ONLINE" );
-        CFGWRITE(fd, "UIN>%d", YSM_USER.Uin );
-
-        CFGWRITE(fd,"# Leave this PASSWORD setting empty in order to be");
-        CFGWRITE(fd,"# prompted for a password when logging in.");
-
-        CFGWRITE(fd, "PASSWORD>%s\n", YSM_USER.password);
-        CFGWRITE(fd, "SERVER>%s", YSM_USER.network.auth_host);
-        CFGWRITE(fd, "SERVERPORT>%d\n", YSM_USER.network.auth_port);
-
-        CFGWRITE(fd, "# The amount of minutes to wait without keyboard "
-            "input before changing\n# your status from 'online' to "
-            "away. Use '0' to disable it.");
-
-        CFGWRITE(fd, "AWAYTIME>%d\n", g_cfg.awaytime);
-
-        CFGWRITE(fd,"# The auto-reply message of the AFK mode.");
-        CFGWRITE(fd,"AFKMESSAGE>%s\n", YSM_AFK_MESSAGE);
-        CFGWRITE(fd,"# Amount of messages to show each time in 'readafk'");
-        CFGWRITE(fd,"AFKMAXSHOWN>%d\n", g_cfg.afkmaxshown);
-
-        CFGWRITE(fd,"# Seconds between AFK notices to each slave.");
-        CFGWRITE(fd,"AFKMINIMUMWAIT>%d\n", g_cfg.afkminimumwait);
-
-
-        CFGWRITE(fd,"# The auto-reply message sent while you are in a CHAT session.");
-        CFGWRITE(fd,"CHATMESSAGE>%s\n", YSM_CHAT_MESSAGE);
-
-        CFGWRITE(fd,"# Proxy Configuration. If you want to enable:\n"
-        "# HTTPS - use 1 on PROXY_HTTPS.\n"
-        "# Note, this is not SSL but a Hack (uses 443 and not 5190).\n"
-        "# RESOLVE - use 1 to resolve hostnames through the proxy.\n"
-        "# AUTH  - use 1 on PROXY_AUTH, type a PROXY_USERNAME"
-        " and a PROXY_PASSWORD.\n");
-
-        CFGWRITE(fd,"PROXY>%s",
-            !(YSM_USER.proxy.proxy_host[0])
-            ? "0" : (char *)YSM_USER.proxy.proxy_host);
-
-        CFGWRITE(fd,"PROXY_PORT>%d", YSM_USER.proxy.proxy_port);
-        CFGWRITE(fd,"PROXY_HTTPS>%d",
-            (YSM_USER.proxy.proxy_flags & YSM_PROXY_HTTPS)
-            ? 1 : 0 );
-
-        CFGWRITE(fd,"PROXY_RESOLVE>%d",
-            (YSM_USER.proxy.proxy_flags & YSM_PROXY_RESOLVE)
-            ? 1 : 0 );
-
-        CFGWRITE(fd,"PROXY_AUTH>%d",
-            (YSM_USER.proxy.proxy_flags & YSM_PROXY_AUTH)
-            ? 1 : 0 );
-
-        CFGWRITE(fd,"PROXY_USERNAME>%s",
-            !(YSM_USER.proxy.username[0])
-            ? "0" : (char *)YSM_USER.proxy.username);
-
-        CFGWRITE(fd,"PROXY_PASSWORD>%s\n",
-            !(YSM_USER.proxy.password[0])
-            ? "0" : (char *)YSM_USER.proxy.password);
-
-        CFGWRITE(fd,"# Enable or disable Beeping.");
-        CFGWRITE(fd,"# By specifying a value bigger than 0, you enable "
-            "beeping\n# and specify the amount of times to beep."
-            " A value of 0 will disable beeping.");
-        CFGWRITE(fd,"BEEP>%d\n", 0x1);
-
-        CFGWRITE(fd,"# GLOBAL Logging ON(1) or OFF(0).");
-        CFGWRITE(fd,"# Use '1' to log messages into a history "
-            "readable by the 'hist' command. ");
-        CFGWRITE(fd,"LOGALL>%d\n", 0x1);
-
-        CFGWRITE(fd,"# Put newer logs at the beginning of the file.");
-        CFGWRITE(fd,"NEWLOGSFIRST>%d\n", 0x1);
-
-        CFGWRITE(fd,"# Only Receive messages from slaves in your list (1)"
-            " or from anyone (0).");
-        CFGWRITE(fd,"# Note you will always receive Auth requests in any"
-            " of the two modes.");
-        CFGWRITE(fd,"ANTISOCIAL>%d\n", 0x0);
-
-        CFGWRITE(fd,"# Update slave nicknames with newer information?.");
-        CFGWRITE(fd,"# (This is done with the 'whois' command).");
-        CFGWRITE(fd,"UPDATENICKS>%d\n", 0x01);
-
-        CFGWRITE(fd,"# Specify a file from where YSM will "
-            "execute client\n# commands every %d seconds. "
-            "(Once they are executed, the file is cleared.)",
-            YSM_COMMANDSTIME );
-        CFGWRITE(fd,"COMMANDSFILE>\n");
-
-
-        CFGWRITE(fd,"# DC Configuration.\n"
-        "# DC_DISABLE - use 1 to disable direct connections.\n"
-        "# DC_LAN - use 1 to speed up LAN negotiations.\n"
-        "# DC_PORT1 - force a port to listen for incoming DCs.\n"
-        "# DC_PORT2 - force a port to deal with File Transfers.\n");
-
-        CFGWRITE(fd,"DC_DISABLE>0");
-        CFGWRITE(fd,"DC_LAN>0");
-        CFGWRITE(fd,"DC_PORT1>0");
-        CFGWRITE(fd,"DC_PORT2>0\n");
-
-        CFGWRITE(fd, "# Do you want to make your presence public?");
-        CFGWRITE(fd, "WEBAWARE>0\n");
-
-        CFGWRITE(fd, "# Let everyone know its my birthday!");
-        CFGWRITE(fd, "MYBIRTHDAY>0\n");
-
-        CFGWRITE(fd,
-    "# WINALERT will alert your console window on incoming messages.\n"
-    "# If set to \"0\" windows alerts will be disabled.\n"
-    "# If set to \"1\" it will only popup (unix/win32/os2).\n"
-    "# If set to \"2\" it will only blink (win32 and OS2 only).\n"
-    "# If set to \"3\" it will popup and blink (only blinks in win32 and OS2).");
-        CFGWRITE(fd,"WINALERT>%d\n", g_cfg.winalert);
-
-#ifdef WIN32
-        CFGWRITE(fd,
-    "# WINHOTKEY is a CTRL+ALT+key combination in charge of\n"
-    "# activating a minimized YSM client. Set WINHOTKEY to the key"
-    " you desire.");
-
-        CFGWRITE(fd,"WINHOTKEY>%c\n", g_cfg.hot_key_maximize);
-
-#endif    /* WIN32 */
-
-        CFGWRITE(fd,"# Specify the path to the browser that will handle");
-        CFGWRITE(fd,"# urls for the \"burl\" command.");
-        CFGWRITE(fd,"# (Windows users specify full path too)");
-        CFGWRITE(fd,"BROWSER>\n");
-
-        CFGWRITE(fd,
-        "# [Action Events Configuration]"
-        "\n"
-        "# specify a command line or shell script to be executed when:"
-        "\n"
-        "# - a message is received [in EXEC_INCOMING]" "\n"
-        "# - a message is sent [in EXEC_OUTGOING]" "\n"
-        "# - a slave goes online [in EXEC_ONCOMING]" "\n"
-        "# - a slave goes offline [in EXEC_OFFGOING]" "\n"
-        "# - you logoff [in EXEC_LOGOFF]" "\n"
-        "# The script you specify will receive the following command-line parameters: \n"
-        "# [script] remote_uin remote_nick msg_length msg_data"
-        "\n" );
-
-        CFGWRITE(fd,"EXEC_INCOMING>" );
-        CFGWRITE(fd,"EXEC_OUTGOING>" );
-        CFGWRITE(fd,"EXEC_ONCOMING>" );
-        CFGWRITE(fd,"EXEC_OFFGOING>" );
-        CFGWRITE(fd,"EXEC_LOGOFF>\n" );
-
-        CFGWRITE(fd,
-        "# [Sound Events Configuration]"
-        "\n"
-        "# enable(1) or disable(0) sounds globally.");
-        CFGWRITE(fd,"SOUNDS>1\n");
-#ifndef WIN32
-        CFGWRITE(fd,
-        "# specify the path to a program that will handle the" "\n"
-        "# playing of the WAVE sounds. Win32 users dont require this.");
-        CFGWRITE(fd,"SOUND_PROGRAM>/usr/bin/play" );
-#endif
-
-        CFGWRITE(fd, "\n"
-        "# enable(1) or disable(0) the playing of sound events." "\n"
-        "# sounds are played from inside the sounds/ directory in\n"
-        "# your ysm's home directory. \n" );
-
-        CFGWRITE(fd,"SOUND_INCOMING>1" );
-        CFGWRITE(fd,"SOUND_OUTGOING>1" );
-        CFGWRITE(fd,"SOUND_ONCOMING>1" );
-        CFGWRITE(fd,"SOUND_OFFGOING>1" );
-        CFGWRITE(fd,"SOUND_LOGOFF>1\n" );
-
-        CFGWRITE(fd,
-        "# Colors configuration. Available colors are:\n"
-        "# BLACK RED GREEN BROWN BLUE MAGENTA CYAN GRAY WHITE TERMINAL_DEFAULT\n"
-        "# and all mentioned colors in bright as in BRIGHT_colorname.\n"
-        "# You can either use defaults or change them below.");
-
-        CFGWRITE(fd,"COLOR_TEXT>" );
-        CFGWRITE(fd,"COLOR_TEXT2>" );
-        CFGWRITE(fd,"COLOR_STATUSCHANGENAME>" );
-        CFGWRITE(fd,"COLOR_STATUSCHANGESTATUS>" );
-        CFGWRITE(fd,"COLOR_MESSAGE>\n" );
-
-        CFGWRITE(fd, "# Verbose level. Add or remove output information.\n"
-            "# Normal output -> 5\n"
-            "# - Remove status changes -> 0\n"
-            "# - Remove connecting information -> 1\n"
-            "# + Add direct connections information -> 20\n"
-            "# + Add data checking information -> 21\n"
-            "# + Add incoming/outgoing packets dump -> 22\n"
-            "# + Add slaves downloading processing -> 23" );
-
-        CFGWRITE(fd,"VERBOSE>%d\n", g_cfg.verbose);
-
-        CFGWRITE(fd,"# VERSION CHECKING. "
-            "Specify 0 if you want to disable it.\n"
-            "# This feature lets ysm check for the lastest "
-            "available\n"
-            "# release in sourceforge, and compares it with the "
-            "local.");
-
-        CFGWRITE(fd,"VERSION_CHECK>%d\n", g_cfg.version_check);
-
-#if defined (YSM_USE_CHARCONV)
-
-        CFGWRITE(fd,"# CHARSET_TRANS is charset for "
-            "transfering/receiving of messages");
-
-        CFGWRITE(fd,"# CHARSET_LOCAL is charset for "
-            "displaying/inputting of messages");
-
-        CFGWRITE(fd,"# Russian Generic (for Unix) are "
-            "TRANS: CP1251 LOCAL: KOI8-R");
-
-        CFGWRITE(fd,"# Russian Generic (for Windows) are "
-            "TRANS: 1251 LOCAL: 866");
-
-        CFGWRITE(fd,"# Windows users have a list of supported charsets at:"
-        "\n# HKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\NIs"
-        "\\CodePage");
-
-        CFGWRITE(fd,"CHARSET_TRANS>");
-        CFGWRITE(fd,"CHARSET_LOCAL>");
-#endif
-
-                CFGWRITE(fd,"\n\n# your ICQ slaves.\n");
-                CFGWRITE(fd,"%s", SLAVES_TAG);
-                CFGWRITE(fd,"\n\n\n# <EOF>");
-
-                YSMCLOSECONFIG();
-
-        } else {
-                PRINTF(VERBOSE_BASE, "\nERROR creating cfg file.\n");
-        YSM_Error(ERROR_CRITICAL, __FILE__, __LINE__, 1);
-    }
-}
+#define YSMOPENCONFIG(rwx)    (fd = ysm_fopen(YSM_cfgfile,rwx))
+#define YSMCLOSECONFIG()    ysm_fclose(fd)
 
 void YSM_ReadSlaves(FILE *fd)
 {
@@ -1055,10 +534,6 @@ void YSM_ReadSlaves(FILE *fd)
                     if (*aux != '\0') auxflags = aux;
                     break;
 
-                case 4: /* Color */
-                    if (*aux != '\0') auxcol = YSM_GetColorByName(aux);
-                    break;
-
                 default: /* Trailing garbage */
                     break;
             }
@@ -1077,7 +552,6 @@ void YSM_ReadSlaves(FILE *fd)
                                 atoi(auxuin),
                                 auxflags,
                                 auxkey,
-                auxcol,
                                 0,
                                 0,
                                 0,
@@ -1085,8 +559,8 @@ void YSM_ReadSlaves(FILE *fd)
 
         }
 
-        PRINTF( VERBOSE_MOREDATA,
-                "%s%d]" NORMAL "\n",
+        PRINTF( VERBOSE_MOATA,
+                "%s%d]\n",
                 MSG_READ_SLAVES,
                 g_slave_list.length );
 }
@@ -1114,7 +588,7 @@ slave_t * YSM_QuerySlaves(
             if (node->ReqID == reqid)
                 return node;
         } else {
-            YSM_Error(ERROR_CODE, __FILE__, __LINE__, 1);
+            YSM_ERROR(ERROR_CODE, 1);
         }
 
         node = (slave_t *) node->suc;
@@ -1131,7 +605,6 @@ void YSM_AddSlave(char *Name, uin_t Uin)
                 Uin,
                 NULL,
                 NULL,
-                NULL,
                 0,
                 0,
                 0,
@@ -1141,9 +614,7 @@ void YSM_AddSlave(char *Name, uin_t Uin)
         PRINTF(VERBOSE_BASE,
             "NO! Illegal Slave Cloning detected..perv!.");
         PRINTF(VERBOSE_BASE,
-            "\n%sSLAVE ALREADY%s exists in your list!.\n",
-                                BRIGHT_CYAN,
-                                NORMAL);
+            "\nSLAVE ALREADY exists in your list!.\n");
         return;
     }
 
@@ -1155,14 +626,13 @@ void YSM_AddSlave(char *Name, uin_t Uin)
     YSM_AddSlaveToDisk( result );
 }
 
-
 void YSM_AddSlaveToDisk(slave_t *victim)
 {
     FILE     *YSM_tmp = NULL, *fd = NULL;
     int8_t    YSMBuff[MAX_PATH];
     u_int32_t x = 0;
 
-    fd = YSM_fopen(YSM_cfgfile, "r");
+    fd = ysm_fopen(YSM_cfgfile, "r");
     if (fd == NULL) {
         /* ERR_FOPEN */
         return;
@@ -1210,11 +680,11 @@ void YSM_AddSlaveToDisk(slave_t *victim)
         }
         }
 
-        YSM_fclose(fd);
+        ysm_fclose(fd);
 
     rewind(YSM_tmp);
 
-        fd = YSM_fopen(YSM_cfgfile,"w");
+        fd = ysm_fopen(YSM_cfgfile,"w");
     if (fd == NULL) {
         /* ERR_FILE */
         return;
@@ -1227,8 +697,8 @@ void YSM_AddSlaveToDisk(slave_t *victim)
                 fprintf(fd,"%s",YSMBuff);
         }
 
-         YSM_fclose(fd);
-         YSM_fclose(YSM_tmp);
+         ysm_fclose(fd);
+         ysm_fclose(YSM_tmp);
 }
 
 
@@ -1241,7 +711,7 @@ void YSM_DelSlave( slave_t *victim, int fl)
     int8_t YSMBuff[MAX_PATH], *auxnick = NULL, *theuin = NULL, *therest = NULL;
     int8_t slave_tDELETED = FALSE, fl_slavedeleted = FALSE;
 
-    fd = YSM_fopen(YSM_cfgfile,"r");
+    fd = ysm_fopen(YSM_cfgfile,"r");
     if (fd == NULL) {
         /* ERR_FILE */
         return;
@@ -1332,9 +802,9 @@ void YSM_DelSlave( slave_t *victim, int fl)
 
                 }
 
-                YSM_fclose(fd);
+                ysm_fclose(fd);
 
-                fd = YSM_fopen(YSM_cfgfile,"w");
+                fd = ysm_fopen(YSM_cfgfile,"w");
         if (fd == NULL) {
             /* ERR_FILE */
             return;
@@ -1349,67 +819,61 @@ void YSM_DelSlave( slave_t *victim, int fl)
                         fprintf(fd,"%s",YSMBuff);
                 }
 
-                YSM_fclose(fd);
-                YSM_fclose(YSM_tmp);
+                ysm_fclose(fd);
+                ysm_fclose(YSM_tmp);
 }
 
 
 void YSM_CFGStatus(char *validate)
 {
+    static struct
+    {
+        const char* str;
+        const u_int16_t val; 
+    } table[] = {
+        {"ONLINE",    STATUS_ONLINE},
+        {"OFFLINE",   STATUS_OFFLINE},
+        {"AWAY",      STATUS_AWAY},
+        {"NA",        STATUS_NA},
+        {"DND",       STATUS_DND},
+        {"OCCUPIED",  STATUS_OCCUPIED},
+        {"FREECHAT",  STATUS_FREE_CHAT},
+        {"INVISIBLE", STATUS_INVISIBLE},
+        {NULL,        0}
+    };
     u_int32_t x;
 
-    for (x = 0; x <= strlen(validate); x++)
+    for (x = 0; validate[x] != '\0'; x++)
         validate[x] = toupper(validate[x]);
 
-    if (!strcasecmp(validate,"ONLINE"))
-        YSM_USER.status = STATUS_ONLINE;
+    for (x = 0; table[x].str != NULL; x++)
+    {
+        if (!strcasecmp(validate, table[x].str))
+        YSM_USER.status = table[x].val;
+        return;
+    }
 
-    else if (!strcasecmp(validate,"OFFLINE"))
-        YSM_USER.status = STATUS_OFFLINE;
-
-    else if (!strcasecmp(validate,"AWAY"))
-        YSM_USER.status = STATUS_AWAY;
-
-    else if (!strcasecmp(validate,"NA"))
-        YSM_USER.status = STATUS_NA;
-
-    else if (!strcasecmp(validate,"DND"))
-        YSM_USER.status = STATUS_DND;
-
-    else if (!strcasecmp(validate,"OCCUPIED"))
-        YSM_USER.status = STATUS_OCCUPIED;
-
-    else if (!strcasecmp(validate,"FREECHAT"))
-        YSM_USER.status = STATUS_FREE_CHAT;
-
-    else if (!strcasecmp(validate,"INVISIBLE"))
-        YSM_USER.status = STATUS_INVISIBLE;
-
-    else
-        YSM_USER.status = STATUS_ONLINE;
+    /* default value */
+    YSM_USER.status = STATUS_ONLINE;
 }
 
-void
-YSM_AFKMode(u_int8_t turnflag)
+void YSM_AFKMode(u_int8_t turnflag)
 {
-    if (!turnflag) {
-
+    if (!turnflag)
+    {
 #ifndef COMPACT_DISPLAY
         PRINTF(VERBOSE_BASE,
-            "%s %s%d%s %s",    MSG_AFK_MODE_OFF1,
-                    BRIGHT_BLACK,
-                    ((time(NULL)-YSM_AFK_Time)/60),
-                    NORMAL,
-                    MSG_AFK_MODE_OFF2);
+            "%s %d %s",
+            MSG_AFK_MODE_OFF1,
+            ((time(NULL)-YSM_AFK_Time)/60),
+            MSG_AFK_MODE_OFF2);
 
         PRINTF(VERBOSE_BASE,
-            "%s%d%s %s %s %s",
-                    BRIGHT_BLACK,
-                    YSM_AFKCount,
-                    NORMAL,
-                    MSG_AFK_MODE_OFF3,
-                    YSM_AFKFILENAME,
-                    MSG_AFK_MODE_OFF4);
+            "%d %s %s %s",
+            YSM_AFKCount,
+            MSG_AFK_MODE_OFF3,
+            YSM_AFKFILENAME,
+            MSG_AFK_MODE_OFF4);
 #endif
 
         g_promptstatus.flags &= ~FL_AFKM;
@@ -1423,7 +887,6 @@ YSM_AFKMode(u_int8_t turnflag)
     }
 
 #ifndef COMPACT_DISPLAY
-
     PRINTF(VERBOSE_BASE,"%s\n",MSG_AFK_MODE_ON);
 #endif
 
@@ -1432,17 +895,19 @@ YSM_AFKMode(u_int8_t turnflag)
     YSM_AFKCount = 0;
     g_promptstatus.flags |= FL_AFKM;
 
-    if(!(strlen(YSM_AFKMessage))) {
-        strncpy(YSM_AFKMessage,
-            YSM_DefaultAFKMessage,
-            sizeof(YSM_AFKMessage) - 1);
-        YSM_AFKMessage[sizeof(YSM_AFKMessage)-1] = '\0';
+    if (!(strlen(g_cfg.AFKMessage)))
+    {
+        strncpy(g_cfg.AFKMessage,
+                YSM_DefaultAFKMessage,
+                sizeof(g_cfg.AFKMessage) - 1);
+        g_cfg.AFKMessage[sizeof(g_cfg.AFKMessage)-1] = '\0';
     }
 
     /* Only change the status to AWAY if the user is */
     /* in status ONLINE so we don't mess with their status */
 
-    if (YSM_USER.status == STATUS_ONLINE || YSM_USER.status == STATUS_FREE_CHAT){
+    if (YSM_USER.status == STATUS_ONLINE || YSM_USER.status == STATUS_FREE_CHAT)
+    {
         YSM_ChangeStatus(STATUS_AWAY);
     }
 }
@@ -1467,7 +932,7 @@ int8_t    buff[ MAX_DATA_LEN+MAX_NICK_LEN+MAX_UIN_LEN+64 ];
     snprintf(rfilename,size,"%s/%s", YSM_cfgdir, FileName);
     rfilename[size - 1] = 0x00;
 
-    if ((logfile = YSM_fopen(rfilename,"r")) == NULL) {
+    if ((logfile = ysm_fopen(rfilename,"r")) == NULL) {
         PRINTF(VERBOSE_BASE,
             "\nNo Messages Found :: filename not found.\n");
 
@@ -1487,11 +952,11 @@ int8_t    buff[ MAX_DATA_LEN+MAX_NICK_LEN+MAX_UIN_LEN+64 ];
 
             g_promptstatus.flags &= ~FL_BUSYDISPLAY;
             PRINTF(VERBOSE_BASE,
-            "\n" BRIGHT_BLUE "[N]ext %d  "
+            "\n[N]ext %d  "
                      "[S]kip 10  "
                      "[C]lear all  "
                      "[Q]uit\n"
-                        NORMAL,
+                        ,
                         g_cfg.afkmaxshown);
 
             g_promptstatus.flags |= FL_BUSYDISPLAY;
@@ -1502,10 +967,10 @@ int8_t    buff[ MAX_DATA_LEN+MAX_NICK_LEN+MAX_UIN_LEN+64 ];
                 case 'C':
                     g_promptstatus.flags &= ~FL_BUSYDISPLAY;
                     PRINTF(VERBOSE_BASE, "\nClearing..\n");
-                    YSM_fclose(logfile);
-                    logfile = YSM_fopen(rfilename, "w");
+                    ysm_fclose(logfile);
+                    logfile = ysm_fopen(rfilename, "w");
                     if (logfile != NULL) {
-                        YSM_fclose(logfile);
+                        ysm_fclose(logfile);
                     }
 
                     ysm_free(rfilename, __FILE__, __LINE__);
@@ -1528,7 +993,7 @@ int8_t    buff[ MAX_DATA_LEN+MAX_NICK_LEN+MAX_UIN_LEN+64 ];
                 default :
                     g_promptstatus.flags &= ~FL_BUSYDISPLAY;
                     PRINTF(VERBOSE_BASE,"\n");
-                    YSM_fclose(logfile);
+                    ysm_fclose(logfile);
 
                     ysm_free(rfilename, __FILE__, __LINE__);
 
@@ -1544,7 +1009,7 @@ int8_t    buff[ MAX_DATA_LEN+MAX_NICK_LEN+MAX_UIN_LEN+64 ];
             g_promptstatus.flags &= ~FL_BUSYDISPLAY;
             PRINTF(VERBOSE_BASE,"\nreadlog :: parsing error.\n");
             ysm_free(rfilename, __FILE__, __LINE__);
-            YSM_fclose(logfile);
+            ysm_fclose(logfile);
             return;
         }
 
@@ -1559,7 +1024,7 @@ int8_t    buff[ MAX_DATA_LEN+MAX_NICK_LEN+MAX_UIN_LEN+64 ];
     g_promptstatus.flags &= ~FL_BUSYDISPLAY;
     PRINTF(VERBOSE_BASE, "\nEnd of Messages\n");
 
-    YSM_fclose( logfile );
+    ysm_fclose( logfile );
     ysm_free(rfilename, __FILE__, __LINE__);
     rfilename = NULL;
 }
@@ -1583,7 +1048,7 @@ ssize_t    fields;
     g_promptstatus.flags &= ~FL_BUSYDISPLAY;
 
     PRINTF(VERBOSE_BASE,
-        "\n" WHITE "Msg #%i:" NORMAL " - From: %s",
+        "\n" "Msg #%i: - From: %s",
         messageNum,
         part[0]);
 
@@ -1593,103 +1058,6 @@ ssize_t    fields;
     g_promptstatus.flags |= FL_BUSYDISPLAY;
     return 1;
 }
-
-void YSM_AskProxyConfiguration(void)
-{
-    int8_t buf[MAX_PATH], def_settings = 0;
-
-    PRINTF(VERBOSE_BASE,
-        "\nIf you need to connect to the Internet through a Proxy.");
-
-    PRINTF(VERBOSE_BASE,
-        "\nPlease specify the address below.");
-
-    PRINTF(VERBOSE_BASE,
-        "\nType '" RED "no" NORMAL "', type '" RED "0" NORMAL "' or just press "
-        "the '" RED "enter" NORMAL
-        "' key if you dont want\n"
-        "to use a proxy or don't know what this is.\n");
-
-    memset(buf, 0, sizeof(buf));
-
-    PRINTF(VERBOSE_BASE,
-        "\nProxy address [%s]: ", YSM_USER.proxy.proxy_host);
-
-    YSM_fgets(buf, MAX_PATH-1, 0);
-
-    buf[strlen(buf)-1] = '\0';
-
-    /* Cancel proxy configuration?
-     * Either the user typed 'no', typed '0' or pressed the enter key.
-     * note pressing the enter key when default values are used will
-     * be interpreted as 'accepting them'.
-     */
-
-    if (!strcasecmp(buf,"no")
-        || buf[0] == '0'
-        || (buf[0] == '\0' && !def_settings)) {
-        return;
-    }
-
-    if(strlen(buf) > 1)
-        strncpy( YSM_USER.proxy.proxy_host,
-            buf,
-            sizeof(YSM_USER.proxy.proxy_host) - 1 );
-
-    PRINTF(VERBOSE_BASE, "\nProxy Port? [%d]: ", YSM_USER.proxy.proxy_port);
-
-    memset( buf, 0, sizeof( buf ) );
-    YSM_fgets(buf, MAX_PATH-1, 0);
-
-    if(strlen(buf) >= 2 && buf[0] != 0x00)
-        YSM_USER.proxy.proxy_port = atoi(buf);
-
-    PRINTF(VERBOSE_BASE,
-        "\nHTTPS hack ? (uses port 443 instead of 5190) [1/0]: ");
-
-    memset(buf,0,sizeof(buf));
-    YSM_fgets(buf,MAX_PATH-1, 0);
-
-    if (atoi(&buf[0]) > 0)    /* Set HTTPS in flags */
-        YSM_USER.proxy.proxy_flags |= YSM_PROXY_HTTPS;
-
-    PRINTF(VERBOSE_BASE,
-        "\nMake the proxy resolve hostnames? [1/0]: ");
-
-    memset(buf,0,sizeof(buf));
-    YSM_fgets(buf,MAX_PATH-1, 0);
-
-    if (atoi(&buf[0]) > 0)    /* Set RESOLVE in flags */
-        YSM_USER.proxy.proxy_flags |= YSM_PROXY_RESOLVE;
-
-    PRINTF(VERBOSE_BASE,
-        "\nThe proxy requires authentication? [1/0]: ");
-
-    memset(buf,0,sizeof(buf));
-    YSM_fgets(buf,MAX_PATH-1, 0);
-
-    if (atoi(&buf[0]) > 0) {
-        YSM_USER.proxy.proxy_flags |= YSM_PROXY_AUTH;
-        PRINTF(VERBOSE_BASE, "\nProxy username: ");
-        YSM_fgets(buf, MAX_PATH-1, 0);
-        buf[strlen(buf)-1] = '\0';
-
-        if(strlen(buf) > 1)
-            strncpy( YSM_USER.proxy.username,
-                buf,
-                sizeof(YSM_USER.proxy.username) - 1 );
-
-        PRINTF(VERBOSE_BASE, "\nProxy password: ");
-        YSM_fgets(buf, MAX_PATH-1, 0);
-        buf[strlen(buf)-1] = '\0';
-
-        if(strlen(buf) > 1)
-            strncpy( YSM_USER.proxy.password,
-                buf,
-                sizeof(YSM_USER.proxy.password) - 1 );
-    }
-}
-
 
 void YSM_ExecuteCommand(int argc, char **argv)
 {
@@ -1720,25 +1088,14 @@ void YSM_ExecuteCommand(int argc, char **argv)
             setenv("YSMUIN", tmp, 1);
 #endif
             execv(argv[0], argv);
-        } else if (epid > 0) {
+        }
+        else if (epid > 0)
+        {
             while (waitpid(-1, NULL, WNOHANG) > 0);
         }
 
         exit(0);
     }
-
-    if (e2pid > 0)
+    else if (e2pid > 0)
         waitpid(e2pid, NULL, 0);
-}
-
-
-/* The following HandleCommand function makes use */
-/* of the system() function. Since its locally user dependent */
-/* it does not mean any risk unless the YSM user is drunk and willing */
-/* to play with ';' chars :) */
-
-void YSM_HandleCommand(char *_argone)
-{
-    /* Sucks huh */
-    system(_argone);
 }

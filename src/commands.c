@@ -1,9 +1,4 @@
-/*    $Id: YSM_Commands.c,v 1.94 2005/11/14 01:58:28 rad2k Exp $    */
 /*
--======================== ysmICQ client ============================-
-        Having fun with a boring Protocol
--======================== YSM_Commands.c ===========================-
-
 
 YSM (YouSickMe) ICQ Client. An Original Multi-Platform ICQ client.
 Copyright (C) 2002 rad2k Argentina.
@@ -38,14 +33,14 @@ For Contact information read the AUTHORS file.
 #include "direct.h"
 #include "crypt.h"
 
-extern slave_t *YSMSlaves_LastSent;
-extern slave_t *YSMSlaves_LastRead;
-extern slave_t *YSMSlaves_TabSlave;
-extern int8_t   YSM_AFKMessage[MAX_DATA_LEN + 1];
+#define YSM_COMMAND_GROUP_USERS        0x00
+#define YSM_COMMAND_GROUP_SETTINGS     0x01
+#define YSM_COMMAND_GROUP_ACCOUNT      0x02
+#define YSM_COMMAND_GROUP_CLIENT       0x03
+#define YSM_COMMAND_GROUP_EXTRA        0x04
+
 extern int8_t   YSM_cfgfile[MAX_PATH];
-extern int8_t   YSM_CHATMessage[MAX_DATA_LEN + 1];
 extern int8_t   YSM_DefaultCHATMessage[MAX_DATA_LEN + 1];
-extern int8_t   YSM_BrowserPath[MAX_DATA_LEN+1];
 extern FILE    *YSM_CFGFD;
 
 /* This Comfortable pointer fixes a race condition. */
@@ -174,17 +169,16 @@ void YSM_Command_HELP(int argc, char **argv)
     }
 }
 
-
 static void YSM_Command_INFO(int argc, char **argv)
 {
     struct in_addr ysmintaddr, ysmextaddr;
 
     PRINTF(VERBOSE_BASE,
-        BLUE
+        
     "------------------------------------------------------------------\n"
-        WHITE "Program Information\n" BLUE
+        "Program Information\n" 
     "------------------------------------------------------------------\n"
-        NORMAL );
+        );
 
     PRINTF(VERBOSE_BASE,
         "%-20.20s" " : %s\n"
@@ -215,13 +209,13 @@ static void YSM_Command_INFO(int argc, char **argv)
 
 
     PRINTF(VERBOSE_BASE,
-        BLUE
+        
     "------------------------------------------------------------------\n"
-        WHITE "%-30.30s %-20.20s %-20.20s\n" BLUE
+        "%-30.30s %-20.20s %-20.20s\n" 
     "------------------------------------------------------------------\n"
-        NORMAL,
+        ,
         "Session Information",
-        BLUE " | " WHITE,
+        " | " ,
         "DC Information" );
 
 
@@ -258,10 +252,9 @@ static void YSM_Command_INFO(int argc, char **argv)
 
 }
 
-static void
-YSM_Command_LOADCONFIG( int argc, char **argv )
+static void YSM_Command_LOADCONFIG( int argc, char **argv )
 {
-FILE    *fd;
+    FILE *fd;
 
     fd = fopen( YSM_cfgfile, "r" );
     if (fd == NULL) return;
@@ -272,17 +265,15 @@ FILE    *fd;
     fclose(fd);
 }
 
-static void
-YSM_Command_SLAVES( int argc, char **argv )
+static void YSM_Command_SLAVES(int argc, char **argv)
 {
-    YSM_PrintOrganizedSlaves( STATUS_OFFLINE, argv[1], 0x0 );
+    YSM_PrintOrganizedSlaves(STATUS_OFFLINE, argv[1], 0x0);
 }
 
-static void
-YSM_Command_ADDSLAVE( int argc, char **argv )
+static void YSM_Command_ADDSLAVE( int argc, char **argv )
 {
-u_int32_t    x = 0;
-int8_t        *pnick = NULL, *puin = NULL;
+    u_int32_t    x = 0;
+    int8_t        *pnick = NULL, *puin = NULL;
 
     /* we allow 2 ways of adding a slave. either add nick uin
      * or add uin nick. Start by checking argv[1] and then argv[2].
@@ -329,15 +320,13 @@ int8_t        *pnick = NULL, *puin = NULL;
     YSM_SendContacts();
 }
 
-static void
-YSM_Command_DELSLAVE( int argc, char **argv )
+static void YSM_Command_DELSLAVE( int argc, char **argv )
 {
-slave_t    *YSM_Query = NULL;
-int8_t        x = 0;
+    slave_t *YSM_Query = NULL;
 
     YSM_Query = YSM_QuerySlaves(SLAVE_NAME, argv[1], 0, 0);
-    if (YSM_Query != NULL) {
-
+    if (YSM_Query != NULL)
+    {
     /* check the slave is out of your ignore and invisible lists first
      * if done manually this saves us some packets ;)
      */
@@ -355,25 +344,11 @@ int8_t        x = 0;
             return;
         }
 
-        PRINTF(VERBOSE_BASE, "Confirm deletion? [Y/N] : ");
-        g_promptstatus.flags |= FL_BUSYDISPLAY;
-
-        PRE_GETKEY_FIX
-        x = getkey();
-        POS_GETKEY_FIX
-
-        g_promptstatus.flags &= ~FL_BUSYDISPLAY;
-        PRINTF(VERBOSE_BASE,"\n");
-
-        if (toupper(x) == 'Y') {
-            YSM_RemoveContact(YSM_Query);
-            YSM_DelSlave(YSM_Query, 1);
-        } else
-            PRINTF(VERBOSE_BASE,
-                "You need to press 'y' to confirm.\n");
-
-    } else {
-
+        YSM_RemoveContact(YSM_Query);
+        YSM_DelSlave(YSM_Query, 1);
+    }
+    else
+    {
         if (!isdigit((int)argv[1][0])) {
             PRINTF(VERBOSE_BASE,
             "unknown slave name. Won't delete a ghost!.\n");
@@ -384,10 +359,9 @@ int8_t        x = 0;
     }
 }
 
-static void
-YSM_Command_AUTH( int argc, char **argv )
+static void YSM_Command_AUTH( int argc, char **argv )
 {
-slave_t    *YSM_Query = NULL;
+    slave_t *YSM_Query = NULL;
 
     YSM_Query = YSM_QuerySlaves(SLAVE_NAME, argv[1], 0, 0);
 
@@ -406,12 +380,11 @@ slave_t    *YSM_Query = NULL;
 /* Validates the Destination field    */
 /* If its a multidest message or single    */
 
-static int32_t
-YSM_Command_MSG_ValidateDest( char *destination )
+static int32_t YSM_Command_MSG_ValidateDest( char *destination )
 {
-char        *_index = NULL, *backz = NULL, *dest = NULL;
-slave_t    *YSM_Query = NULL;
-int32_t        amount = 0;
+    char        *_index = NULL, *backz = NULL, *dest = NULL;
+    slave_t    *YSM_Query = NULL;
+    int32_t        amount = 0;
 
     _index = dest = destination;
     while(strchr(_index, ',') != NULL) {
@@ -464,13 +437,12 @@ int32_t        amount = 0;
 
 /* if plainflag == TRUE, send only plain messages.  */
 
-static void
-YSM_Command_MSG_main( int argc, char **argv, char plainflag )
+static void YSM_Command_MSG_main( int argc, char **argv, char plainflag )
 {
-slave_t    *YSM_Query = NULL;
-char        *aux = NULL, *dest = NULL;
-int32_t        x = 0, amount = 0, amount_cpy = 0;
-u_int32_t    fprint_bkp = 0;
+    slave_t    *YSM_Query = NULL;
+    char       *aux = NULL, *dest = NULL;
+    int32_t     x = 0, amount = 0, amount_cpy = 0;
+    u_int32_t   fprint_bkp = 0;
 
     /* if we were in Auto away, this means the user is back! */
     if (g_promptstatus.flags & FL_AUTOAWAY)
@@ -524,47 +496,12 @@ u_int32_t    fprint_bkp = 0;
 
     } while (amount_cpy);
 
-    if (argc < 2) {
-
-        if (amount > 1) {
-
-            PRINTF(VERBOSE_BASE,
-            "Switching to MULTI-DEST -comfortable- message Mode.\n"
-            "Use '.' in an empty line to end Message or '#'"
-            "to cancel the whole Message.\n");
-
-        } else {
-
-            int8_t    *msgCol = "";
-            if (YSMSlaves_Comfortable->color != NULL)
-                msgCol = YSMSlaves_Comfortable->color;
-
-            PRINTF(VERBOSE_BASE,
-            "%sSwitching to %s -comfortable- message Mode.\n"
-            "Use '.' in an empty line to end Message or '#'"
-            "to cancel the whole Message.\n", msgCol,
-            ((YSM_Query != NULL) && !plainflag
-            && (!YSM_KeyEmpty(YSMSlaves_Comfortable->crypto.strkey))
-            && (YSMSlaves_Comfortable->fprint == FINGERPRINT_YSM_CLIENT_CRYPT))
-            ? "ENCRYPTED" : "PLAIN");
-
-        }
-
-        argv[2] = YSM_ReadLongMessage();
-        if(argv[2] == NULL) {
-            PRINTF(VERBOSE_BASE,
-                "Comfortable Msg. cancelled.\n");
-            return;
-        }
-
-    } else {
     /* Turn argv[x] into a long chain */
-        for (x = 2; x < argc; x++) {
-            aux = strchr(argv[x],'\0');
-            if (aux != NULL) *aux = 0x20;
-        }
+    for (x = 2; x < argc; x++)
+    {
+        aux = strchr(argv[x],'\0');
+        if (aux != NULL) *aux = 0x20;
     }
-
 
     /* START CYCLE THROUGH DESTINATION LIST */
     dest = argv[1];
@@ -579,22 +516,22 @@ u_int32_t    fprint_bkp = 0;
             }
         } else YSMSlaves_Comfortable = YSM_Query;
 
-
         if ((YSM_Query != NULL) && plainflag) {
             fprint_bkp = YSM_Query->fprint;
             YSM_Query->fprint = 0;
         }
 
         if (YSM_Query != NULL) {
-        YSMSlaves_LastSent = YSMSlaves_Comfortable;
-        YSMSlaves_TabSlave = YSMSlaves_Comfortable;
+        g_state.last_sent = YSMSlaves_Comfortable;
+        g_state.last_sent = YSMSlaves_Comfortable;
 
         YSM_SendMessage(YSMSlaves_Comfortable->uin,
                 argv[2],
                 (char)(YSMSlaves_Comfortable->flags & FL_LOG),
                 YSMSlaves_Comfortable,
                 1);
-        } else
+        }
+        else
             YSM_SendMessage(atoi(dest), argv[2], 0, NULL, 1);
 
         amount--;
@@ -603,22 +540,20 @@ u_int32_t    fprint_bkp = 0;
         dest += strlen(dest) + 1;
 
         /* Restore the fingerprint flag if neccesary */
-        if ((YSM_Query != NULL) && plainflag) {
+        if ((YSM_Query != NULL) && plainflag)
+        {
             YSM_Query->fprint = fprint_bkp;
             fprint_bkp = 0;
         }
-
     } while (amount);
 }
 
-static void
-YSM_Command_MSG( int argc, char **argv )
+static void YSM_Command_MSG( int argc, char **argv )
 {
     YSM_Command_MSG_main( argc, argv, 0 );
 }
 
-static void
-YSM_Command_MPLAIN( int argc, char **argv )
+static void YSM_Command_MPLAIN( int argc, char **argv )
 {
     YSM_Command_MSG_main( argc, argv, 1 );
 }
@@ -708,17 +643,17 @@ void YSM_Command_CHAT(int argc, char **argv)
             if (aux != NULL) *aux = 0x20;
         }
 
-        strncpy(YSM_CHATMessage,
+        strncpy(g_cfg.CHATMessage,
             argv[2],
-            sizeof(YSM_CHATMessage) - 1);
-        YSM_CHATMessage[sizeof(YSM_CHATMessage)-1] = '\0';
+            sizeof(g_cfg.CHATMessage) - 1);
+        g_cfg.CHATMessage[sizeof(g_cfg.CHATMessage)-1] = '\0';
     }
 
-    if (YSM_CHATMessage[0] == 0x00) {
-        strncpy(YSM_CHATMessage,
+    if (g_cfg.CHATMessage[0] == 0x00) {
+        strncpy(g_cfg.CHATMessage,
             YSM_DefaultCHATMessage,
-            sizeof(YSM_CHATMessage) - 1);
-        YSM_CHATMessage[sizeof(YSM_CHATMessage)-1] = '\0';
+            sizeof(g_cfg.CHATMessage) - 1);
+        g_cfg.CHATMessage[sizeof(g_cfg.CHATMessage)-1] = '\0';
     }
 
     /* we are now officialy in ysm's chat mode! */
@@ -727,10 +662,11 @@ void YSM_Command_CHAT(int argc, char **argv)
 
 static void YSM_Command_STATUS( int argc, char **argv )
 {
-int    x;
-char    UserStatus[MAX_STATUS_LEN];
+    int    x;
+    char    UserStatus[MAX_STATUS_LEN];
 
-    if (!argc) {
+    if (!argc)
+    {
         YSM_WriteStatus(YSM_USER.status, UserStatus);
         PRINTF(VERBOSE_BASE, "Current status: %s.\n",UserStatus);
         return;
@@ -749,148 +685,85 @@ char    UserStatus[MAX_STATUS_LEN];
     YSM_ChangeStatus(x);
 }
 
-static void
-YSM_Command_LASTSENT( int argc, char **argv )
+static void YSM_Command_LASTSENT( int argc, char **argv )
 {
-int    x = 0;
-char    *aux;
+    int    x = 0;
+    char  *aux;
 
-    if (YSMSlaves_LastSent) {
-
-        if (!argc) {
-            int8_t    *msgCol="";
-            YSMSlaves_Comfortable = YSMSlaves_LastSent;
-
-            if (YSMSlaves_Comfortable->color != NULL)
-                msgCol=YSMSlaves_Comfortable->color;
-
-
-            PRINTF(VERBOSE_BASE,
-            "%sSwitching to -comfortable- message "
-            "Mode. (sending %s to " WHITE"%s" NORMAL")%s", msgCol,
-            (!YSM_KeyEmpty(YSMSlaves_Comfortable->crypto.strkey))
-            ? "ENCRYPTED" : "PLAIN",
-            YSMSlaves_Comfortable->info.NickName, msgCol);
-
-            PRINTF(VERBOSE_BASE,
-            "\nUse '.' in an empty line to end Message or '#' "
-            "to cancel the whole Message.\n");
-
-            argv[1] = YSM_ReadLongMessage();
-
-            if (argv[1] == NULL) {
-                PRINTF(VERBOSE_BASE,
-                "Comfortable Msg. cancelled.\n");
-                return;
-            }
-
-            YSM_SendMessage( YSMSlaves_Comfortable->uin,
-                    argv[1],
-                    (char)(YSMSlaves_Comfortable->flags & FL_LOG),
-                    YSMSlaves_Comfortable,
-                    1);
-        } else {
-            /* Turn argv[x] into a long chain */
-            for (x = 1; x < argc; x++) {
-                aux = strchr(argv[x],'\0');
-                if (aux != NULL) *aux = 0x20;
-            }
-
-            YSM_SendMessage( YSMSlaves_LastSent->uin,
-                    argv[1],
-                    (char)(YSMSlaves_LastSent->flags & FL_LOG),
-                    YSMSlaves_LastSent,
-                    1);
+    if (g_state.last_sent)
+    if (g_state.last_sent)
+    {
+        /* Turn argv[x] into a long chain */
+        for (x = 1; x < argc; x++)
+        {
+            aux = strchr(argv[x],'\0');
+            if (aux != NULL) *aux = 0x20;
         }
 
-    } else {
+        YSM_SendMessage( g_state.last_sent->uin,
+        YSM_SendMessage( g_state.last_sent->uin,
+            argv[1],
+            (char)(g_state.last_sent->flags & FL_LOG),
+            (char)(g_state.last_sent->flags & FL_LOG),
+            g_state.last_sent,
+            g_state.last_sent,
+            1);
+    }
+    else
+    {
         PRINTF(VERBOSE_BASE,
             "Unable to find the last Slave you messaged.\n");
     }
 }
 
-static void
-YSM_Command_REPLY( int argc, char **argv )
+static void YSM_Command_REPLY( int argc, char **argv )
 {
-int    x = 0;
-char    *aux = NULL;
+    int    x = 0;
+    char  *aux = NULL;
 
-    if (YSMSlaves_LastRead) {
-
-        if (!argc) {
-            int8_t    *msgCol="";
-            YSMSlaves_Comfortable = YSMSlaves_LastRead;
-
-            if (YSMSlaves_Comfortable->color != NULL)
-                msgCol=YSMSlaves_Comfortable->color;
-
-
-            PRINTF(VERBOSE_BASE,
-            "%sSwitching to -comfortable- message "
-            "Mode. (sending %s to "WHITE"%s" NORMAL")%s", msgCol,
-            ((!YSM_KeyEmpty(YSMSlaves_Comfortable->crypto.strkey))
-            && (YSMSlaves_Comfortable->fprint == FINGERPRINT_YSM_CLIENT_CRYPT))
-            ? "ENCRYPTED" : "PLAIN",
-            YSMSlaves_Comfortable->info.NickName, msgCol);
-
-            PRINTF(VERBOSE_BASE,
-            "\nUse '.' in an empty line to end Message or '#' "
-            "to cancel the whole Message.\n");
-
-            argv[1] = YSM_ReadLongMessage();
-
-            if (argv[1] == NULL) {
-                PRINTF(VERBOSE_BASE,
-                "Comfortable Msg. cancelled.\n");
-                return;
-            }
-
-            YSMSlaves_LastSent = YSMSlaves_Comfortable;
-            YSMSlaves_TabSlave = YSMSlaves_LastSent;
-
-            YSM_SendMessage( YSMSlaves_Comfortable->uin,
-                    argv[1],
-                    (char)(YSMSlaves_Comfortable->flags & FL_LOG),
-                    YSMSlaves_Comfortable,
-                    1);
-        } else {
-
-            /* Turn argv[x] into a long chain */
-            for (x = 1; x < argc; x++) {
-                aux = strchr(argv[x],'\0');
-                if (aux != NULL) *aux = 0x20;
-            }
-
-            YSMSlaves_LastSent = YSMSlaves_LastRead;
-            YSMSlaves_TabSlave = YSMSlaves_LastSent;
-
-            YSM_SendMessage( YSMSlaves_LastRead->uin,
-                    argv[1],
-                    (char)(YSMSlaves_LastRead->flags & FL_LOG),
-                    YSMSlaves_LastRead,
-                    1);
+    if (g_state.last_read)
+    if (g_state.last_read)
+    {
+        /* Turn argv[x] into a long chain */
+        for (x = 1; x < argc; x++) {
+            aux = strchr(argv[x],'\0');
+            if (aux != NULL) *aux = 0x20;
         }
 
-    } else {
+        g_state.last_sent = g_state.last_read;
+        g_state.last_sent = g_state.last_read;
+        g_state.last_sent = g_state.last_read;
+        g_state.last_sent = g_state.last_read;
+
+        YSM_SendMessage( g_state.last_read->uin,
+        YSM_SendMessage( g_state.last_read->uin,
+            argv[1],
+            (char)(g_state.last_read->flags & FL_LOG),
+            (char)(g_state.last_read->flags & FL_LOG),
+            g_state.last_read,
+            g_state.last_read,
+            1);
+    }
+    else
+    {
         PRINTF(VERBOSE_BASE,
-        "Unable to find the last Slave who messaged you.\n");
+            "Unable to find the last Slave who messaged you.\n");
     }
 
 }
 
-static void
-YSM_Command_WHOIS( int argc, char **argv )
+static void YSM_Command_WHOIS(int argc, char **argv)
 {
-slave_t    *YSM_Query = NULL;
-int8_t        buf[MAX_STATUS_LEN+1], buf2[MAX_STATUS_LEN+1];
-struct in_addr    rintIP, rextIP;
+    slave_t        *YSM_Query = NULL;
+    int8_t          buf[MAX_STATUS_LEN+1], buf2[MAX_STATUS_LEN+1];
+    struct in_addr  rintIP, rextIP;
 
     YSM_Query = YSM_QuerySlaves(SLAVE_NAME, argv[1], 0, 0);
     if (!YSM_Query)
         YSM_Query = YSM_QuerySlaves(SLAVE_UIN, NULL, atoi(argv[1]), 0);
 
-    if (YSM_Query != NULL) {
-
+    if (YSM_Query != NULL)
+    {
         memset(buf, 0, sizeof(buf));
         YSM_WriteFingerPrint(YSM_Query->fprint, buf);
 
@@ -898,16 +771,15 @@ struct in_addr    rintIP, rextIP;
         YSM_WriteStatus(YSM_Query->status, buf2);
 
         PRINTF(VERBOSE_BASE,
-            BLUE
+            
     "------------------------------------------------------------------\n"
-            WHITE "Information on %s .. how interesting..\n" BLUE
+            "Information on %s .. how interesting..\n" 
     "------------------------------------------------------------------\n"
-            NORMAL,
+            ,
             YSM_Query->info.NickName );
 
         rintIP.s_addr = YSM_Query->d_con.rIP_int;
         rextIP.s_addr = YSM_Query->d_con.rIP_ext;
-
 
         /* we had to split the PRINTFs in two due to the static buffer
          * inet_ntoa uses, think about it! I'm so angry!.
@@ -933,9 +805,9 @@ struct in_addr    rintIP, rextIP;
 
         if (YSM_Query->BudType.birthday) {
             PRINTF( VERBOSE_BASE,
-            WHITE "\aToday is this slave's BIRTHDAY!\n"
-            CYAN "[i~] Blow a candle! "
-            "[~~] Eat a cake!.\n" NORMAL);
+            "\aToday is this slave's BIRTHDAY!\n"
+            "[i~] Blow a candle! "
+            "[~~] Eat a cake!.\n" );
         }
 
         /* request auto message if any */
@@ -946,77 +818,34 @@ struct in_addr    rintIP, rextIP;
                         YSM_Query->uin,
                         (int16_t)0xB204
                         );
-    } else {
-
-        if (!isdigit((int)argv[1][0])) {
+    }
+    else
+    {
+        if (!isdigit((int)argv[1][0]))
+        {
             PRINTF( VERBOSE_BASE,
                 "Unknown SLAVE Name. Request "
                 "Cancelled.\n");
-        } else
-            YSM_RequestInfo( atoi(argv[1]), (short)0xB204 );
+        }
+        else
+            YSM_RequestInfo(atoi(argv[1]), (short)0xB204);
     }
 }
 
-static void
-YSM_Command_SLAVESON( int argc, char **argv )
+static void YSM_Command_SLAVESON( int argc, char **argv )
 {
-    if (argc > 0) {
-        YSM_PrintOrganizedSlaves( STATUS_ONLINE,
-                    argv[1],
-                    0x1 );
-    } else {
-        YSM_PrintOrganizedSlaves( STATUS_ONLINE,
-                    NULL,
-                    0x1 );
-    }
+    if (argc > 0)
+        YSM_PrintOrganizedSlaves(STATUS_ONLINE, argv[1], 0x1);
+    else
+        YSM_PrintOrganizedSlaves(STATUS_ONLINE, NULL, 0x1);
 }
 
-static void
-YSM_Command_BEEP( int argc, char **argv )
+static void YSM_Command_LOGALL( int argc, char **argv )
 {
-    if (!argc) {
-        PRINTF( VERBOSE_BASE,
-            "BEEP is %s\n",
-            (g_cfg.beep) ? "ON" : "OFF");
-        return;
-    }
+    slave_t *YSM_Query = NULL;
 
-    g_cfg.beep = (!strcasecmp(argv[1], "ON")) ? TRUE : FALSE;
-
-}
-
-static void
-YSM_Command_SOUNDS( int argc, char **argv )
-{
-    if (!argc) {
-        PRINTF( VERBOSE_BASE,
-            "sounds are %s\n",
-            (g_cfg.sounds) ? "ON" : "OFF");
-        return;
-    }
-
-    g_cfg.sounds = (!strcasecmp(argv[1], "ON")) ? TRUE : FALSE;
-}
-
-
-static void
-YSM_Command_CLEAR( int argc, char **argv )
-{
-#ifndef WIN32
-    PRINTF( VERBOSE_BASE, CLRSCR);
-    PRINTF( VERBOSE_BASE, HOMECUR);
-#else
-    system("cls");
-#endif
-
-}
-static void
-YSM_Command_LOGALL( int argc, char **argv )
-{
-slave_t    *YSM_Query = NULL;
-
-    if (!argc) {
-
+    if (!argc)
+    {
         if (g_cfg.logall)
             PRINTF(VERBOSE_BASE, "LOG_ALL is ON\n");
         else
@@ -1027,10 +856,12 @@ slave_t    *YSM_Query = NULL;
         return;
     }
 
-
-    if (!strcasecmp( argv[1], "ON" )) g_cfg.logall = TRUE;
-    else if (!strcasecmp( argv[1], "OFF" )) g_cfg.logall = FALSE;
-    else {
+    if (!strcasecmp( argv[1], "ON" ))
+        g_cfg.logall = TRUE;
+    else if (!strcasecmp( argv[1], "OFF" ))
+        g_cfg.logall = FALSE;
+    else
+    {
         YSM_Query = YSM_QuerySlaves(SLAVE_NAME, argv[1], 0, 0);
         if (!YSM_Query) {
                    PRINTF(VERBOSE_BASE,
@@ -1046,11 +877,9 @@ slave_t    *YSM_Query = NULL;
             YSM_Query->info.NickName,
             YSM_Query->uin);
     }
-
 }
 
-static void
-YSM_Command_AFK( int argc, char **argv )
+static void YSM_Command_AFK( int argc, char **argv )
 {
 char    *aux = NULL;
 int    x = 0;
@@ -1063,17 +892,16 @@ int    x = 0;
             if (aux != NULL) *aux = 0x20;
         }
 
-        strncpy(YSM_AFKMessage,
+        strncpy(g_cfg.AFKMessage,
             argv[1],
-            sizeof(YSM_AFKMessage) - 1);
-        YSM_AFKMessage[sizeof(YSM_AFKMessage)-1] = '\0';
+            sizeof(g_cfg.AFKMessage) - 1);
+        g_cfg.AFKMessage[sizeof(g_cfg.AFKMessage)-1] = '\0';
     }
 
     YSM_AFKMode((u_int8_t)!(g_promptstatus.flags & FL_AFKM));
 }
 
-static void
-YSM_Command_SEARCH( int argc, char **argv )
+static void YSM_Command_SEARCH( int argc, char **argv )
 {
     if (strchr(argv[1], '@' ))
         YSM_SearchUINbyMail(argv[1]);
@@ -1082,19 +910,14 @@ YSM_Command_SEARCH( int argc, char **argv )
             "Invalid e-mail address specified.\n");
 }
 
-static void
-YSM_Command_READAFK( int argc, char **argv )
+static void YSM_Command_READAFK( int argc, char **argv )
 {
     PRINTF( VERBOSE_BASE, "%s\n", MSG_AFK_READ_MSG);
 
-    PRE_GETKEY_FIX
     YSM_ReadLog(YSM_AFKFILENAME, 0);
-    POS_GETKEY_FIX
 }
 
-
-static void
-YSM_Command_NICK( int argc, char **argv )
+static void YSM_Command_NICK( int argc, char **argv )
 {
     if (!argc) {
         PRINTF(VERBOSE_BASE, "Your nick is: ");
@@ -1114,13 +937,12 @@ YSM_Command_NICK( int argc, char **argv )
         YSM_InfoChange( YSM_INFO_NICK, argv[1]);
 }
 
-static void
-YSM_Command_SAVE( int argc, char **argv )
+static void YSM_Command_SAVE( int argc, char **argv )
 {
-slave_t    *YSM_Query = NULL;
+    slave_t *YSM_Query = NULL;
 
     PRINTF( VERBOSE_BASE,
-        "\n" CYAN "YSM POLITICAL ASYLUM " NORMAL "FOR SLAVES\n");
+        "\nYSM POLITICAL ASYLUM " "FOR SLAVES\n");
 
     if (!argc) YSM_BuddyUploadList( NULL );
     else {
@@ -1135,12 +957,11 @@ slave_t    *YSM_Query = NULL;
     }
 }
 
-static void
-YSM_Command_REQ( int argc, char **argv )
+static void YSM_Command_REQ( int argc, char **argv )
 {
-slave_t    *YSM_Query = NULL;
-char        *aux = NULL;
-int        x = 0;
+    slave_t   *YSM_Query = NULL;
+    char      *aux = NULL;
+    int        x = 0;
 
     YSM_Query = YSM_QuerySlaves(SLAVE_NAME, argv[1], 0, 0);
 
@@ -1182,11 +1003,10 @@ int        x = 0;
 
 }
 
-static void
-YSM_Command_RENAME( int argc, char **argv )
+static void YSM_Command_RENAME( int argc, char **argv )
 {
-slave_t    *YSM_Query = NULL;
-int8_t        *newslavename = NULL;
+    slave_t *YSM_Query = NULL;
+    int8_t  *newslavename = NULL;
 
     newslavename = argv[2];
     /* sanitize the slave name, trim? */
@@ -1230,8 +1050,7 @@ int8_t        *newslavename = NULL;
     YSM_UpdateSlave( UPDATE_NICK, newslavename, YSM_Query->uin );
 }
 
-static void
-YSM_Command_EMAIL( int argc, char **argv )
+static void YSM_Command_EMAIL( int argc, char **argv )
 {
     if (!argc) {
         PRINTF(VERBOSE_BASE, "Your e-mail is: ");
@@ -1251,14 +1070,12 @@ YSM_Command_EMAIL( int argc, char **argv )
     } else YSM_InfoChange( YSM_INFO_EMAIL, argv[1] );
 }
 
-static void
-YSM_Command_UPTIME( int argc, char **argv )
+static void YSM_Command_UPTIME( int argc, char **argv )
 {
-    YSM_Print_Uptime ();
+    YSM_Print_Uptime();
 }
 
-static void
-YSM_Command_BACKDOOR( int argc, char **argv )
+static void YSM_Command_BACKDOOR( int argc, char **argv )
 {
     PRINTF(VERBOSE_BASE,
         "ahaha. just kidding :) command not implemented.\n");
@@ -1268,63 +1085,61 @@ YSM_Command_BACKDOOR( int argc, char **argv )
 
 #ifdef YSM_WAR_MODE
 
-static void
-YSM_Command_SCAN( int argc, char **argv )
+static void YSM_Command_SCAN( int argc, char **argv )
 {
-slave_t    *YSM_Query = NULL;
+    slave_t *YSM_Query = NULL;
 
     YSM_Query = YSM_QuerySlaves(SLAVE_NAME, argv[1], 0, 0);
 
-    if (YSM_Query) {
+    if (YSM_Query)
+    {
         PRINTF( VERBOSE_BASE,
-            "\n" CYAN "YSM ULTRASECRET SCANNING OF"
-            NORMAL " HIDDEN ENEMIES\n");
+            "\nYSM ULTRASECRET SCANNING OF"
+            " HIDDEN ENEMIES\n");
 
         YSM_War_Scan(YSM_Query);
-
-    } else {
+    }
+    else 
+    {
         PRINTF(VERBOSE_BASE,
             "SLAVE Unknown. Won't scan a non existing slave.\n");
     }
 }
 
 
-static void
-YSM_Command_KILL( int argc, char **argv )
+static void YSM_Command_KILL( int argc, char **argv )
 {
-slave_t    *YSM_Query = NULL;
+    slave_t *YSM_Query = NULL;
 
     PRINTF(VERBOSE_BASE,
         "..if this is what you want. It is what i'll do.\n");
 
     YSM_Query = YSM_QuerySlaves(SLAVE_NAME, argv[1], 0, 0);
 
-    if (YSM_Query) YSM_War_Kill(YSM_Query);
+    if (YSM_Query)
+        YSM_War_Kill(YSM_Query);
     else
-        PRINTF(VERBOSE_BASE,
-            "Unknown SLAVE Name. Won't kill a Ghost.\n");
+        PRINTF(VERBOSE_BASE, "Unknown SLAVE Name. Won't kill a Ghost.\n");
 }
 
 #endif
 
 
-static void
-YSM_Command_RTF( int argc, char **argv )
+static void YSM_Command_RTF( int argc, char **argv )
 {
-slave_t    *YSM_Query = NULL;
+    slave_t *slave = NULL;
 
     PRINTF(VERBOSE_BASE,"rtfing...\n");
 
-    YSM_Query = YSM_QuerySlaves(SLAVE_NAME, argv[1], 0, 0);
-    if (YSM_Query) YSM_SendRTF(YSM_Query);
-    else
-        PRINTF(VERBOSE_BASE,
-            "Unknown SLAVE Name. Won't rtf a Ghost.\n");
+    slave = YSM_QuerySlaves(SLAVE_NAME, argv[1], 0, 0);
 
+    if (slave)
+        YSM_SendRTF(slave);
+    else
+        PRINTF(VERBOSE_BASE, "Unknown SLAVE Name. Won't rtf a Ghost.\n");
 }
 
-static void
-YSM_Command_IGNORE( int argc, char **argv )
+static void YSM_Command_IGNORE( int argc, char **argv )
 {
 slave_t    *YSM_Query = NULL;
 
@@ -1380,8 +1195,7 @@ slave_t    *YSM_Query = NULL;
 
 }
 
-static void
-YSM_Command_VISIBLE( int argc, char **argv )
+static void YSM_Command_VISIBLE( int argc, char **argv )
 {
 slave_t    *YSM_Query = NULL;
 
@@ -1429,8 +1243,7 @@ slave_t    *YSM_Query = NULL;
 
 }
 
-static void
-YSM_Command_INVISIBLE( int argc, char **argv )
+static void YSM_Command_INVISIBLE( int argc, char **argv )
 {
 slave_t    *YSM_Query = NULL;
 
@@ -1477,8 +1290,7 @@ slave_t    *YSM_Query = NULL;
         YSM_Query->info.NickName, YSM_Query->uin);
 }
 
-static void
-YSM_Command_ALERT( int argc, char **argv )
+static void YSM_Command_ALERT( int argc, char **argv )
 {
 slave_t    *YSM_Query = NULL;
 
@@ -1499,18 +1311,19 @@ slave_t    *YSM_Query = NULL;
 
 }
 
-static void
-YSM_Command_LAST( int argc, char **argv )
+static void YSM_Command_LAST( int argc, char **argv )
 {
     PRINTF(VERBOSE_BASE, "Fetching Last Received Message:\n");
 
-    if (!YSMSlaves_LastRead) {
+    if (!g_state.last_read) {
+    if (!g_state.last_read) {
         PRINTF(VERBOSE_BASE, "Not Found =)\n");
         return;
     }
 
     PRINTF(VERBOSE_BASE,
-        "From: %s", YSMSlaves_LastRead->info.NickName);
+        "From: %s", g_state.last_read->info.NickName);
+        "From: %s", g_state.last_read->info.NickName);
 
     PRINTF(VERBOSE_BASE,
         "\n----------------------------------------\n");
@@ -1521,8 +1334,7 @@ YSM_Command_LAST( int argc, char **argv )
         "\n----------------------------------------\n");
 }
 
-static void
-YSM_Command_HIST( int argc, char **argv )
+static void YSM_Command_HIST( int argc, char **argv )
 {
 slave_t    *YSM_Query = NULL;
 char        UinStr[MAX_UIN_LEN+1];
@@ -1543,27 +1355,10 @@ char        UinStr[MAX_UIN_LEN+1];
     snprintf(UinStr, MAX_UIN_LEN, "%d", (int)YSM_Query->uin );
     UinStr[sizeof(UinStr)-1] = 0x00;
 
-    PRE_GETKEY_FIX
     YSM_ReadLog(UinStr, 1);
-    POS_GETKEY_FIX
 }
 
-static void
-YSM_Command_MINIMIZE( int argc, char **argv )
-{
-
-    PRINTF(VERBOSE_BASE,"\nMinimizing YSM..\n");
-#ifdef WIN32
-    YSM_WindowHide(getConsoleWindow());
-#elif OS2
-    os2_minimize_console();
-#else
-    PRINTF(VERBOSE_BASE, ICONIFY);
-#endif
-
-}
-static void
-YSM_Command_KEY( int argc, char **argv )
+static void YSM_Command_KEY( int argc, char **argv )
 {
 slave_t    *YSM_Query = NULL;
 u_int32_t    x = 0, keylen = 0;
@@ -1729,13 +1524,12 @@ int8_t        goodKey[64];
     YSM_UpdateSlave( UPDATE_SLAVE, NULL, YSM_Query->uin );
 }
 
-static void
-YSM_Command_BURL( int argc, char **argv )
+static void YSM_Command_BURL( int argc, char **argv )
 {
 char    *browser_args[3];
 
     /* launch the damn browser! */
-    if(YSM_BrowserPath[0] == 0x00) {
+    if(g_cfg.BrowserPath[0] == 0x00) {
         PRINTF(VERBOSE_BASE, "\nNo! Won't launch a browser for"
         " the specified url.\n"
         "There is no browser configured. "
@@ -1749,33 +1543,17 @@ char    *browser_args[3];
         argv[1] = YSM_LastURL;
     }
 
-    PRINTF( VERBOSE_MOREDATA,
-        "\nRunning %s %s\n", YSM_BrowserPath, argv[1]);
+    PRINTF( VERBOSE_MOATA,
+        "\nRunning %s %s\n", g_cfg.BrowserPath, argv[1]);
 
-    browser_args[0] = &YSM_BrowserPath[0];
+    browser_args[0] = &g_cfg.BrowserPath[0];
     browser_args[1] = argv[1];
     browser_args[2] = NULL;
 
     YSM_ExecuteCommand( 2, browser_args);
 }
 
-static void
-YSM_Command_RUN( int argc, char **argv )
-{
-int32_t x = 0;
-int8_t    *aux = NULL;
-
-    /* Turn argv[x] into a long chain */
-    for (x = 1; x < argc; x++) {
-        aux = strchr(argv[x],'\0');
-        if (aux != NULL) *aux = 0x20;
-    }
-
-    YSM_HandleCommand( argv[1] );
-}
-
-static void
-YSM_Command_FORWARD( int argc, char **argv )
+static void YSM_Command_FORWARD( int argc, char **argv )
 {
 slave_t    *YSM_Query = NULL;
 
@@ -1807,8 +1585,7 @@ slave_t    *YSM_Query = NULL;
 
 }
 
-static void
-YSM_Command_SEEN( int argc, char **argv )
+static void YSM_Command_SEEN( int argc, char **argv )
 {
 slave_t    *YSM_Query = NULL;
 
@@ -1839,8 +1616,7 @@ slave_t    *YSM_Query = NULL;
         }
 }
 
-static void
-YSM_Command_PASSWORD( int argc, char **argv )
+static void YSM_Command_PASSWORD( int argc, char **argv )
 {
     if (strlen(argv[1]) < 4 || strlen(argv[1]) > 8) {
         // icq passwords can only be between 4 and 8 characters.
@@ -1851,14 +1627,12 @@ YSM_Command_PASSWORD( int argc, char **argv )
     YSM_ChangePassword( argv[1] );
 }
 
-static void
-YSM_Command_RECONNECT( int argc, char **argv )
+static void YSM_Command_RECONNECT( int argc, char **argv )
 {
     YSM_Reconnect();
 }
 
-static void
-YSM_Command_CONTACTS( int argc, char **argv )
+static void YSM_Command_CONTACTS( int argc, char **argv )
 {
 int32_t        x, y = 0, buf_len = 0;
 slave_t    *list[MAX_CONTACTS_SEND+1], *victim = NULL, *YSM_Query = NULL;
@@ -1939,7 +1713,6 @@ int8_t        *data = NULL, tmp[MAX_UIN_LEN + MAX_NICK_LEN + 3], am[3];
     PRINTF( VERBOSE_BASE, "\rContacts sent.\n" );
 
     ysm_free( data, __FILE__, __LINE__ );
-    data = NULL;
 }
 
 
@@ -2030,7 +1803,7 @@ void YSM_Command_FILESTATUS(int argc, char **argv)
                 for ( y = 0; y <= 100; y += 10 ) {
                     if (y <= t)
                         PRINTF( VERBOSE_BASE,
-                            BLUE "." NORMAL );
+                            "." );
                     else
                         PRINTF( VERBOSE_BASE, " ");
                 }
@@ -2179,27 +1952,23 @@ int32_t        x = 0;
     }
 }
 
-static void
-YSM_Command_OPENDC( int argc, char **argv )
+static void YSM_Command_OPENDC(int argc, char **argv)
 {
-slave_t    *query = NULL;
-#ifdef WIN32
-int32_t        tid;
-#elif OS2
-int         tid;
-#else
-pthread_t    tid;
-#endif
+    slave_t    *query = NULL;
+    pthread_t   tid;
 
     /* Check if the victim exists */
-    query = YSM_QuerySlaves( SLAVE_NAME, argv[1], 0, 0 );
-    if (!query) {
+    query = YSM_QuerySlaves(SLAVE_NAME, argv[1], 0, 0);
+
+    if (!query)
+    {
         PRINTF( VERBOSE_BASE,
             "Negotiation cancelled. slave %s unknown.\n", argv[1] );
         return;
     }
 
-    if (query->d_con.flags & DC_CONNECTED) {
+    if (query->d_con.flags & DC_CONNECTED)
+    {
         PRINTF( VERBOSE_BASE,
             "An existing session with this slave was found.\n"
             "Use the 'closedc' command to end it if required.\n");
@@ -2209,23 +1978,25 @@ pthread_t    tid;
     PRINTF( VERBOSE_BASE,
         "Initiating a DC session with %s..\n", query->info.NickName );
 
-    pthread_create( &tid, NULL, (void *)&YSM_OpenDC, (slave_t *)query);
+    pthread_create(&tid, NULL, (void *)&YSM_OpenDC, (void *)query);
 }
 
-static void
-YSM_Command_CLOSEDC( int argc, char **argv )
+static void YSM_Command_CLOSEDC(int argc, char **argv)
 {
-slave_t    *query = NULL;
+    slave_t *query = NULL;
 
     /* Check if the victim exists */
-    query = YSM_QuerySlaves( SLAVE_NAME, argv[1], 0, 0 );
-    if (!query) {
+    query = YSM_QuerySlaves(SLAVE_NAME, argv[1], 0, 0);
+
+    if (!query)
+    {
         PRINTF( VERBOSE_BASE,
             "Negotiation cancelled. slave %s unknown.\n", argv[1] );
         return;
     }
 
-    if (!query->d_con.rSocket) {
+    if (!query->d_con.rSocket)
+    {
         PRINTF( VERBOSE_BASE,
             "No active DC session with this slave was found.\n"
             "Use the 'opendc' command to open a DC session.\n");
@@ -2235,16 +2006,14 @@ slave_t    *query = NULL;
     PRINTF( VERBOSE_BASE, "Closing DC Session with %s..\n",
         query->info.NickName );
 
-    YSM_CloseDC( query );
+    YSM_CloseDC(query);
 }
 
 #endif /* YSM_WITH_THREADS */
 
 static void YSM_Command_SLAVESALL( int argc, char **argv )
 {
-    YSM_PrintOrganizedSlaves( STATUS_ONLINE,
-                argv[1],
-                0x0 );
+    YSM_PrintOrganizedSlaves(STATUS_ONLINE, argv[1], 0x0);
 }
 
 #ifdef YSM_TRACE_MEMLEAK
@@ -2254,324 +2023,256 @@ static void YSM_Command_SHOWLEAK( int argc, char **argv )
 }
 #endif
 
-void YSM_Init_Commands(void)
+void init_commands(void)
 {
-
-#define YSM_COMMAND_GROUP_USERS        0x00
-#define YSM_COMMAND_GROUP_SETTINGS     0x01
-#define YSM_COMMAND_GROUP_ACCOUNT      0x02
-#define YSM_COMMAND_GROUP_CLIENT       0x03
-#define YSM_COMMAND_GROUP_EXTRA        0x04
-
-    YSM_AddCommandtoList( "quit",
+    add_command_to_list( "quit",
             "q",
             YSM_COMMAND_QUIT_HELP,
             YSM_COMMAND_GROUP_CLIENT,
             0,
             &YSM_Command_QUIT );
 
-    YSM_AddCommandtoList( "help",
+    add_command_to_list( "help",
             "?",
             YSM_COMMAND_HELP_HELP,
             YSM_COMMAND_GROUP_CLIENT,
             0,
             &YSM_Command_HELP );
 
-    YSM_AddCommandtoList( "clear",
-            "c",
-            YSM_COMMAND_CLEAR_HELP,
-            YSM_COMMAND_GROUP_CLIENT,
-            0,
-            &YSM_Command_CLEAR);
-
-
-    YSM_AddCommandtoList( "readafk",
+    add_command_to_list( "readafk",
             NULL,
             YSM_COMMAND_READAFK_HELP,
             YSM_COMMAND_GROUP_CLIENT,
             0,
             &YSM_Command_READAFK);
 
-
-    YSM_AddCommandtoList( "uptime",
+    add_command_to_list( "uptime",
             NULL,
             YSM_COMMAND_UPTIME_HELP,
             YSM_COMMAND_GROUP_CLIENT,
             0,
             &YSM_Command_UPTIME);
 
-
-    YSM_AddCommandtoList( "backdoor",
+    add_command_to_list( "backdoor",
             NULL,
             YSM_COMMAND_BACKDOOR_HELP,
             YSM_COMMAND_GROUP_CLIENT,
             0,
             &YSM_Command_BACKDOOR);
 
-    YSM_AddCommandtoList( "afk",
+    add_command_to_list( "afk",
             NULL,
             YSM_COMMAND_AFK_HELP,
             YSM_COMMAND_GROUP_CLIENT,
             0,
             &YSM_Command_AFK);
 
-
-    YSM_AddCommandtoList( "last",
+    add_command_to_list( "last",
             NULL,
             YSM_COMMAND_LAST_HELP,
             YSM_COMMAND_GROUP_CLIENT,
             0,
             &YSM_Command_LAST);
 
-
-    YSM_AddCommandtoList( "minimize",
-            "z",
-            YSM_COMMAND_MINIMIZE_HELP,
-            YSM_COMMAND_GROUP_CLIENT,
-            0,
-            &YSM_Command_MINIMIZE);
-
-    YSM_AddCommandtoList( "tabkey",
+    add_command_to_list( "tabkey",
             NULL,
             YSM_COMMAND_TABKEY_HELP,
             YSM_COMMAND_GROUP_CLIENT,
             0,
             NULL);
 
-    YSM_AddCommandtoList( "hotkeys",
+    add_command_to_list( "hotkeys",
             NULL,
             YSM_COMMAND_HOTKEYS_HELP,
             YSM_COMMAND_GROUP_CLIENT,
             0,
             NULL);
 
-    YSM_AddCommandtoList( "burl",
+    add_command_to_list( "burl",
             NULL,
             YSM_COMMAND_BURL_HELP,
             YSM_COMMAND_GROUP_CLIENT,
             1,
             &YSM_Command_BURL);
 
-    YSM_AddCommandtoList( "run",
-            "!",
-            YSM_COMMAND_RUN_HELP,
-            YSM_COMMAND_GROUP_CLIENT,
-            1,
-            &YSM_Command_RUN);
-
-
-    YSM_AddCommandtoList( "forward",
+    add_command_to_list( "forward",
             NULL,
             YSM_COMMAND_FORWARD_HELP,
             YSM_COMMAND_GROUP_CLIENT,
             0,
             &YSM_Command_FORWARD);
 
-
-    YSM_AddCommandtoList( "reconnect",
+    add_command_to_list( "reconnect",
             NULL,
             YSM_COMMAND_RECONNECT_HELP,
             YSM_COMMAND_GROUP_CLIENT,
             0,
             &YSM_Command_RECONNECT);
 
-
-    YSM_AddCommandtoList( "slaves",
+    add_command_to_list( "slaves",
             "w",
             YSM_COMMAND_SLAVES_HELP,
             YSM_COMMAND_GROUP_USERS,
             0,
             &YSM_Command_SLAVES );
 
-    YSM_AddCommandtoList( "ls",
+    add_command_to_list( "ls",
             "l",
             YSM_COMMAND_SLAVES_HELP,
             YSM_COMMAND_GROUP_USERS,
             0,
             &YSM_Command_SLAVES );
 
-    YSM_AddCommandtoList( "slavesall",
+    add_command_to_list( "slavesall",
             "wa",
             YSM_COMMAND_SLAVESALL_HELP,
             YSM_COMMAND_GROUP_USERS,
             0,
             &YSM_Command_SLAVESALL );
 
-    YSM_AddCommandtoList( "кто",
-            NULL,
-            YSM_COMMAND_SLAVESON_HELP,
-            YSM_COMMAND_GROUP_USERS,
-            0,
-            &YSM_Command_SLAVESON );
-
-    YSM_AddCommandtoList( "slaveson",
+    add_command_to_list( "slaveson",
             "wo",
             YSM_COMMAND_SLAVESON_HELP,
             YSM_COMMAND_GROUP_USERS,
             0,
             &YSM_Command_SLAVESON );
 
-    YSM_AddCommandtoList( "addslave",
+    add_command_to_list( "addslave",
             "add",
             YSM_COMMAND_ADDSLAVE_HELP,
             YSM_COMMAND_GROUP_USERS,
             2,
             &YSM_Command_ADDSLAVE);
 
-    YSM_AddCommandtoList( "delslave",
+    add_command_to_list( "delslave",
             "del",
             YSM_COMMAND_DELSLAVE_HELP,
             YSM_COMMAND_GROUP_USERS,
             1,
             &YSM_Command_DELSLAVE);
 
-    YSM_AddCommandtoList( "hist",
+    add_command_to_list( "hist",
             "history",
             YSM_COMMAND_HIST_HELP,
             YSM_COMMAND_GROUP_USERS,
             1,
             &YSM_Command_HIST);
 
-    YSM_AddCommandtoList( "msg",
+    add_command_to_list( "msg",
             "m",
             YSM_COMMAND_MSG_HELP,
             YSM_COMMAND_GROUP_USERS,
             1,
             &YSM_Command_MSG);
 
-    YSM_AddCommandtoList( "соо",
-            "с",
-            YSM_COMMAND_MSG_HELP,
-            YSM_COMMAND_GROUP_USERS,
-            1,
-            &YSM_Command_MSG);
-
-    YSM_AddCommandtoList( "mplain",
+    add_command_to_list( "mplain",
             "mp",
             YSM_COMMAND_MPLAIN_HELP,
             YSM_COMMAND_GROUP_USERS,
             1,
             &YSM_Command_MPLAIN);
 
-    YSM_AddCommandtoList( "chat",
+    add_command_to_list( "chat",
             "ch",
             YSM_COMMAND_CHAT_HELP,
             YSM_COMMAND_GROUP_USERS,
             0,
             &YSM_Command_CHAT);
 
-    YSM_AddCommandtoList( "lastsent",
+    add_command_to_list( "lastsent",
             "a",
             YSM_COMMAND_LASTSENT_HELP,
             YSM_COMMAND_GROUP_USERS,
             0,
             &YSM_Command_LASTSENT);
 
-
-    YSM_AddCommandtoList( "reply",
+    add_command_to_list( "reply",
             "r",
             YSM_COMMAND_REPLY_HELP,
             YSM_COMMAND_GROUP_USERS,
             0,
             &YSM_Command_REPLY);
 
-    YSM_AddCommandtoList( "отв",
-            "о",
-            YSM_COMMAND_REPLY_HELP,
-            YSM_COMMAND_GROUP_USERS,
-            0,
-            &YSM_Command_REPLY);
-
-    YSM_AddCommandtoList( "whois",
+    add_command_to_list( "whois",
             NULL,
             YSM_COMMAND_WHOIS_HELP,
             YSM_COMMAND_GROUP_USERS,
             1,
             &YSM_Command_WHOIS);
 
-    YSM_AddCommandtoList( "search",
+    add_command_to_list( "search",
             NULL,
             YSM_COMMAND_SEARCH_HELP,
             YSM_COMMAND_GROUP_USERS,
             1,
             &YSM_Command_SEARCH);
 
-
-    YSM_AddCommandtoList( "save",
+    add_command_to_list( "save",
             NULL,
             YSM_COMMAND_SAVE_HELP,
             YSM_COMMAND_GROUP_USERS,
             0,
             &YSM_Command_SAVE);
 
-
-    YSM_AddCommandtoList( "req",
+    add_command_to_list( "req",
             NULL,
             YSM_COMMAND_REQ_HELP,
             YSM_COMMAND_GROUP_USERS,
             1,
             &YSM_Command_REQ);
 
-
-    YSM_AddCommandtoList( "auth",
+    add_command_to_list( "auth",
             NULL,
             YSM_COMMAND_AUTH_HELP,
             YSM_COMMAND_GROUP_USERS,
             1,
             &YSM_Command_AUTH);
 
-
-    YSM_AddCommandtoList( "rename",
+    add_command_to_list( "rename",
             "mv",
             YSM_COMMAND_RENAME_HELP,
             YSM_COMMAND_GROUP_USERS,
             2,
             &YSM_Command_RENAME);
 
-
-    YSM_AddCommandtoList( "ignore",
+    add_command_to_list( "ignore",
             "ign",
             YSM_COMMAND_IGNORE_HELP,
             YSM_COMMAND_GROUP_USERS,
             1,
             &YSM_Command_IGNORE);
 
-
-    YSM_AddCommandtoList( "visible",
+    add_command_to_list( "visible",
             "vis",
             YSM_COMMAND_VISIBLE_HELP,
             YSM_COMMAND_GROUP_USERS,
             1,
             &YSM_Command_VISIBLE);
 
-
-    YSM_AddCommandtoList( "invisible",
+    add_command_to_list( "invisible",
             "inv",
             YSM_COMMAND_INVISIBLE_HELP,
             YSM_COMMAND_GROUP_USERS,
             1,
             &YSM_Command_INVISIBLE);
 
-
-    YSM_AddCommandtoList( "alert",
+    add_command_to_list( "alert",
             NULL,
             YSM_COMMAND_ALERT_HELP,
             YSM_COMMAND_GROUP_USERS,
             1,
             &YSM_Command_ALERT);
 
-
-    YSM_AddCommandtoList( "key",
+    add_command_to_list( "key",
             NULL,
             YSM_COMMAND_KEY_HELP,
             YSM_COMMAND_GROUP_USERS,
             1,
             &YSM_Command_KEY);
 
-
 #ifdef YSM_WAR_MODE
 
-    YSM_AddCommandtoList( "scan",
+    add_command_to_list( "scan",
             NULL,
             YSM_COMMAND_SCAN_HELP,
             YSM_COMMAND_GROUP_USERS,
@@ -2579,7 +2280,7 @@ void YSM_Init_Commands(void)
             &YSM_Command_SCAN);
 
 
-    YSM_AddCommandtoList( "kill",
+    add_command_to_list( "kill",
             NULL,
             YSM_COMMAND_KILL_HELP,
             YSM_COMMAND_GROUP_USERS,
@@ -2588,31 +2289,28 @@ void YSM_Init_Commands(void)
 
 #endif
 
-    YSM_AddCommandtoList( "rtf",
+    add_command_to_list( "rtf",
             NULL,
             YSM_COMMAND_KILL_HELP,
             YSM_COMMAND_GROUP_USERS,
             1,
             &YSM_Command_RTF);
 
-
-    YSM_AddCommandtoList( "seen",
+    add_command_to_list( "seen",
             NULL,
             YSM_COMMAND_SEEN_HELP,
             YSM_COMMAND_GROUP_USERS,
             1,
             &YSM_Command_SEEN);
 
-
-    YSM_AddCommandtoList( "contacts",
+    add_command_to_list( "contacts",
             "contact",
             YSM_COMMAND_CONTACTS_HELP,
             YSM_COMMAND_GROUP_USERS,
             2,
             &YSM_Command_CONTACTS);
 
-
-    YSM_AddCommandtoList( "url",
+    add_command_to_list( "url",
             NULL,
             YSM_COMMAND_URL_HELP,
             YSM_COMMAND_GROUP_USERS,
@@ -2621,51 +2319,49 @@ void YSM_Init_Commands(void)
 
 #ifdef YSM_WITH_THREADS
 
-    YSM_AddCommandtoList( "opendc",
+    add_command_to_list( "opendc",
             NULL,
             YSM_COMMAND_OPENDC_HELP,
             YSM_COMMAND_GROUP_USERS,
             1,
             &YSM_Command_OPENDC);
 
-    YSM_AddCommandtoList( "closedc",
+    add_command_to_list( "closedc",
             NULL,
             YSM_COMMAND_CLOSEDC_HELP,
             YSM_COMMAND_GROUP_USERS,
             1,
             &YSM_Command_CLOSEDC);
 
-
-    YSM_AddCommandtoList( "faccept",
+    add_command_to_list( "faccept",
             NULL,
             YSM_COMMAND_FILEACCEPT_HELP,
             YSM_COMMAND_GROUP_USERS,
             1,
             &YSM_Command_FILEACCEPT);
 
-
-    YSM_AddCommandtoList( "fdecline",
+    add_command_to_list( "fdecline",
             NULL,
             YSM_COMMAND_FILEDECLINE_HELP,
             YSM_COMMAND_GROUP_USERS,
             1,
             &YSM_Command_FILEDECLINE);
 
-    YSM_AddCommandtoList( "send",
+    add_command_to_list( "send",
             "file",
             YSM_COMMAND_SEND_HELP,
             YSM_COMMAND_GROUP_USERS,
             3,
             &YSM_Command_SEND);
 
-    YSM_AddCommandtoList( "fstatus",
+    add_command_to_list( "fstatus",
             NULL,
             YSM_COMMAND_FILESTATUS_HELP,
             YSM_COMMAND_GROUP_USERS,
             0,
             &YSM_Command_FILESTATUS);
 
-    YSM_AddCommandtoList( "fcancel",
+    add_command_to_list( "fcancel",
             NULL,
             YSM_COMMAND_FILECANCEL_HELP,
             YSM_COMMAND_GROUP_USERS,
@@ -2674,78 +2370,57 @@ void YSM_Init_Commands(void)
 
 #endif
 
-    YSM_AddCommandtoList( "info",
+    add_command_to_list( "info",
             NULL,
             YSM_COMMAND_INFO_HELP,
             YSM_COMMAND_GROUP_ACCOUNT,
             0,
             &YSM_Command_INFO );
 
-
-    YSM_AddCommandtoList( "status",
+    add_command_to_list( "status",
             "s",
             YSM_COMMAND_STATUS_HELP,
             YSM_COMMAND_GROUP_ACCOUNT,
             0,
             &YSM_Command_STATUS);
 
-
-    YSM_AddCommandtoList( "nick",
+    add_command_to_list( "nick",
             NULL,
             YSM_COMMAND_NICK_HELP,
             YSM_COMMAND_GROUP_ACCOUNT,
             0,
             &YSM_Command_NICK);
 
-
-    YSM_AddCommandtoList( "email",
+    add_command_to_list( "email",
             NULL,
             YSM_COMMAND_EMAIL_HELP,
             YSM_COMMAND_GROUP_ACCOUNT,
             0,
             &YSM_Command_EMAIL);
 
-
-
-    YSM_AddCommandtoList( "password",
+    add_command_to_list( "password",
             NULL,
             YSM_COMMAND_PASSWORD_HELP,
             YSM_COMMAND_GROUP_ACCOUNT,
             1,
             &YSM_Command_PASSWORD);
 
-    YSM_AddCommandtoList( "logall",
+    add_command_to_list( "logall",
             "log",
             YSM_COMMAND_LOGALL_HELP,
             YSM_COMMAND_GROUP_SETTINGS,
             0,
             &YSM_Command_LOGALL);
 
-
-    YSM_AddCommandtoList( "beep",
-            NULL,
-            YSM_COMMAND_BEEP_HELP,
-            YSM_COMMAND_GROUP_SETTINGS,
-            0,
-            &YSM_Command_BEEP);
-
-    YSM_AddCommandtoList( "sounds",
-            NULL,
-            YSM_COMMAND_SOUNDS_HELP,
-            YSM_COMMAND_GROUP_SETTINGS,
-            0,
-            &YSM_Command_SOUNDS);
-
-    YSM_AddCommandtoList( "loadconfig",
+    add_command_to_list( "loadconfig",
             NULL,
             YSM_COMMAND_LOADCONFIG_HELP,
             YSM_COMMAND_GROUP_SETTINGS,
             0,
             &YSM_Command_LOADCONFIG);
 
-
 #ifdef YSM_TRACE_MEMLEAK
-    YSM_AddCommandtoList( "showleak",
+    add_command_to_list( "showleak",
             NULL,
             YSM_COMMAND_HELP_HELP,
             YSM_COMMAND_GROUP_SETTINGS,
@@ -2754,13 +2429,13 @@ void YSM_Init_Commands(void)
 #endif
 }
 
-command_t * YSM_AddCommandtoList(
-    int8_t   *cmd_name,
-    int8_t   *cmd_alias,
-    int8_t   *cmd_help,
-    int16_t   groupid,
-    u_int16_t cmd_margs,
-    void     *pfunc )
+command_t * add_command_to_list(
+    int8_t    *cmd_name,
+    int8_t    *cmd_alias,
+    int8_t    *cmd_help,
+    int16_t    groupid,
+    u_int16_t  cmd_margs,
+    void      *pfunc)
 {
     command_t *node = NULL;
 

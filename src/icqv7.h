@@ -107,7 +107,7 @@ enum CAP_FLAGS {    CAPFL_SRVRELAY    = 1,
     #define YSM_CLIENT_ONLINE    0x02
     #define    YSM_SERVER_IS_READY    0x03
     #define YSM_REQUEST_SERVICE    0x04
-    #define YSM_SRV_REDIRECT    0x05
+    #define YSM_SRV_IRECT    0x05
     #define YSM_RATE_INFO_REQ    0x06
     #define YSM_RATE_INFO_RESP    0x07
     #define YSM_RATE_INFO_ACK    0x08

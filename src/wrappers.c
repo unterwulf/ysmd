@@ -1,7 +1,4 @@
 /*
--======================== ysmICQ client ============================-
-        Having fun with a boring Protocol
--======================== YSM_Wrappers.c ===========================-
 
 YSM (YouSickMe) ICQ Client. An Original Multi-Platform ICQ client.
 Copyright (C) 2002 rad2k Argentina.
@@ -42,7 +39,9 @@ int unfreed_blocks = 0;
 void YSM_Reconnect(void)
 {
     slave_t    *slave;
-    u_int32_t   x = 10; /* starting time is 10 seconds */
+
+    /* Starting time is 10 seconds */
+    u_int32_t   x = 10;
     int32_t     y = 0;
 
     g_sinfo.flags &= ~FL_LOGGEDIN;
@@ -51,7 +50,7 @@ void YSM_Reconnect(void)
     /* put them all offline */
     g_sinfo.onlineslaves = 0;
 
-    /* reset slaves status */
+    /* Reset slaves status */
     for (slave = (slave_t *) g_slave_list.start;
          slave != NULL;
          slave = (slave_t *) slave->suc)
@@ -62,8 +61,8 @@ void YSM_Reconnect(void)
     while (y <= 0)
     {
         PRINTF(VERBOSE_BASE,
-            "\n" RED "Disconnection detected. "
-            "Reconnecting in %d seconds.\n" NORMAL, x);
+        "\nDisconnection detected. "
+        "Reconnecting in %d seconds.\n" , x );
 
         YSM_Thread_Sleep(x, 0);
 
@@ -76,14 +75,13 @@ void YSM_Reconnect(void)
             else
             {
                 PRINTF(VERBOSE_BASE,
-                "\n" RED "Maximum reconnects reached. "
-                "Network must be down..\n" NORMAL);
-                YSM_Error(ERROR_NETWORK, __FILE__, __LINE__, 0);
+                "\nMaximum reconnects reached. "
+                "Network must be down..\n" );
+                YSM_ERROR(ERROR_NETWORK, 0);
             }
         }
     }
 }
-
 
 int YSM_READ( int32_t    sock,
     void        *buf,
@@ -121,16 +119,17 @@ int32_t    r = 0, x = 0, rlen = 0;
 }
 
 
-int YSM_WRITE( int32_t sock, void *data, int32_t data_len )
+int YSM_WRITE(int32_t sock, void *data, int32_t data_len)
 {
-int32_t    r = 0, y = 0;
+    int32_t r = 0, y = 0;
 
     do {
         y = SOCK_WRITE(sock, data, data_len);
         if (y) r += y;
     } while (y >= 0 && r != data_len);
 
-    if (y < 0) YSM_Reconnect();
+    if (y < 0)
+        YSM_Reconnect();
 
     return r;
 }
@@ -155,8 +154,8 @@ int32_t YSM_WRITE_DC(slave_t *victim, int32_t sock, void *data, int32_t data_len
 
 size_t YSM_READ_LN(int32_t sock, int8_t *obuf, size_t maxsize)
 {
-int8_t    ch = 0;
-size_t    bread = 0;
+    int8_t ch = 0;
+    size_t bread = 0;
 
     while (ch != '\n' && bread < maxsize) {
         if (SOCK_READ(sock, &ch, 1) <= 0)
@@ -239,17 +238,21 @@ int YSM_IsInvalidPtr(void *ptr)
     return FALSE;
 }
 
-/*    This is the function that should be called instead of directly    */
-/*    using the exit() syscall. It does some garbage collection and    */
-/*    allows the addition of pre-leaving procedures.            */
+/* This is the function that should be called instead of directly */
+/* using the exit() syscall. It does some garbage collection and  */
+/* allows the addition of pre-leaving procedures.                 */
 
 void YSM_Exit(int32_t status, int8_t ask)
 {
-    if (g_sinfo.blgroupsid != NULL)
+    if (g_sinfo.blgroupsid != NULL) {
         ysm_free(g_sinfo.blgroupsid, __FILE__, __LINE__);
+        g_sinfo.blgroupsid = NULL;
+    }
 
-    if (g_sinfo.blusersid != NULL)
+    if (g_sinfo.blusersid != NULL) {
         ysm_free(g_sinfo.blusersid, __FILE__, __LINE__);
+        g_sinfo.blusersid = NULL;
+    }
 
     /* Logging off event */
     YSM_Event(EVENT_LOGOFF,
@@ -258,11 +261,6 @@ void YSM_Exit(int32_t status, int8_t ask)
         0,
         NULL,
         0);
-
-#if !defined(__OpenBSD__)
-    /* Clear the terminal title */
-    printf("%c]0;%c", '\033', '\007');
-#endif
 
     /* close the network socket */
     close(YSM_USER.network.rSocket);
@@ -282,12 +280,11 @@ void YSM_Exit(int32_t status, int8_t ask)
     exit(status);
 }
 
-
-FILE * YSM_fopen(const char *path, const char *mode)
+FILE * ysm_fopen(const char *path, const char *mode)
 {
     FILE      *fd = NULL;
     u_int32_t  i = 0;
-    filemap_t *node = (filemap_t *) g_filemap_list.start;
+    filemap_t *node;
 
     /* call the real fopen */
     fd = fopen(path, mode);
@@ -295,94 +292,35 @@ FILE * YSM_fopen(const char *path, const char *mode)
         return fd;
 
     /* do we already have an entry for this fd? weird..could happen */
-    for (i = 1; node != NULL; i++) {
-        if (node->fd == fd) {
+    for (node = (filemap_t *) g_filemap_list.start;
+         node != NULL;
+         node = (filemap_t *) node->suc)
+    {
+        if (node->fd == fd)
             /* yep, does exist. */
             return fd;
-        }
-        node = (filemap_t *) node->suc;
     }
 
     /* no entry exists, create one */
-    node = (filemap_t *) ysm_calloc(1, sizeof(filemap_t), __FILE__, __LINE__);
+    node = (filemap_t *) YSM_CALLOC(1, sizeof(filemap_t));
     node->fd = fd;
 
-    /* get the file size */
-    if (fseek(node->fd, 0L, SEEK_END) != 0)
-    {
-        fclose(fd);
-        ysm_free(node, __FILE__, __LINE__);
-        return NULL;
-    }
-
-    node->size = ftell(node->fd);
-    if (node->size < 0)
-    {
-        fclose(fd);
-        ysm_free(node, __FILE__, __LINE__);
-        return NULL;
-    }
-
-    /* rewind the file descriptor */
-    if (fseek(node->fd, 0L, SEEK_SET) != 0)
-    {
-        fclose(fd);
-        ysm_free(node, __FILE__, __LINE__);
-        return NULL;
-    }
-
-    /* load the file in memory */
-    if (node->size > 0)
-    {
-        node->data = ysm_malloc(node->size+1, __FILE__, __LINE__);
-        if (node->data == NULL) {
-            /* ERR_MEMORY */
-            fclose(fd);
-            ysm_free(node, __FILE__, __LINE__);
-            return NULL;
-        }
-
-        /* update the size with the new real read size */
-        node->size = fread(node->data, 1, node->size, node->fd);
-        if (node->size < 0) {
-            /* ERRO_WOOPS */
-            fclose(fd);
-            ysm_free(node->data, __FILE__, __LINE__);
-            ysm_free(node, __FILE__, __LINE__);
-            return NULL;
-        }
-    }
-
-    /* rewind the file descriptor again */
-    if (fseek(node->fd, 0L, SEEK_SET) != 0)
-    {
-        fclose(fd);
-        if (node->data != NULL)
-            ysm_free(node->data, __FILE__, __LINE__);
-
-        ysm_free(node, __FILE__, __LINE__);
-        return NULL;
-    }
-
-    /* add the filemap to the list */
     list_unshift(&g_filemap_list, (dl_list_node_t *) node);
 
     return fd;
 }
 
-int YSM_fclose(FILE *stream)
+int ysm_fclose(FILE *stream)
 {
-    filemap_t *node = (filemap_t *) g_filemap_list.start;
-    u_int32_t  i = 0;
+    filemap_t *node;
 
     /* do we have an entry for this fd? */
-    for (i = 1; node != NULL; i++)
+    for (node = (filemap_t *) g_filemap_list.start;
+         node != NULL;
+         node = (filemap_t *) node->suc)
     {
         if (node->fd == stream)
-        {
             list_delete(&g_filemap_list, (dl_list_node_t *) node);
-        }
-        node = (filemap_t *) node->suc;
     }
 
     return fclose(stream);

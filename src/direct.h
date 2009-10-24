@@ -80,6 +80,6 @@ int32_t YSM_DC_FileSpeedAck( slave_t *victim, int8_t *buf, int32_t len );
 int32_t YSM_DC_FileTransfer( slave_t *victim, int8_t *buf, int32_t len );
 int32_t YSM_DC_FileReceive( slave_t *victim, int8_t *buf, int32_t len );
 
-int YSM_DC_Init(void);
+int init_dc(void);
 
 #endif

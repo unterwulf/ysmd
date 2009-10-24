@@ -41,9 +41,8 @@ For Contact information read the AUTHORS file.
 struct    YSM_SERVERINFORMATION    g_sinfo;
 
 extern    char YSM_Reconnecting;
-extern    slave_t *YSMSlaves_LastRead, *YSMSlaves_TabSlave;
 
-int32_t YSM_NetworkInit(void)
+int32_t init_network(void)
 {
     /* zero all sinfo fields */
     memset(&g_sinfo, 0, sizeof(struct YSM_SERVERINFORMATION));
@@ -60,12 +59,13 @@ int32_t YSM_NetworkInit(void)
     return 0;
 }
 
-int32_t YSM_HostToAddress(int8_t *inhost, u_int32_t *outaddress)
+int32_t
+YSM_HostToAddress( int8_t *inhost, u_int32_t *outaddress )
 {
-    struct hostent    *myhostent;
+struct hostent    *myhostent;
 #if !defined(WIN32) && !defined(_AIX) && !defined(__sun__) && !defined(sun)
-    struct in_addr    myaddr;
-    int32_t           retval = 0;
+struct in_addr    myaddr;
+int32_t        retval = 0;
 #else
 #ifndef    INADDR_NONE
 #define    INADDR_NONE    -1
@@ -107,9 +107,9 @@ int32_t YSM_HostToAddress(int8_t *inhost, u_int32_t *outaddress)
 
 int32_t YSM_RawConnect(int8_t *host, u_int16_t port)
 {
-    struct sockaddr_in  server;
-    int32_t             sock = 0;
-    u_int32_t           address = 0;
+    struct sockaddr_in server;
+    int32_t            sock = 0;
+    u_int32_t          address = 0;
 
     /* convert host into an ip address if it isn't already */
     if (YSM_HostToAddress(host, &address) < 0)
@@ -362,21 +362,46 @@ struct sockaddr_in    server;
     return mysock;
 }
 
+/* SignIn to the ICQ Network             */
+/* moduled for being able to 'reconnect' */
+
+int YSM_SignIn(void)
+{
+    u_int16_t port = 0;
+
+    if (YSM_USER.proxy.proxy_flags & YSM_PROXY_HTTPS)
+        port = 443;
+    else
+        port = YSM_USER.network.auth_port;
+
+    YSM_USER.network.rSocket = YSM_Connect(
+        YSM_USER.network.auth_host,
+        port,
+        0x1);
+
+    if (YSM_USER.network.rSocket < 0)
+        return YSM_USER.network.rSocket;
+
+    PRINTF(VERBOSE_BASE, "\rLogging in.. [");
+    YSM_Init_LoginA(YSM_USER.Uin, YSM_USER.password);
+
+    return YSM_USER.network.rSocket;
+}
+
 void YSM_SrvResponse(void)
 {
     int8_t    *buf = NULL, error_code[2];
     FLAP_Head  head;
-    int32_t    r = 0;
-    int32_t    pos = 0;
+    int32_t    r = 0, pos = 0;
     TLV        login_tlv;
 
     memset(&head, 0, sizeof(head));
     memset(&error_code, 0, 2);
 
-    r = YSM_READ( YSM_USER.network.rSocket,
-            &head,
-            FLAP_HEAD_SIZE,
-            0 );
+    r = YSM_READ(YSM_USER.network.rSocket,
+        &head,
+        FLAP_HEAD_SIZE,
+        0);
 
     if (r < 1 || r != FLAP_HEAD_SIZE) return;
 
@@ -385,11 +410,11 @@ void YSM_SrvResponse(void)
     r = YSM_READ(YSM_USER.network.rSocket,
         buf,
         Chars_2_Wordb(head.dlen),
-        0 );
+        0);
 
     if (r < 1 || r != Chars_2_Wordb(head.dlen)) return;
 
-    PRINTF( VERBOSE_PACKET, WHITE "[INCOMING Packet]" NORMAL "\n");
+    PRINTF(VERBOSE_PACKET, "[INCOMING Packet]\n");
     DumpPacket(&head, buf);
 
     switch (head.channelID)
@@ -425,7 +450,7 @@ void YSM_SrvResponse(void)
                 PRINTF(VERBOSE_BASE,
                     "\n" MSG_ERR_DISCONNECTED "\n");
 
-                YSM_Error(ERROR_NETWORK, __FILE__, __LINE__, 0);
+                YSM_ERROR(ERROR_NETWORK, 0);
                 break;
             }
 
@@ -448,9 +473,9 @@ void YSM_SrvResponse(void)
                 if (!buf[pos] && buf[pos+1] == 0x04)
                 {
                     /* skip the description.. */
-                    memcpy( &login_tlv, &buf[pos], sizeof(TLV) );
-                    pos += sizeof( TLV );
-                    pos += Chars_2_Wordb( login_tlv.len );
+                    memcpy(&login_tlv, &buf[pos], sizeof(TLV));
+                    pos += sizeof(TLV);
+                    pos += Chars_2_Wordb(login_tlv.len);
                 }
 
                 if ((u_int32_t)r < (pos + sizeof(TLV) + 2))
@@ -464,41 +489,50 @@ void YSM_SrvResponse(void)
                 switch (Chars_2_Wordb(error_code))
                 {
                     case 0x0001:
-                        PRINTF(VERBOSE_BASE, MSG_ERR_INVUIN, "\n");
+                        PRINTF(VERBOSE_BASE,
+                            MSG_ERR_INVUIN, "\n");
                         break;
 
                     case 0x0004:
-                        PRINTF(VERBOSE_BASE, MSG_ERR_INVPASSWD, "\n");
+                        PRINTF(VERBOSE_BASE,
+                            MSG_ERR_INVPASSWD, "\n");
                         break;
 
                     case 0x0005:
-                        PRINTF(VERBOSE_BASE, MSG_ERR_INVPASSWD, "\n");
+                        PRINTF(VERBOSE_BASE,
+                            MSG_ERR_INVPASSWD, "\n");
                         break;
 
                     case 0x0007:
-                        PRINTF(VERBOSE_BASE, MSG_ERR_INVUIN, "\n");
+                        PRINTF(VERBOSE_BASE,
+                            MSG_ERR_INVUIN, "\n");
                         break;
 
                     case 0x0008:
-                        PRINTF(VERBOSE_BASE, MSG_ERR_INVUIN, "\n");
+                        PRINTF(VERBOSE_BASE,
+                            MSG_ERR_INVUIN, "\n");
                         break;
 
                     case 0x0015:
-                        PRINTF(VERBOSE_BASE, MSG_ERR_TOOMC, "\n");
+                        PRINTF(VERBOSE_BASE,
+                            MSG_ERR_TOOMC, "\n");
                         break;
 
                     case 0x0016:
-                        PRINTF(VERBOSE_BASE, MSG_ERR_TOOMC, "\n");
+                        PRINTF(VERBOSE_BASE,
+                            MSG_ERR_TOOMC, "\n");
                         break;
 
                     case 0x0018:
-                        PRINTF(VERBOSE_BASE, MSG_ERR_RATE, "\n");
+                        PRINTF(VERBOSE_BASE,
+                            MSG_ERR_RATE, "\n");
                         break;
+
                 }
 
                 PRINTF(VERBOSE_BASE,
-                "\n" MSG_ERR_DISCONNECTED "\n");
-                YSM_Error(ERROR_NETWORK, __FILE__, __LINE__, 0);
+                    "\n" MSG_ERR_DISCONNECTED "\n");
+                YSM_ERROR(ERROR_NETWORK, 0);
             }
             else
             {
@@ -512,18 +546,19 @@ void YSM_SrvResponse(void)
                     /* wopz, big error here */
                 }
             }
-            break;
+        break;
 
-        default:
-            PRINTF(VERBOSE_MOREDATA,
-                    "\nEl channel ID es: %d\n",head.channelID);
-            PRINTF (VERBOSE_MOREDATA,
-                     "[ERR] Inexisting channel ID received");
-            PRINTF (VERBOSE_MOREDATA,
-                     "inside a FLAP structure.\n");
-            PRINTF (VERBOSE_MOREDATA,
-                     "As I'm a paranoid one.. i'll disconnect.\n");
-            break;
+    default:
+        PRINTF(VERBOSE_MOATA,
+            "\nEl channel ID es: %d\n", head.channelID);
+        PRINTF (VERBOSE_MOATA,
+            "[ERR] Inexisting channel ID received");
+        PRINTF (VERBOSE_MOATA,
+            "inside a FLAP structure.\n");
+        PRINTF (VERBOSE_MOATA,
+            "As I'm a paranoid one.. i'll disconnect.\n");
+
+        break;
     }
 
     ysm_free(buf, __FILE__, __LINE__);
@@ -540,240 +575,258 @@ static const u_int8_t Rates_Acknowledge[] = {
     0x00,0x01,0x00,0x02,0x00,0x03,0x00,0x04,0x00,0x05,
 };
 
-int YSM_Incoming_SNAC(FLAP_Head *head, char *buf, int buflen)
+int
+YSM_Incoming_SNAC( FLAP_Head *head, char *buf, int buflen )
 {
-    SNAC_Head thesnac;
-    int       a = 0;
+SNAC_Head     thesnac;
+int         a = 0;
 
     /* copy, and beware of padding of structs */
-    memcpy(&thesnac, buf, SNAC_HEAD_SIZE);
-    memcpy(&thesnac.ReqID, &buf[6], sizeof(int32_t));
+    memcpy( &thesnac, buf, SNAC_HEAD_SIZE );
+    memcpy( &thesnac.ReqID, &buf[6], sizeof(int32_t) );
 
-    PRINTF( VERBOSE_MOREDATA,
+    PRINTF( VERBOSE_MOATA,
         "\nSNAC id %x and sub %x\n",Chars_2_Wordb(thesnac.familyID),
         Chars_2_Wordb( thesnac.SubTypeID ) );
 
-    switch (Chars_2_Wordb(thesnac.familyID))
+    switch(Chars_2_Wordb( thesnac.familyID ))
     {
         case YSM_BASIC_SERVICE_SNAC:
-            PRINTF(VERBOSE_MOREDATA, "Basic Service SNAC arrived!\n");
+            PRINTF( VERBOSE_MOATA,
+                "Basic Service SNAC arrived!\n" );
 
-            switch (Chars_2_Wordb(thesnac.SubTypeID))
-            {
-                case YSM_SERVER_IS_READY:
-                    PRINTF(VERBOSE_MOREDATA,
-                        "Server Ready. Notifying the\n");
-                    PRINTF(VERBOSE_MOREDATA,
-                        "server that we are an ICQ client\n");
+        switch(Chars_2_Wordb( thesnac.SubTypeID ))
+        {
+            case YSM_SERVER_IS_READY:
+                PRINTF(VERBOSE_MOATA,
+                    "Server Ready. Notifying the\n");
+                PRINTF(VERBOSE_MOATA,
+                    "server that we are an ICQ client\n");
 
-                    a = YSM_SendSNAC( 0x1,
-                            0x17,
-                            0x0,
-                            0x0,
-                            icqCloneIdent,
-                            sizeof(icqCloneIdent),
-                            Chars_2_Wordb(head->seq),
-                            NULL );
-                    break;
 
-                case YSM_ACK_ICQ_CLIENT:
-                    YSM_RequestRates();
-                    break;
-
-                case YSM_RATE_INFO_RESP:
-                    /* Just an ACK that we received the rates */
-                    YSM_SendSNAC( 0x1,
-                        0x08,
+                a = YSM_SendSNAC( 0x1,
+                        0x17,
                         0x0,
                         0x0,
-                        Rates_Acknowledge,
-                        sizeof( Rates_Acknowledge ),
-                        g_sinfo.seqnum++,
+                        icqCloneIdent,
+                        sizeof(icqCloneIdent),
+                        Chars_2_Wordb(head->seq),
                         NULL );
-
-                    /* ICBM, CAPABILITES, YOU NAME IT! */
-                    YSM_RequestICBMRights();
-                    YSM_RequestBuddyRights();
-                    /* Request Personal */
-                    YSM_RequestPersonal();
-                    break;
+                break;
 
 
-                /* This is either a status change Acknowledge   */
-                /* Or a personal information reply.             */
-                /* We check its request ID to be 0x000E as sent */
-                /* in the first request. If so, proceed with    */
-                /* the startup. Else, it's a status change.     */
+            case YSM_ACK_ICQ_CLIENT:
+                YSM_RequestRates();
+                break;
 
-                /* case YSM_SCREEN_INFO_RESP: same thing */
-                case YSM_STATUS_CHANGE_ACK:
-                    if(thesnac.ReqID == 0xE000000
-                    || thesnac.ReqID == 0x000000E ) {
+            case YSM_RATE_INFO_RESP:
+            /* Just an ACK that we received the rates */
+                YSM_SendSNAC( 0x1,
+                    0x08,
+                    0x0,
+                    0x0,
+                    Rates_Acknowledge,
+                    sizeof( Rates_Acknowledge ),
+                    g_sinfo.seqnum++,
+                    NULL );
 
-                        YSM_IncomingPersonal( head,
-                                &thesnac,
-                                   &buf[SNAC_HEAD_SIZE] );
+            /* ICBM, CAPABILITES, YOU NAME IT! */
+                YSM_RequestICBMRights();
+                YSM_RequestBuddyRights();
+            /* Request Personal */
+                YSM_RequestPersonal();
+                break;
 
-                        YSM_SendCapabilities();
 
-                        /* If we have no slaves we would */
-                        /* be sending an empty packet. */
-                        if (g_slave_list.length > 0)
-                            YSM_SendContacts();
+            /* This is either a status change Acknowledge    */
+            /* Or a personal information reply.        */
+            /* We check its request ID to be 0x000E as sent */
+            /* in the first request. If so, proceed with    */
+            /* the startup. Else, it's a status change.    */
 
-                        YSM_SendICBM();
+            /* case YSM_SCREEN_INFO_RESP: same thing */
+            case YSM_STATUS_CHANGE_ACK:
+                if(thesnac.ReqID == 0xE000000
+                || thesnac.ReqID == 0x000000E ) {
 
-                        if (YSM_USER.status != STATUS_INVISIBLE) {
-                            YSM_ChangeStatus(
-                                YSM_USER.status
-                                );
-                        }
+                    YSM_IncomingPersonal( head,
+                            &thesnac,
+                               &buf[SNAC_HEAD_SIZE] );
 
-                        /* SET US AS READY */
-                        YSM_SendCliReady();
-                        YSM_RequestContacts ();
-                        YSM_RequestOffline ();
+                    YSM_SendCapabilities();
 
+                    /* If we have no slaves we would */
+                    /* be sending an empty packet. */
+                    if (g_slave_list.length > 0)
+                        YSM_SendContacts();
+
+                    YSM_SendICBM();
+
+                    if (YSM_USER.status != STATUS_INVISIBLE) {
+                        YSM_ChangeStatus(
+                            YSM_USER.status
+                            );
                     }
-                    else
-                        PRINTF(VERBOSE_MOREDATA,
-                            "Status Changed\n");
 
-                    break;
+                    /* SET US AS READY */
+                    YSM_SendCliReady();
+                    YSM_RequestContacts ();
+                    YSM_RequestOffline ();
 
-                default:
-                    break;
-            }
-            break;
+                }
+                else
+                    PRINTF(VERBOSE_MOATA,
+                        "Status Changed\n");
+
+                break;
+
+            default:
+                break;
+
+        }
+
+        break;
+
 
         case YSM_MESSAGING_SNAC:
-            switch(Chars_2_Wordb( thesnac.SubTypeID ))
-            {
-                case YSM_MESSAGE_TO_CLIENT:
-                    YSM_ReceiveMessage( head,
-                            &thesnac,
-                             &buf[SNAC_HEAD_SIZE] );
-                    break;
 
-                case YSM_MESSAGE_FROM_CLIENT:
-                    break;
+        switch(Chars_2_Wordb( thesnac.SubTypeID ))
+        {
+            case YSM_MESSAGE_TO_CLIENT:
+                YSM_ReceiveMessage( head,
+                        &thesnac,
+                         &buf[SNAC_HEAD_SIZE] );
+                break;
 
-                case YSM_CLIENT_ACK:
+            case YSM_MESSAGE_FROM_CLIENT:
+                break;
 
-                    YSM_Incoming_ClientAck(head,
-                            &thesnac,
-                            &buf[SNAC_HEAD_SIZE]);
-                    break;
+            case YSM_CLIENT_ACK:
 
-                case YSM_HOST_ACK:    /* just a srv ack */
+                YSM_Incoming_ClientAck(head,
+                        &thesnac,
+                        &buf[SNAC_HEAD_SIZE]);
+                break;
 
-                    /* call Incoming_Scan if we were waiting
-                     * a reply from a previous scan.
-                     */
+            case YSM_HOST_ACK:    /* just a srv ack */
 
-                    if (0 != g_sinfo.scanqueue)
-                        YSM_Incoming_Scan(&thesnac);
+                /* call Incoming_Scan if we were waiting
+                 * a reply from a previous scan.
+                 */
 
-                    break;
+                if (0 != g_sinfo.scanqueue)
+                    YSM_Incoming_Scan(&thesnac);
 
-                case YSM_SRV_MISSED_CALLS:
-                    PRINTF(VERBOSE_MOREDATA,
-                        "\n" MSG_AOL_WARNING );
-                    break;
+                break;
 
-                case YSM_CLI_SRV_ERRORMSG:
-                    /* We used to have lots of 0x1 subtypes */
-                    /* printf's on the screen big mistake! not */
-                    /* all of the error-codes are known and */
-                    /* they still are useless for us. Plus, no */
-                    /* printf's of %s now. Most of these errors */
-                    /* are caused by really sucking features of */
-                    /* the new-era icq clients, such as plugins. */
+            case YSM_SRV_MISSED_CALLS:
+                PRINTF(VERBOSE_MOATA,
+                    "\n" MSG_AOL_WARNING );
+                break;
 
-                    /* We want this for our WAR mode, */
-                    /* undocumented of course ;)  for not wasting */
-                    /* time searching in the slaves list, use a */
-                    /* global flag, yak :( */
+            case YSM_CLI_SRV_ERRORMSG:
+                /* We used to have lots of 0x1 subtypes */
+                /* printf's on the screen big mistake! not */
+                /* all of the error-codes are known and */
+                /* they still are useless for us. Plus, no */
+                /* printf's of %s now. Most of these errors */
+                /* are caused by really sucking features of */
+                /* the new-era icq clients, such as plugins. */
 
-                    if (0 != g_sinfo.scanqueue)
-                        YSM_Incoming_Scan( &thesnac );
+                /* We want this for our WAR mode, */
+                /* undocumented of course ;)  for not wasting */
+                /* time searching in the slaves list, use a */
+                /* global flag, yak :( */
 
-                    break;
+                if (0 != g_sinfo.scanqueue)
+                    YSM_Incoming_Scan( &thesnac );
 
-                /* Dont bother the user with new subtypes arriving */
-                default:
-                    break;
-            }
-            break;
+                break;
+
+            /* Dont bother the user with new subtypes arriving */
+            default:
+                break;
+        }
+
+        break;
+
 
         case YSM_BUDDY_LIST_SNAC:
-            switch (Chars_2_Wordb(thesnac.SubTypeID))
-            {
-                case YSM_SRV_ONCOMING_BUD:
-                case YSM_SRV_OFFGOING_BUD:
-                    YSM_BuddyChangeStatus( head, &thesnac,
-                        &buf[SNAC_HEAD_SIZE] );
-                    break;
 
-                case YSM_SRV_REJECT_NOTICE:
-                    /* woha this seems serious..mama mia. */
-                    break;
+        switch(Chars_2_Wordb(thesnac.SubTypeID))
+        {
+            case YSM_SRV_ONCOMING_BUD:
+            case YSM_SRV_OFFGOING_BUD:
+                YSM_BuddyChangeStatus( head, &thesnac,
+                    &buf[SNAC_HEAD_SIZE] );
+                break;
 
-                case YSM_SRV_RIGHTS_INFO:
-                    /* reply to rights request, just */
-                    /* we wont care about the data */
-                    break;
+            case YSM_SRV_REJECT_NOTICE:
+                /* woha this seems serious..mama mia. */
+                break;
 
-                default:
-                    PRINTF(VERBOSE_MOREDATA,
-                        "\n[ERR]:  Unknown subtype");
-                    PRINTF(VERBOSE_MOREDATA,
-                        ": %x - in Buddy List SNAC\n",
-                    Chars_2_Wordb(thesnac.SubTypeID));
-                    break;
-            }
-            break;
+            case YSM_SRV_RIGHTS_INFO:
+                /* reply to rights request, just */
+                /* we wont care about the data */
+                break;
+
+            default:
+
+                PRINTF(VERBOSE_MOATA,
+                "\n[ERR]:  Unknown subtype");
+                PRINTF(VERBOSE_MOATA,
+                ": %x - in Buddy List SNAC\n",
+                Chars_2_Wordb(thesnac.SubTypeID));
+
+                break;
+        }
+
+        break;
 
         case YSM_MULTIUSE_SNAC:
-            switch (Chars_2_Wordb(thesnac.SubTypeID))
-            {
-                case YSM_SRV_SEND_RESP:
-                    YSM_IncomingMultiUse(head, &thesnac,
-                        &buf[SNAC_HEAD_SIZE]);
-                    break;
+        switch(Chars_2_Wordb( thesnac.SubTypeID) )
+        {
+            case YSM_SRV_SEND_RESP:
+                YSM_IncomingMultiUse(head, &thesnac,
+                    &buf[SNAC_HEAD_SIZE]);
+                break;
 
-                default:
-                    break;
-            }
-            break;
+            default:
+                break;
+        }
+
+        break;
 
         case YSM_ICQV8FUNC_SNAC:
-            switch (Chars_2_Wordb( thesnac.SubTypeID ))
-            {
-                case YSM_SRV_SEND_ROSTER:
-                    YSM_BuddyIncomingList( head, thesnac,
-                    &buf[SNAC_HEAD_SIZE], buflen);
-                    YSM_SendContacts();
-                    break;
+        switch(Chars_2_Wordb( thesnac.SubTypeID ))
+        {
+            case YSM_SRV_SEND_ROSTER:
+                YSM_BuddyIncomingList( head, thesnac,
+                &buf[SNAC_HEAD_SIZE], buflen);
+                YSM_SendContacts();
+                break;
 
-                case YSM_SRV_ROSTER_OK:
-                    break;
+            case YSM_SRV_ROSTER_OK:
+                break;
 
-                case YSM_SRV_CHANGE_ACK:
-                    YSM_BuddyIncomingChange( head, thesnac,
-                    &buf[SNAC_HEAD_SIZE]);
-                    break;
+            case YSM_SRV_CHANGE_ACK:
+                YSM_BuddyIncomingChange( head, thesnac,
+                &buf[SNAC_HEAD_SIZE]);
+                break;
 
-                default:
-                    break;
-            }
-            break;
+            default:
+                break;
+        }
+
+
+        break;
 
         case YSM_REGISTRATION_SNAC:
             break;
 
         default:
             break;
+
     }
 
     return (Chars_2_Wordb(head->dlen) + FLAP_HEAD_SIZE);
@@ -801,7 +854,7 @@ slave_t            *victim = NULL;
 
     victim = YSM_QuerySlaves(SLAVE_UIN, NULL, atol(puin), 0);
     if (victim == NULL) {
-        PRINTF( VERBOSE_MOREDATA,
+        PRINTF( VERBOSE_MOATA,
             "YSM_BuddyChangeStatus: "
             "Received a status change for UIN %s which is not "
             "in your list.\n", puin );
@@ -869,25 +922,25 @@ u_int8_t    cap_pre[3], capnum[3];
 
             if (!memcmp(capnum, CAP_SRVRELAY, 2)) {
                 victim->caps |= CAPFL_SRVRELAY;
-                PRINTF( VERBOSE_MOREDATA,
+                PRINTF( VERBOSE_MOATA,
                     "Found AIM Cap: SRVRELAY\n");
 
             } else if (!memcmp(capnum, CAP_ISICQ, 2)) {
 
                 victim->caps |= CAPFL_ISICQ;
-                PRINTF( VERBOSE_MOREDATA,
+                PRINTF( VERBOSE_MOATA,
                     "Found AIM Cap: ISICQ\n");
 
 
             } else if (!memcmp(capnum, CAP_UTF8, 2)) {
 
                 victim->caps |= CAPFL_UTF8;
-                PRINTF( VERBOSE_MOREDATA,
+                PRINTF( VERBOSE_MOATA,
                     "Found AIM Cap: UTF8\n");
 
             } else {
 
-                PRINTF( VERBOSE_MOREDATA,
+                PRINTF( VERBOSE_MOATA,
                     "Unknown AIM capability found:"
                     " \\x%.2X\n", capnum );
             }
@@ -899,10 +952,10 @@ u_int8_t    cap_pre[3], capnum[3];
 
             if (!memcmp(capnum, CAP_RTF, 2)) {
                 victim->caps |= CAPFL_RTF;
-                PRINTF( VERBOSE_MOREDATA,
+                PRINTF( VERBOSE_MOATA,
                     "Found RTF Cap: RTF\n");
             } else {
-                PRINTF( VERBOSE_MOREDATA,
+                PRINTF( VERBOSE_MOATA,
                     "Unknown RTF capability found:"
                     " \\x%.2X\n", capnum );
             }
@@ -912,68 +965,68 @@ u_int8_t    cap_pre[3], capnum[3];
         } else {    /* might be Fingerprinting Capabilities */
 
             if (!memcmp(caps+x, CAP_M2001, 16)) {
-                PRINTF( VERBOSE_MOREDATA,
+                PRINTF( VERBOSE_MOATA,
                     "Found fprint Cap: M2001\n");
 
                 victim->fprint = FINGERPRINT_M2000_CLIENT;
 
             } else if (!memcmp(caps+x, CAP_M2001_2, 16)) {
-                PRINTF( VERBOSE_MOREDATA,
+                PRINTF( VERBOSE_MOATA,
                     "Found fprint Cap: M2001_2\n");
 
                 victim->fprint = FINGERPRINT_M20012_CLIENT;
 
             } else if (!memcmp(caps+x, CAP_M2002, 16)) {
-                PRINTF( VERBOSE_MOREDATA,
+                PRINTF( VERBOSE_MOATA,
                     "Found fprint Cap: M2002\n");
 
                 victim->fprint = FINGERPRINT_M2002_CLIENT;
 
             } else if (!memcmp(caps+x, CAP_MLITE, 16)) {
-                PRINTF( VERBOSE_MOREDATA,
+                PRINTF( VERBOSE_MOATA,
                     "Found fprint Cap: ICQ LITE\n");
 
                 victim->fprint = FINGERPRINT_MICQLITE_CLIENT;
 
             } else if (!memcmp(caps+x, CAP_SIMICQ, 16)) {
-                PRINTF( VERBOSE_MOREDATA,
+                PRINTF( VERBOSE_MOATA,
                     "Found fprint Cap: SIMICQ\n");
 
                 victim->fprint = FINGERPRINT_SIMICQ_CLIENT;
 
             } else if (!memcmp(caps+x, CAP_MICQ, 16)) {
-                PRINTF( VERBOSE_MOREDATA,
+                PRINTF( VERBOSE_MOATA,
                     "Found fprint Cap: MICQ\n");
 
                 victim->fprint = FINGERPRINT_MICQ_CLIENT;
 
             } else if (!memcmp(caps+x, CAP_TRILL_NORM, 16)) {
-                PRINTF( VERBOSE_MOREDATA,
+                PRINTF( VERBOSE_MOATA,
                     "Found fprint Cap: TRILLIAN\n");
 
                 victim->fprint = FINGERPRINT_TRILLIAN_CLIENT;
 
             } else if (!memcmp(caps+x, CAP_TRILL_CRYPT, 16)) {
-                PRINTF( VERBOSE_MOREDATA,
+                PRINTF( VERBOSE_MOATA,
                     "Found fprint Cap: TRILLIAN CRYPT\n");
 
                 victim->fprint = FINGERPRINT_TRILLIAN_CLIENT;
 
             } else if (!memcmp(caps+x, CAP_LICQ, 16)) {
-                PRINTF( VERBOSE_MOREDATA,
+                PRINTF( VERBOSE_MOATA,
                     "Found fprint Cap: LICQ\n");
 
                 victim->fprint = FINGERPRINT_LICQ_CLIENT;
             } else {
 
-                PRINTF( VERBOSE_MOREDATA,
+                PRINTF( VERBOSE_MOATA,
                     "Found an Unknown capability:\n");
 
                 for (y = 0; y < 16; y++)
-                    PRINTF( VERBOSE_MOREDATA,
+                    PRINTF( VERBOSE_MOATA,
                         "\\x%.2x", *(caps+x+y));
 
-                PRINTF( VERBOSE_MOREDATA, "\n" );
+                PRINTF( VERBOSE_MOATA, "\n" );
             }
         }
 
@@ -985,7 +1038,7 @@ u_int8_t    cap_pre[3], capnum[3];
 
             victim->caps &= ~CAPFL_UTF8;
             victim->fprint = FINGERPRINT_ICQ2GO_CLIENT;
-            PRINTF(VERBOSE_MOREDATA, "Found an ICQ2Go Client\n");
+            PRINTF(VERBOSE_MOATA, "Found an ICQ2Go Client\n");
     }
 
 }
@@ -1136,8 +1189,7 @@ TLV    thetlv;
 }
 
 
-void
-YSM_BuddyUpdateStatus( slave_t        *victim,
+void YSM_BuddyUpdateStatus( slave_t        *victim,
         struct YSM_DIRECT_CONNECTION    *dcinfo,
         u_int16_t            status,
         u_int16_t            flags,
@@ -1294,14 +1346,12 @@ int32_t        x = 0;
 
     g_promptstatus.flags |= FL_OVERWRITTEN;
 
-
     /* are we in CHAT MODE ? we dont print messages which don't belong
      * to our chat session!. */
     if (g_promptstatus.flags & FL_CHATM) {
         if (victim == NULL || !(victim->flags & FL_CHAT))
             return;
     }
-
 
 #if defined(YSM_WITH_THREADS)
     /* if the display is busy make the thread sleep for 2 secs */
@@ -1311,31 +1361,19 @@ int32_t        x = 0;
     /* Is this slave's Birthday? */
     if (victim->BudType.birthday == 0x1) {
 
-        PRINTF( VERBOSE_BASE, "\r"WHITE"%s"NORMAL" Notice for "
-            "slave "WHITE"%s"NORMAL"\n",
+        PRINTF( VERBOSE_BASE, "\r""%s"" Notice for "
+            "slave ""%s""\n",
             MSG_SLAVES_BIRTHDAY,
             victim->info.NickName );
 
-        if (g_cfg.beep) PRINTF(VERBOSE_BASE, "\a");
-
         /* only inform once this way */
         victim->BudType.birthday = 0x2;
-#if defined(WIN32) || defined(OS2)
-        YSM_WindowAlert();
-#endif
     }
 
     /* Is this slave on our Alert list ? */
-    if (victim->flags & FL_ALERT) {
-        PRINTF( VERBOSE_BASE, "\r%s<<[%sSLAVE %sA L E R T%s]>>%s\n",
-            CYAN, WHITE, RED, CYAN, NORMAL );
-#if defined(WIN32) || defined(OS2)
-        YSM_WindowAlert();
-#endif
-        for ( x = 0; x < g_cfg.beep; x++ ) {
-            PRINTF(VERBOSE_BASE,"\a");
-            YSM_Thread_Sleep( 0, 200 );
-        }
+    if (victim->flags & FL_ALERT)
+    {
+        PRINTF(VERBOSE_BASE, "\r<<[SLAVE A L E R T]>>\n");
     }
 
     /* Okie, now print the status change line */
@@ -1346,32 +1384,28 @@ int32_t        x = 0;
             MSG_STATUS_CHANGE1
             "%d"
             MSG_STATUS_CHANGE2
-            " %s%.10s "
+            " %.10s "
             MSG_STATUS_CHANGE3
-            " " "%s%.9s" NORMAL "]\n",
+            " %.9s]\n",
             time_string,
             victim->uin,
-            g_cfg.color_statuschangename,
             victim->info.NickName,
-            YSM_GetColorStatus(status_string, g_cfg.color_statuschangestatus),
-            status_string );
+            status_string);
 #else
     YSM_WriteStatus(victim->status, oldstatus_string);
 
     PRINTF( VERBOSE_STCHANGE,
-            "\r%-5.5s " CYAN "%-10.10s" NORMAL
-            " %s%-9.9s" NORMAL " -> "
-            "%s%s" NORMAL "\n",
+            "\r%-5.5s %-10.10s" 
+            " %-9.9s -> "
+            "%s\n",
             time_string,
             victim->info.NickName,
-            YSM_GetColorStatus(oldstatus_string, g_cfg.color_statuschangestatus),
             oldstatus_string,
-            YSM_GetColorStatus(status_string, g_cfg.color_statuschangestatus),
             status_string);
 #endif
 
     victim->status = status;
-    g_promptstatus.flags |= FL_REDRAW;
+    g_promptstatus.flags |= FL_RAW;
 }
 
 static void
@@ -1413,7 +1447,7 @@ slave_t    *victim = NULL;
                         status );
                 break;
         default:
-            PRINTF( VERBOSE_MOREDATA,
+            PRINTF( VERBOSE_MOATA,
                 "YSM_TreatMessage: "
                 "Unknown type (%.2x) received.\n",
                 type );
@@ -1661,11 +1695,11 @@ int32_t    ret = TRUE;
 
     /* after the message data, there might be a GUID identifying
      * the type of encoding the sent message is in.
-     * if the message type is a NORMAL MESSAGE, GUIDs come after
+     * if the message type is a MESSAGE, GUIDs come after
      * 8 bytes of colors (fg(4) + bg(4))
      */
     pguid = data+tsize+Chars_2_Word(m_len);
-    if (m_type == YSM_MESSAGE_NORMAL) pguid += 8;
+    if (m_type == YSM_MESSAGE_) pguid += 8;
 
     if ((u_int32_t)(*pguid) == 0x26    /* size of the UTF8 GUID */
     && !memcmp(pguid+4, CAP_UTF8_GUID, sizeof(CAP_UTF8_GUID))) {
@@ -1742,7 +1776,7 @@ TLV        thetlv;
             break;
 
         default:
-            PRINTF( VERBOSE_MOREDATA,
+            PRINTF( VERBOSE_MOATA,
                 "ReceiveMessageType2: unknown cmd(%d).\n",
                  cmd );
             return;
@@ -1865,11 +1899,11 @@ int32_t    i = 0, c = 0, ret = 2;
 
     switch (m_type) {
 
-        case YSM_MESSAGE_NORMAL:
+        case YSM_MESSAGE_:
 
             if (victim) {
-                YSMSlaves_LastRead = victim;
-                YSMSlaves_TabSlave = victim;
+                g_state.last_read = victim;
+                g_state.last_read = victim;
             }
 
             datap = message;
@@ -1964,7 +1998,7 @@ int32_t    i = 0, c = 0, ret = 2;
             return ret;
 
         default:
-            PRINTF( VERBOSE_MOREDATA,
+            PRINTF( VERBOSE_MOATA,
                 "YSM_ReceiveMessageData: "
                 "Unknown m_type received.\n" );
 
@@ -2145,7 +2179,7 @@ char        *buf = NULL;
 
     Word_2_Charsb(&buf[4], bsize - FLAP_HEAD_SIZE);
 
-    PRINTF( VERBOSE_PACKET, WHITE "[OUTGOING Packet]" NORMAL "\n");
+    PRINTF( VERBOSE_PACKET, "[OUTGOING Packet]\n");
     DumpPacket((FLAP_Head *)buf, buf+FLAP_HEAD_SIZE);
 
     if (YSM_WRITE(YSM_USER.network.rSocket, buf, bsize) < 0) {
@@ -2163,45 +2197,64 @@ char        *buf = NULL;
  * server, getting the cookie, and logging in to the BOS server.
  */
 
-int32_t YSM_LoginSequence(uin_t uin, int8_t *password)
+int32_t
+YSM_LoginSequence( uin_t uin, int8_t *password )
 {
-    u_int32_t  datasize = 0, pos = 0;
-    int32_t    r = 0;
-    int8_t    *data = NULL;
-    int8_t     str_uin[MAX_UIN_LEN+1];
-    int8_t    *buf = NULL;
-    SNAC_Head  snac;
-    FLAP_Head  head;
+u_int32_t     datasize = 0, pos = 0;
+int32_t        r = 0;
+int8_t        *data = NULL, suin[MAX_UIN_LEN+1], *buf = NULL;
+TLV        thetlv;
+SNAC_Head    snac;
+FLAP_Head    head;
 
     /* First send a 17,6 SNAC. This way, we request a random
      * key from the server in order to do an MD5 login.
      */
 
-    snprintf(str_uin, MAX_UIN_LEN, "%d", (int)uin);
-    str_uin[sizeof(str_uin) - 1] = 0x00;
+    snprintf(suin, MAX_UIN_LEN, "%d", (int)uin);
+    suin[sizeof(suin) - 1] = 0x00;
 
-    datasize = sizeof(TLV) + strlen(str_uin) /* screen name */
-        + sizeof(TLV)                        /* unknown */
-        + sizeof(TLV);                       /* unknown */
+    datasize = sizeof(TLV) + strlen(suin);    /* screen name */
+    datasize += sizeof(TLV);        /* unknown */
+    datasize += sizeof(TLV);        /* unknown */
 
     data = ysm_calloc(1, datasize, __FILE__, __LINE__);
+    memset(&thetlv, 0, sizeof(TLV));
 
-    pos += InsertTLV(str_uin, 0x1, data + pos, strlen(str_uin));
-    pos += InsertTLV(NULL, 0x4B, data + pos, 0);
-    pos += InsertTLV(NULL, 0x5A, data + pos, 0);
+    Word_2_Charsb(thetlv.type, 0x1);
+    Word_2_Charsb(thetlv.len, strlen(suin));
 
-    if (YSM_SendSNAC(17, 6,
+    memcpy(data+pos, &thetlv, sizeof(TLV));
+    pos += sizeof(TLV);
+
+    memcpy(data+pos, suin, strlen(suin));
+    pos += strlen(suin);
+
+    Word_2_Charsb(thetlv.type, 0x4B);
+    Word_2_Charsb(thetlv.len, 0x0);
+
+    memcpy(data+pos, &thetlv, sizeof(TLV));
+    pos += sizeof(TLV);
+
+    Word_2_Charsb(thetlv.type, 0x5A);
+    Word_2_Charsb(thetlv.len, 0x0);
+
+    memcpy(data+pos, &thetlv, sizeof(TLV));
+    pos += sizeof(TLV);
+
+    if (YSM_SendSNAC( 17, 6,
             0x0,
             0x0,
             data,
             pos,
             g_sinfo.seqnum++,
-            NULL) < 0)
-    {
+            NULL) < 0) {
+
         return -1;
     }
 
     ysm_free(data, __FILE__, __LINE__);
+    data = NULL;
 
     /* ok we sent the first SNAC, we have to receive 17, 07
      * as a valid response
@@ -2209,23 +2262,23 @@ int32_t YSM_LoginSequence(uin_t uin, int8_t *password)
 
     memset(&head, 0, sizeof(head));
 
-    r = YSM_READ(YSM_USER.network.rSocket,
-        &head,
-        FLAP_HEAD_SIZE,
-        0);
+    r = YSM_READ( YSM_USER.network.rSocket,
+            &head,
+            FLAP_HEAD_SIZE,
+            0 );
 
     if (r < 1 || r != FLAP_HEAD_SIZE) return -1;
 
-    buf = ysm_calloc(1, Chars_2_Wordb(head.dlen) + 1, __FILE__, __LINE__);
+    buf = ysm_calloc(1, Chars_2_Wordb(head.dlen)+1, __FILE__, __LINE__);
 
     r = YSM_READ(YSM_USER.network.rSocket,
         buf,
         Chars_2_Wordb(head.dlen),
-        0);
+        0 );
 
     if (r < 1 || r != Chars_2_Wordb(head.dlen)) return -1;
 
-    memcpy(&snac, buf, SNAC_HEAD_SIZE);
+    memcpy( &snac, buf, SNAC_HEAD_SIZE );
 
     if (snac.ReqID == 0x23) return 1;
 
@@ -2253,16 +2306,16 @@ void YSM_Init_LoginA(uin_t uin, u_int8_t *password)
     UinStr[sizeof(UinStr) - 1] = 0x00;
 
     r = YSM_READ(YSM_USER.network.rSocket,
-        &head,
-        FLAP_HEAD_SIZE,
-        1);
+            &head,
+            FLAP_HEAD_SIZE,
+            1);
 
     if (r < FLAP_HEAD_SIZE) return;
 
     r = YSM_READ(YSM_USER.network.rSocket,
-        &buf,
-        sizeof(buf),
-        1);
+            &buf,
+            sizeof(buf),
+            1);
 
     if (r < (int32_t)sizeof(buf)) return;
 
@@ -2287,49 +2340,34 @@ void YSM_Init_LoginA(uin_t uin, u_int8_t *password)
         tsize += 4;
 
         /* TLV type 1 */
-        ret = InsertTLV(UinStr, 0x1, paquete + tsize, strlen(UinStr));
-        tsize += ret;
+        tsize += InsertTLV(UinStr, 0x1, paquete+tsize, strlen(UinStr));
 
-        memset(PasswdStr, '\0', sizeof(PasswdStr));
-        EncryptPassword(password, PasswdStr);
+        memset(PasswdStr,'\0',sizeof(PasswdStr));
+        EncryptPassword(password,PasswdStr);
 
         /* TLV type 2 */
-        ret = InsertTLV(PasswdStr, 0x2, paquete + tsize, strlen(password));
-        tsize += ret;
+        tsize += InsertTLV(PasswdStr,0x2,paquete+tsize,strlen(password));
 
         /* TLV type 3 */
-        ret = InsertTLV(profile, 0x3, paquete + tsize, strlen(profile));
-        tsize += ret;
+        tsize += InsertTLV(profile,0x3,paquete+tsize,strlen(profile));
 
         /* TLV type 16 */
-        ret = InsertTLV(&unkdata, 0x16, paquete + tsize, 2);
-        tsize += ret;
+        tsize += InsertTLV(&unkdata,0x16,paquete+tsize,2);
 
         /* TLV type 17 */
         /* major version 4 icq2000 5 icq2001 */
-        ret = InsertTLV(&majorver, 0x17, paquete + tsize, 2);
-        tsize += ret;
+        tsize += InsertTLV(&majorver,0x17,paquete+tsize,2);
 
         /* Estos que siguen son valores que supongo que no importan  */
         /* que tienen, pero todos son WORD. */
-        ret = InsertTLV(&minorver,0x18,paquete+tsize,2);
-        tsize += ret;
-        ret = InsertTLV(&lesserver,0x19,paquete+tsize,2);
-        tsize += ret;
-        ret = InsertTLV(&buildver,0x1A,paquete+tsize,2);
-        tsize += ret;
-        ret = InsertTLV(&dwordver,0x14,paquete+tsize,4);
-        tsize += ret;
+        tsize += InsertTLV(&minorver,  0x18, paquete+tsize, 2);
+        tsize += InsertTLV(&lesserver, 0x19, paquete+tsize, 2);
+        tsize += InsertTLV(&buildver,  0x1A, paquete+tsize, 2);
+        tsize += InsertTLV(&dwordver,  0x14, paquete+tsize, 4);
 
         /* and the final 4 bytes - Language and Country */
-
-        /* TLV type 0F */
-        ret = InsertTLV("en", 0x0F, paquete + tsize, 2);
-        tsize += ret;
-
-        /* TLV type 0E */
-        ret = InsertTLV("us", 0x0E, paquete + tsize, 2);
-        tsize += ret;
+        tsize += InsertTLV("en",0x0F,paquete+tsize,2);     /* TLV type 0F */
+        tsize += InsertTLV("us",0x0E,paquete+tsize,2);     /* TLV type 0E */
 
         /* Flap HEAD -- Replace the first sizeof(FLAP_Head) bytes */
         /* with the new Flap HEADER. */
@@ -2339,6 +2377,7 @@ void YSM_Init_LoginA(uin_t uin, u_int8_t *password)
         Word_2_Chars(head.seq, newseq);
 
         tsize -= sizeof(FLAP_Head);
+
         /* Data Len means without the header file! */
         Word_2_Charsb(head.dlen, tsize - sizeof(FLAP_Head));
         memcpy(paquete, &head, sizeof(FLAP_Head));
@@ -2346,19 +2385,18 @@ void YSM_Init_LoginA(uin_t uin, u_int8_t *password)
         /* Cruzar dedos y mandar el paquete de Login -A- */
         YSM_WRITE(YSM_USER.network.rSocket, paquete, tsize);
 
-        PRINTF (VERBOSE_MOREDATA, "Login A Sent to the Server\n");
+        PRINTF(VERBOSE_MOATA, "Login A Sent to the Server\n");
 
         ysm_free(paquete, __FILE__, __LINE__);
-
         YSM_Reconnecting = FALSE;
     }
     else
     {
-        PRINTF (VERBOSE_MOREDATA,
-            "Login Init A Failure, bad Server Response.\n" );
-        PRINTF (VERBOSE_MOREDATA,
-            "The reply should have been 0001. Exiting..\n");
-        YSM_Error(ERROR_CRITICAL, __FILE__, __LINE__, 1);
+        PRINTF(VERBOSE_MOATA,
+             "Login Init A Failure, bad Server Response.\n");
+        PRINTF(VERBOSE_MOATA,
+             "The reply should have been 0001. Exiting..\n");
+        YSM_ERROR(ERROR_CRITICAL, 1);
     }
 
     /* update the logging in status bar */
@@ -2367,110 +2405,110 @@ void YSM_Init_LoginA(uin_t uin, u_int8_t *password)
 
 void YSM_Init_LoginB(FLAP_Head *head, int8_t *buf, int32_t buflen)
 {
-    TLV      tlv;
-    int32_t  len;
-    int32_t  x = 0;
+    TLV      thetlv;
+    int32_t  len, x = 0;
     int8_t  *a = NULL, *cookie = NULL;
 
     if (head == NULL || buf == NULL || buflen <= 0)
         return;
 
     if (buflen < Chars_2_Wordb(head->dlen) ||
-        buflen <= (int32_t)sizeof(tlv))
+        buflen <= (int32_t)sizeof(thetlv))
         return;
 
     while (x < Chars_2_Wordb(head->dlen))
     {
-        memcpy(&tlv, buf + x, sizeof(tlv));
-        x += sizeof(tlv);
-        len = Chars_2_Wordb(tlv.len);
+        memcpy(&thetlv, buf+x, sizeof(thetlv));
+        x += sizeof(TLV);
+        len = Chars_2_Wordb(thetlv.len);
 
-        switch (Chars_2_Wordb(tlv.type))
+        switch(Chars_2_Wordb(thetlv.type))
         {
             case 0x1:
             case 0x8e:
-                /* reply from srv. */
-                break;
+            /* reply from srv. */
+            break;
 
             case 0x5:
-                if ((a = strchr(&buf[x], ':')) == NULL)
-                    return;
 
-                *a++ = '\0';
+            if ((a = strchr(&buf[x], ':')) == NULL)
+                return;
 
-                memset(YSM_USER.network.cookie_host, '\0', MAX_PATH);
-                strncpy(YSM_USER.network.cookie_host,
-                        &buf[x],
-                    sizeof(YSM_USER.network.cookie_host) - 1);
+            *a++ = '\0';
 
-                /* 5190 is default */
-                YSM_USER.network.cookie_port = (unsigned short)strtol(a, NULL, 10);
-                /* update the logging in status bar */
-                PRINTF(VERBOSE_BASE, "**");
-                break;
+            memset(YSM_USER.network.cookie_host, '\0', MAX_PATH);
+            strncpy( YSM_USER.network.cookie_host,
+                    &buf[x],
+                sizeof(YSM_USER.network.cookie_host) - 1);
 
-            case 0x6:    /* Cookie is here..hmmm ..comida ;) */
-                cookie = &buf[x];
-                break;
+            /* 5190 is default */
+            YSM_USER.network.cookie_port = (unsigned short)strtol(a, NULL, 10);
+            /** update the logging in status bar */
+            PRINTF(VERBOSE_BASE, "**");
+            break;
 
-            case 0xC:
-                YSM_Error(ERROR_NETWORK, __FILE__, __LINE__, 1);
-                break;
+        case 0x6:    /* Cookie is here..hmmm ..comida ;) */
+            cookie = &buf[x];
+            break;
 
-            case 0x8:
-            case 0x4:
-                PRINTF(VERBOSE_MOREDATA,
-                    "\n%s\n",MSG_ERR_DISCONNECTED);
-
-            default:
-                PRINTF(VERBOSE_BASE,
-                    "Invalid TLV arrived for cookie, quiting.\n");
-                YSM_Error(ERROR_CRITICAL, __FILE__, __LINE__, 1);
-                break;
+        case 0xC:
+            YSM_ERROR(ERROR_NETWORK, 1);
+            break;
+        case 0x8:
+        case 0x4:
+            PRINTF(VERBOSE_MOATA,
+                "\n%s\n",MSG_ERR_DISCONNECTED);
+        default:
+            PRINTF(VERBOSE_BASE,
+                "Invalid TLV arrived for cookie, quiting.\n");
+            YSM_ERROR(ERROR_CRITICAL, 1);
+            break;
         }
+
         x += len;
+
     }
 
     close(YSM_USER.network.rSocket);
 
     YSM_USER.network.rSocket = YSM_Connect(
-        YSM_USER.network.cookie_host,
-        YSM_USER.network.cookie_port,
-        0x1);
+                YSM_USER.network.cookie_host,
+                YSM_USER.network.cookie_port,
+                0x1 );
 
     if (YSM_USER.network.rSocket < 0)
-        YSM_Error(ERROR_NETWORK, __FILE__, __LINE__, 1);
+        YSM_ERROR(ERROR_NETWORK, 1);
 
     /* Generemos nuestro Seq random primario */
     srand((unsigned int)time(NULL));
     g_sinfo.seqnum = rand () % 0xffff;
 
     /* buf should contain de cookie by now */
-    YSM_Init_LoginC(tlv, cookie);
+    YSM_Init_LoginC(thetlv, cookie);
 
     g_sinfo.flags |= FL_LOGGEDIN;
-    g_promptstatus.flags |= FL_REDRAW;
+    g_promptstatus.flags |= FL_RAW;
 
     /* update the logging in status bar */
     PRINTF(VERBOSE_BASE, "**]");
-    PRINTF(VERBOSE_BASE,"\n%s\n\n", MSG_LOGIN_OK);
+    PRINTF(VERBOSE_BASE, "\n%s\n\n", MSG_LOGIN_OK);
 }
 
-void YSM_Init_LoginC(TLV tlv, char *buff)
+void YSM_Init_LoginC(TLV thetlv, char *buff)
 {
-    FLAP_Head   head;
-    char        buf[4];
-    char       *paquete = NULL;
-    int         paqsize, newseq, tsize = 0;
+    FLAP_Head  head;
+    char       buf[4];
+    char      *paquete = NULL;
+    int        paqsize, newseq, tsize = 0;
 
     if (buff == NULL)
         return;
 
-    memset(&head, '\0', sizeof(head));
-    memset(buf, '\0', 4);
+    memset(&head,'\0',sizeof(head));
+    memset(buf,'\0',4);
 
-    recv(YSM_USER.network.rSocket, (char *)&head, sizeof(head), 0);
-    recv(YSM_USER.network.rSocket, &buf[0], 4, 0);
+    recv(YSM_USER.network.rSocket,(char *)&head,sizeof(head),0);
+    recv(YSM_USER.network.rSocket,&buf[0],4,0);
 
     /* aca tambien el server nos manda el 0001 */
     if (!buf[0] && !buf[1] && !buf[2] && buf[3] == 1)
@@ -2489,13 +2527,13 @@ void YSM_Init_LoginC(TLV tlv, char *buff)
         tsize += 4;
 
         /* TLV type 6 THE COOKIE! */
-        /* (we already have the tlv from InitB) =) */
-        memcpy(paquete + tsize, &tlv, sizeof(tlv));
+        /* (we alrady have the tlv from InitB) =) */
+        memcpy(paquete+tsize,&thetlv,sizeof(TLV));
         tsize += sizeof(TLV);
         /* data of tlv...the cookie! =) */
 
-        memcpy(paquete+tsize,buff,Chars_2_Wordb(tlv.len));
-        tsize += Chars_2_Wordb(tlv.len);
+        memcpy(paquete+tsize,buff,Chars_2_Wordb(thetlv.len));
+        tsize += Chars_2_Wordb(thetlv.len);
 
         /* Flap HEAD -- Replace the first sizeof(FLAP_Head) bytes */
         /* with the new Flap HEADER. */
@@ -2512,14 +2550,15 @@ void YSM_Init_LoginC(TLV tlv, char *buff)
         YSM_WRITE(YSM_USER.network.rSocket,paquete,tsize);
 
         ysm_free(paquete, __FILE__, __LINE__);
+        paquete = NULL;
     }
     else
     {
-        PRINTF(VERBOSE_MOREDATA,
+        PRINTF(VERBOSE_MOATA,
         "\nWeird, When we were going to send the cookie, we didnt receive\n");
-        PRINTF(VERBOSE_MOREDATA,
+        PRINTF(VERBOSE_MOATA,
         "the 0001 from the server. So its an error, and we are quitting..\n");
-        YSM_Error(ERROR_CRITICAL, __FILE__, __LINE__, 1);
+        YSM_ERROR(ERROR_CRITICAL, 1);
     }
 
     /* update the logging in status bar */
@@ -2537,20 +2576,18 @@ YSM_UpdatePrivacy possible settings are:
 0x5 : Only allow users in your buddy list.
 */
 
-void
-YSM_UpdatePrivacy( int Setting )
+void YSM_UpdatePrivacy(int Setting)
 {
-int    dlen = 0, tsize = 0;
-char    *data, item_type[2];
-char    YSMBuddy_ID[2];
-char    reqid[4];
+    int    dlen = 0, tsize = 0;
+    char  *data, item_type[2];
+    char   YSMBuddy_ID[2];
+    char   reqid[4];
 
     /* We increment the change count on our buddy list for future chgs */
-     g_sinfo.blentries++;
+    g_sinfo.blentries++;
 
     /* Just used if adding a Buddy */
     Word_2_Charsb(YSMBuddy_ID, g_sinfo.blprivacygroupid);
-
 
     dlen = 2;    /* Len (WORD) */
     dlen += 2 + 2; /* Group ID and Buddy ID */
@@ -2562,7 +2599,6 @@ char    reqid[4];
     data = ysm_calloc(1, dlen, __FILE__, __LINE__);
 
     tsize = 0;
-
     tsize += 2;    /* len == 0 */
     tsize += 2;    /* GrpID == 0, Master Group! */
 
@@ -2585,24 +2621,20 @@ char    reqid[4];
     /* Now insert the Setting in its TLV 0xca */
     InsertTLV(&Setting, 0xca, data+tsize, 1);
 
-    YSM_SendSNAC( 0x13,
-            0x09,
-            0x0,
-            0x0,
-            data,
-            dlen,
-            g_sinfo.seqnum++, reqid);
+    YSM_SendSNAC(0x13, 0x09, 0x0, 0x0,
+        data,
+        dlen,
+        g_sinfo.seqnum++, reqid);
 
     ysm_free(data, __FILE__, __LINE__);
     data = NULL;
 }
 
-int32_t
-YSM_ChangeStatus( u_int16_t status )
+int32_t YSM_ChangeStatus(u_int16_t status)
 {
-TLV        thetlv;
-u_int32_t    len = 0, pos = 0;
-int8_t        *buf = NULL;
+    TLV        thetlv;
+    u_int32_t  len = 0, pos = 0;
+    int8_t    *buf = NULL;
 
     /* autoaway is always overriden when calling ChangeStatus.
      * hence, autoaway MUST be set AFTER the call for away status change.
@@ -2656,13 +2688,13 @@ int8_t        *buf = NULL;
 
     buf[pos] = 0x04;    /* DC flag  */
 
-    /* 0x01 for FW, 0x04 for NORMAL */
-    pos ++;
+    /* 0x01 for FW, 0x04 for */
+    pos++;
 
     pos++;
 
     buf[pos] = YSM_PROTOCOL_VERSION;
-    pos ++;
+    pos++;
 
     pos += 4;    /* Connection Cookie */
     /* TODO: This could be important, if we set a cookie    */
@@ -2673,15 +2705,15 @@ int8_t        *buf = NULL;
 
     pos += 2;    /* Empty WORD */
 
-    pos ++;
+    pos++;
     buf[pos] = 0x50;
-    pos ++;
+    pos++;
 
     pos += 2;    /* Empty WORD */
 
-    pos ++;
+    pos++;
     buf[pos] = 0x03;
-    pos ++;
+    pos++;
 
     /* YSM Fingerprint */
     DW_2_Chars( &buf[pos], FINGERPRINT_YSM_CLIENT );
@@ -2695,7 +2727,7 @@ int8_t        *buf = NULL;
     /* 2 zero bytes */
     pos += 2;
 
-    YSM_SendSNAC( 0x1,
+    YSM_SendSNAC(0x1,
         0x1E,
         0x0,
         0x0,
@@ -2703,10 +2735,12 @@ int8_t        *buf = NULL;
         len,
         g_sinfo.seqnum++, NULL);
 
-    if (status == STATUS_INVISIBLE) {
+    if (status == STATUS_INVISIBLE)
+    {
         YSM_UpdatePrivacy(0x3);
-
-    } else if (YSM_USER.status == STATUS_INVISIBLE) {
+    }
+    else if (YSM_USER.status == STATUS_INVISIBLE)
+    {
         /* Were in Invisible and changing to something else
          * we choose 0x4 as default, since it blocks people
          * in the deny list..a common request huh
@@ -2717,24 +2751,24 @@ int8_t        *buf = NULL;
     YSM_USER.status = status;
 
     ysm_free(buf, __FILE__, __LINE__);
-    buf = NULL;
+
     return status;
 }
 
-int32_t
-YSM_SendMessage2Client( slave_t    *victim,
-        uin_t         r_uin,
-        int16_t        m_format,
-        int32_t        m_type,
-        int8_t        *m_data,
-        int32_t        m_len,
-        u_int8_t    m_flags,
-        u_int8_t    sendflags,
-        int32_t        reqid )
+int32_t YSM_SendMessage2Client(
+    slave_t    *victim,
+    uin_t       r_uin,
+    int16_t     m_format,
+    int32_t     m_type,
+    int8_t     *m_data,
+    int32_t     m_len,
+    u_int8_t    m_flags,
+    u_int8_t    sendflags,
+    int32_t     reqid)
 {
-int8_t        *phead = NULL, *pbody = NULL, *pmsg = NULL;
-int32_t        hsize = 0, bsize = 0;
-u_int32_t    m_id = 0, m_time = 0;
+    int8_t     *phead = NULL, *pbody = NULL, *pmsg = NULL;
+    int32_t     hsize = 0, bsize = 0;
+    u_int32_t   m_id = 0, m_time = 0;
 
     m_time    = rand() % 0xffff;
     m_id    = rand() % 0xffff;
@@ -2821,16 +2855,13 @@ u_int32_t    m_id = 0, m_time = 0;
         );
 
     ysm_free(pmsg, __FILE__, __LINE__);
-    pmsg = NULL;
     ysm_free(phead, __FILE__, __LINE__);
-    phead = NULL;
     ysm_free(pbody, __FILE__, __LINE__);
-    pbody = NULL;
+
     return 0;
 }
 
-int32_t
-YSM_BuildMessageHead( uin_t    r_uin,
+int32_t YSM_BuildMessageHead( uin_t    r_uin,
         int16_t        m_format,
         u_int32_t    m_time,
         u_int32_t    m_id,
@@ -3160,19 +3191,21 @@ TLV        tlv5;
     return pos;
 }
 
-void YSM_ForwardMessage(uin_t r_uin, char *inmsg)
+void
+YSM_ForwardMessage( uin_t r_uin, char *inmsg )
 {
-    int8_t outmsg[MAX_DATA_LEN];
+int8_t outmsg[MAX_DATA_LEN];
 
     memset(outmsg, 0, sizeof(outmsg));
 
     snprintf(outmsg, sizeof(outmsg), "<%d> %s", (int)r_uin, inmsg);
-    outmsg[sizeof(outmsg) - 1] = 0x00;
+    outmsg[sizeof(outmsg)-1] = 0x00;
 
-    YSM_SendMessage(g_cfg.forward, outmsg, 0, NULL, 1);
+    YSM_SendMessage( g_cfg.forward, outmsg, 0, NULL, 1 );
 }
 
-void YSM_SendAuthRequest( uin_t uin, char *Nick, char *Message )
+void
+YSM_SendAuthRequest( uin_t uin, char *Nick, char *Message )
 {
 int8_t    *paquete = NULL;
 int8_t    sUin[MAX_UIN_LEN+1], mlen[2];
@@ -3474,11 +3507,10 @@ slave_t    *new = NULL;
                 uini,
                 NULL,
                 NULL,
-                NULL,
                 Chars_2_Wordb(budID),
                 Chars_2_Wordb(grpID),
                 Chars_2_Wordb(type),
-                fl );
+                fl);
 
     if (new != NULL) {
 
@@ -3501,7 +3533,7 @@ YSM_BuddyDelSlave( slave_t *contact )
     if (contact == NULL)
         return;
 
-    PRINTF( VERBOSE_MOREDATA,
+    PRINTF( VERBOSE_MOATA,
         "\nRemoving from server: %s with budid: %x "
         "and groupd id: %x\n",
         contact->info.NickName,
@@ -3937,7 +3969,7 @@ int8_t        reqid[4];
         }
 
         default:
-            YSM_Error(ERROR_CODE, __FILE__, __LINE__, 1);
+            YSM_ERROR(ERROR_CODE, 1);
             break;
 
     }
@@ -3955,7 +3987,7 @@ YSM_BuddyCreateGroup(void)
         we sat 0x0 as its value. (which means no need to create) */
 
     if (g_sinfo.blusersidentries < 0) {
-        PRINTF(VERBOSE_MOREDATA,
+        PRINTF(VERBOSE_MOATA,
             "CREATING YSM Group, doesn't exist!..\n");
 
         YSM_BuddyAddItem(0x0,
@@ -4028,7 +4060,7 @@ void YSM_BuddyUploadList(slave_t *refugee)
 
     if(!count)
         PRINTF(VERBOSE_BASE,
-            "-- " BLUE "done with ALL SLAVES" NORMAL ".\n"
+            "-- done with ALL SLAVES" ".\n"
              "Use the 'req' command for those who require auth.\n");
 }
 
@@ -4158,7 +4190,7 @@ YSM_BuddyIncomingChange( FLAP_Head *head, SNAC_Head thesnac, char *buf )
                 0,
                 0x09);
 
-        PRINTF(VERBOSE_MOREDATA,"\n" MSG_BUDDY_GROUPCREATED "\n");
+        PRINTF(VERBOSE_MOATA,"\n" MSG_BUDDY_GROUPCREATED "\n");
 
         /* Let it know it can close the contact list */
         YSM_BuddyRequestFinished();
@@ -4184,7 +4216,7 @@ YSM_BuddyIncomingChange( FLAP_Head *head, SNAC_Head thesnac, char *buf )
 
 
                 PRINTF(VERBOSE_BASE,
-                BRIGHT_BLUE "\n" MSG_BUDDY_SAVING1 "%s"
+                "\n" MSG_BUDDY_SAVING1 "%s"
                          MSG_BUDDY_SAVING2 "%d"
                          MSG_BUDDY_SAVING3,
                             SlavesList->info.NickName,
@@ -4201,7 +4233,7 @@ YSM_BuddyIncomingChange( FLAP_Head *head, SNAC_Head thesnac, char *buf )
                 know who required auth and who did not */
 
                 PRINTF(VERBOSE_BASE,
-                MSG_BUDDY_SAVINGOK  "\n" NORMAL );
+                MSG_BUDDY_SAVINGOK  "\n" );
 
                 SlavesList->DownloadedFlag = TRUE;
 
@@ -4214,7 +4246,7 @@ YSM_BuddyIncomingChange( FLAP_Head *head, SNAC_Head thesnac, char *buf )
                 other part in order to add it in the list */
 
             PRINTF(VERBOSE_BASE,
-            BRIGHT_BLUE "\n" MSG_BUDDY_SAVING1 "%s"
+            "\n" MSG_BUDDY_SAVING1 "%s"
                      MSG_BUDDY_SAVING2 "%d"
                      MSG_BUDDY_SAVING3,
                         SlavesList->info.NickName,
@@ -4222,7 +4254,7 @@ YSM_BuddyIncomingChange( FLAP_Head *head, SNAC_Head thesnac, char *buf )
 
 
             PRINTF(VERBOSE_BASE,
-                MSG_BUDDY_SAVINGAUTH "\n" NORMAL
+                MSG_BUDDY_SAVINGAUTH "\n" 
                 MSG_BUDDY_SAVINGAUTH2
                 MSG_BUDDY_SAVINGAUTH3 "\n");
 
@@ -4233,7 +4265,7 @@ YSM_BuddyIncomingChange( FLAP_Head *head, SNAC_Head thesnac, char *buf )
             case YSM_SRV_BUDDY_ERRADD:
 
             PRINTF(VERBOSE_BASE,
-                MSG_BUDDY_SAVINGERROR "\n" NORMAL
+                MSG_BUDDY_SAVINGERROR "\n" 
                 MSG_BUDDY_SAVINGERROR2 );
 
                 SlavesList->DownloadedFlag = TRUE;
@@ -4248,12 +4280,12 @@ YSM_BuddyIncomingChange( FLAP_Head *head, SNAC_Head thesnac, char *buf )
                 Bleh, don't let the user know about this ;P
 
                 PRINTF(VERBOSE_BASE,
-                 MAGENTA " [WARNING]\n" NORMAL
+                 " [WARNING]\n" 
                 "Try Again!.\n");
 
                 Just retry.
             */
-            PRINTF(VERBOSE_MOREDATA, "\nDijo WARNING\n");
+            PRINTF(VERBOSE_MOATA, "\nDijo WARNING\n");
 
                     YSM_BuddyAddItem( SlavesList,
                         YSM_BUDDY_GROUPNAME,
@@ -4517,7 +4549,7 @@ TLV    thetlv;
         MSG_BUDDY_BLOCKWARN2 "\n");
 #endif
 
-    g_promptstatus.flags |= FL_REDRAW;
+    g_promptstatus.flags |= FL_RAW;
 
     YSM_BuddyAck( head, thesnac, buf );
 }
@@ -4642,12 +4674,11 @@ slave_t    *victim = NULL;
 
             PRINTF( VERBOSE_BASE,
                 "\n" MSG_NEW_OFFLINE "\n"
-                "[date: %.2d/%.2d time: %.2d:%.2d (GMT):%s\n",
+                "[date: %.2d/%.2d time: %.2d:%.2d (GMT):\n",
                 o_day,
                 o_month,
                 o_hour,
-                o_minutes,
-                NORMAL );
+                o_minutes);
 
             /* offline message */
             YSM_ReceiveMessageData( victim,
@@ -4657,7 +4688,6 @@ slave_t    *victim = NULL;
                     0x00,
                     Chars_2_Word(m_len),
                     buf+tsize );
-
 
             YSM_AckOffline();
             break;
@@ -4670,33 +4700,30 @@ slave_t    *victim = NULL;
             break;
     }
 
-    g_promptstatus.flags |= FL_REDRAW;
+    g_promptstatus.flags |= FL_RAW;
 }
 
-void
-YSM_IncomingSearch( char *buf, int tsize )
+void YSM_IncomingSearch(char *buf, int tsize)
 {
-char    Len[2], *data = NULL;
-int    len2 = 0;
-uin_t    ruin = 0;
+    char   Len[2];
+    char  *data = NULL;
+    int    len2 = 0;
+    uin_t  ruin = 0;
 
-        tsize+=2;    /* record LEN */
-        memcpy(&ruin,buf+tsize,4);
-        tsize+=4;
+    tsize += 2;    /* record LEN */
+    memcpy(&ruin, buf+tsize, 4);
+    tsize += 4;
 
-        memcpy(&Len,buf+tsize,2);
-        tsize+=2;
-        len2 = Chars_2_Word(Len);
-        data = ysm_calloc(1, len2+1, __FILE__, __LINE__);
-        memcpy(data,buf+tsize,len2);
+    memcpy(&Len, buf+tsize, 2);
+    tsize += 2;
+    len2 = Chars_2_Word(Len);
+    data = ysm_calloc(1, len2+1, __FILE__, __LINE__);
+    memcpy(data, buf+tsize, len2);
 
-        PRINTF(VERBOSE_BASE,
-            "\n%sUIN%s: %d",WHITE,NORMAL,ruin);
-        PRINTF(VERBOSE_BASE,
-            "\t%sNick%s: %s\n",WHITE,NORMAL,data);
+    PRINTF(VERBOSE_BASE, "\nUIN: %d", ruin);
+    PRINTF(VERBOSE_BASE, "\tNick: %s\n", data);
 
-        ysm_free(data, __FILE__, __LINE__);
-        data = NULL;
+    ysm_free(data, __FILE__, __LINE__);
 }
 
 
@@ -4785,8 +4812,8 @@ uin_t        *puin = NULL;
             if ( reqid == (YSM_USER.Uin & 0xffffff7f) )
             {    /* disimulamos el primer query */
                 PRINTF( VERBOSE_BASE,
-                    "\r"WHITE"ACCOUNT INFORMATION:"
-                    NORMAL"\n");
+                    "\r""ACCOUNT INFORMATION:"
+                    "\n");
             }
 
             YSM_IncomingMainInfo( buf,
@@ -4823,18 +4850,18 @@ uin_t        *puin = NULL;
 
 }
 
-void
-YSM_IncomingMainInfo( int8_t    *buf,
-        int32_t        tsize,
-        int8_t        *pnick,
-        int8_t        *pfirst,
-        int8_t        *plast,
-        int8_t        *pemail,
-        u_int32_t    reqid,
-        uin_t         *puin )
+void YSM_IncomingMainInfo(
+    int8_t    *buf,
+    int32_t    tsize,
+    int8_t    *pnick,
+    int8_t    *pfirst,
+    int8_t    *plast,
+    int8_t    *pemail,
+    u_int32_t  reqid,
+    uin_t     *puin)
 {
-int8_t    *data = NULL, local = 0;
-int32_t    nlen = 0;
+    int8_t    *data = NULL, local = 0;
+    int32_t    nlen = 0;
 
     if (buf == NULL)
         return;
@@ -4847,22 +4874,24 @@ int32_t    nlen = 0;
     nlen = Chars_2_Word(buf+tsize);
     tsize += 2;
 
-    data = ysm_calloc(1, nlen+1, __FILE__, __LINE__);
+    data = YSM_CALLOC(1, nlen+1);
     memcpy(data, buf+tsize, nlen);
 
     /* Update nicknames ? */
-    if (pnick && (local || g_cfg.updatenicks > 0)) {
+    if (pnick && (local || g_cfg.updatenicks > 0))
+    {
         /* using strcmp here, to update even low/big caps */
-        if(strlen(data) > 1 && strcmp(pnick, data)) {
-            if(YSM_ParseSlave(data)) {
-                if (local) {
+        if (strlen(data) > 1 && strcmp(pnick, data))
+        {
+            if (YSM_ParseSlave(data))
+            {
+                if (local)
+                {
                     strncpy(pnick, data, MAX_NICK_LEN-1);
                     pnick[MAX_NICK_LEN - 1] = '\0';
-
-                } else
-                    YSM_UpdateSlave( UPDATE_NICK,
-                            data,
-                            *puin );
+                }
+                else
+                    YSM_UpdateSlave(UPDATE_NICK, data, *puin);
             }
         }
     }
@@ -4872,8 +4901,7 @@ int32_t    nlen = 0;
         "Nickname",
         YSM_CharsetConvertOutputString(&data, 1));
 
-    ysm_free(data, __FILE__, __LINE__);
-    data = NULL;
+    YSM_FREE(data);
 
     /* Next LNTS is FirstName */
     tsize += nlen;
@@ -4881,15 +4909,14 @@ int32_t    nlen = 0;
     nlen = Chars_2_Word(buf+tsize);
     tsize += 2;
 
-    data = ysm_calloc(1, nlen+1, __FILE__, __LINE__);
+    data = YSM_CALLOC(1, nlen+1);
     memcpy(data, buf+tsize, nlen);
 
-    if (pfirst) {
+    if (pfirst)
+    {
         strncpy( pfirst, data, MAX_NICK_LEN-1 );
         pfirst[MAX_NICK_LEN - 1] = '\0';
     }
-
-
 
     PRINTF(VERBOSE_BASE,
         "%-20.20s" " : %s\n",
@@ -5118,7 +5145,7 @@ int16_t    len = 0;
 
     ysm_free(data, __FILE__, __LINE__);
     data = NULL;
-    g_promptstatus.flags |= FL_REDRAW;
+    g_promptstatus.flags |= FL_RAW;
 }
 
 
@@ -5767,7 +5794,7 @@ void YSM_KeepAlive(void)
     char *data, *data2, BytesRem[2], Type[2], ReqID[2];
     int   dlen = 0;
 
-    PRINTF(VERBOSE_MOREDATA, "Sending KEEP Alive Packet.\n");
+    PRINTF(VERBOSE_MOATA, "Sending KEEP Alive Packet.\n");
 
     memset(BytesRem,  '\0', 2);
     memset(Type,      '\0', 2);
@@ -5914,7 +5941,7 @@ u_int8_t    flags = 0;
     YSM_SendMessage2Client( victim,
             victim->uin,
             0x02,
-            YSM_MESSAGE_NORMAL,
+            YSM_MESSAGE_,
             rtfmessage,
             sizeof(rtfmessage),
             0x00,
@@ -6014,9 +6041,9 @@ void YSM_Incoming_Scan(SNAC_Head *thesnac)
             if(SlavesList->flags & FL_SCANNED) {
                 if(Chars_2_Wordb(thesnac->SubTypeID) == 0x01) {
                     PRINTF(VERBOSE_BASE,
-                        "\n%s %s is " GREEN
+                        "\n%s %s is " 
                         "connected to the "
-                        NORMAL "ICQ Network.\n",
+                        "ICQ Network.\n",
                         YSM_gettime(time(NULL),
                              buf,
                             sizeof(buf)),
@@ -6024,8 +6051,8 @@ void YSM_Incoming_Scan(SNAC_Head *thesnac)
                 } else
                 if(Chars_2_Wordb(thesnac->SubTypeID) == 0x0c) {
                     PRINTF(VERBOSE_BASE,
-                        "\n%s %s is " RED
-                        "NOT connected" NORMAL
+                        "\n%s %s is " 
+                        "NOT connected" 
                         " to the ICQ Network.\n",
                         YSM_gettime(time(NULL),
                              buf,
@@ -6036,7 +6063,7 @@ void YSM_Incoming_Scan(SNAC_Head *thesnac)
                 SlavesList->flags ^= FL_SCANNED;
             }
 
-            g_promptstatus.flags |= FL_REDRAW;
+            g_promptstatus.flags |= FL_RAW;
             break;
         }
         SlavesList = (slave_t *) SlavesList->suc;
@@ -6079,12 +6106,11 @@ static void YSM_Scan_Slave(slave_t *slave)
  **/
 
 
-void YSM_War_Kill( slave_t *victim )
+void YSM_War_Kill(slave_t *victim)
 {
 #ifdef YSM_WITH_THREADS
-
-char *smelling_poison, *kill_uin = "66666666666", *kill_nick = "YSM__d0ll";
-int buf_len = 0, tsize = 0;
+    char *smelling_poison, *kill_uin = "66666666666", *kill_nick = "YSM__d0ll";
+    int buf_len = 0, tsize = 0;
 
     buf_len = strlen(kill_uin) + 1 + strlen(kill_nick) + 1;
     smelling_poison = ysm_calloc(1, buf_len, __FILE__, __LINE__);
@@ -6107,7 +6133,7 @@ int buf_len = 0, tsize = 0;
     smelling_poison = NULL;
 
 #else
-    PRINTF(VERBOSE_BASE, MSG_ERR_FEATUREDISABLED "\n");
+    PRINTF(VERBOSE_BASE, MSG_ERR_FEATUISABLED "\n");
 #endif
 }
 
@@ -6128,7 +6154,7 @@ void YSM_War_Scan( slave_t *victim )
 
     } else {
         PRINTF(VERBOSE_BASE,
-            RED "\nWait! " NORMAL
+            "\nWait! " 
             "already waiting a reply from this slave!.");
     }
 
@@ -6165,17 +6191,17 @@ void YSM_War_Scan( slave_t *victim )
                 " in groups of %d.\n", MAX_SCAN_COUNT);
 
         if (!count) {
-                PRINTF( VERBOSE_BASE, "-- " BLUE "done with ALL SLAVES. "
-            "(yo'r welcome)" NORMAL ".\n" );
+                PRINTF( VERBOSE_BASE, "-- done with ALL SLAVES. "
+            "(yo'r welcome).\n" );
     }
 }
 
 /* end of Punishment functions */
 
 
-void DumpFLAP( FLAP_Head *inflap )
+void DumpFLAP(FLAP_Head *inflap)
 {
-    PRINTF(VERBOSE_PACKET, BRIGHT_BLUE "FLAP Information:" NORMAL "\n");
+    PRINTF(VERBOSE_PACKET, "FLAP Information:\n");
 
     PRINTF(VERBOSE_PACKET,
         "cmd: 0x%.2X\n"
@@ -6188,10 +6214,9 @@ void DumpFLAP( FLAP_Head *inflap )
         Chars_2_Wordb(inflap->dlen));
 }
 
-void DumpSNAC( SNAC_Head *insnac )
+void DumpSNAC(SNAC_Head *insnac)
 {
-    PRINTF(VERBOSE_PACKET, BRIGHT_BLUE "SNAC Information:" NORMAL "\n");
-
+    PRINTF(VERBOSE_PACKET, "SNAC Information:\n");
 
     PRINTF(VERBOSE_PACKET,
         "family: 0x%.2X\n"
@@ -6219,8 +6244,10 @@ void DumpPacket(FLAP_Head *flap, int8_t *data)
     if (flap == NULL || data == NULL)
         return;
 
-    if (Chars_2_Wordb(flap->dlen) >= SNAC_HEAD_SIZE) {
-        if (flap->channelID == YSM_CHANNEL_SNACDATA) {
+    if (Chars_2_Wordb(flap->dlen) >= SNAC_HEAD_SIZE)
+    {
+        if (flap->channelID == YSM_CHANNEL_SNACDATA)
+        {
             psnac = (SNAC_Head *)data;
             pos += SNAC_HEAD_SIZE;
         }
@@ -6235,7 +6262,7 @@ void DumpPacket(FLAP_Head *flap, int8_t *data)
     /* dump the rest of the data */
     if (pos < Chars_2_Wordb(flap->dlen)) {
         PRINTF(VERBOSE_PACKET,
-            BRIGHT_BLUE "Rest of data dump:" NORMAL "\n");
+            "Rest of data dump:\n");
         for (x = pos; x < Chars_2_Wordb(flap->dlen); x++) {
             PRINTF( VERBOSE_PACKET, "%.2X ", (u_int8_t)*(data+x));
         }

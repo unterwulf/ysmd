@@ -29,21 +29,27 @@ For Contact information read the AUTHORS file.
 
 /* Command Groups */
 #define YSM_COMMAND_GROUP_USERS         0x00
-#define YSM_COMMAND_GROUP_USERS_STR     MAGENTA "USERS/SLAVES" NORMAL":\n"
+#define YSM_COMMAND_GROUP_USERS_STR     "USERS/SLAVES" ":\n"
 #define YSM_COMMAND_GROUP_SETTINGS      0x01
-#define YSM_COMMAND_GROUP_SETTINGS_STR  MAGENTA "SETTINGS/CONFIGURATION"NORMAL":\n"
+#define YSM_COMMAND_GROUP_SETTINGS_STR  "SETTINGS/CONFIGURATION"":\n"
 #define YSM_COMMAND_GROUP_ACCOUNT       0x02
-#define YSM_COMMAND_GROUP_ACCOUNT_STR   MAGENTA "ACCOUNT/SESSION"NORMAL":\n"
+#define YSM_COMMAND_GROUP_ACCOUNT_STR   "ACCOUNT/SESSION"":\n"
 #define YSM_COMMAND_GROUP_CLIENT        0x03
-#define YSM_COMMAND_GROUP_CLIENT_STR    MAGENTA "CLIENT"NORMAL":\n"
+#define YSM_COMMAND_GROUP_CLIENT_STR    "CLIENT"":\n"
 #define YSM_COMMAND_GROUP_AMOUNT        0x04
 
 
-#define YSM_COMMAND_QUIT_HELP        "Close the ysm client.\n"                            "usage: 'quit'\n\n"
+#define YSM_COMMAND_QUIT_HELP \
+    "Close the ysm client.\n" \
+    "usage: 'quit'\n\n"
 
-#define YSM_COMMAND_HELP_HELP        "Query for help on a command\n"                            "usage: 'help <command>'\n\n"
+#define YSM_COMMAND_HELP_HELP \
+    "Query for help on a command\n" \
+    "usage: 'help <command>'\n\n"
 
-#define YSM_COMMAND_INFO_HELP        "Show information about your ysm client and session.\n"                                                        "usage: 'info'\n\n"
+#define YSM_COMMAND_INFO_HELP \
+    "Show information about your ysm client and session.\n" \
+    "usage: 'info'\n\n"
 
 #define YSM_COMMAND_SLAVES_HELP        "You may check on your Slave list anytime by using this command. The slaves are organized in <slave_name> <status> <flags>. Flags are modified by the 'ignore', 'visible' and 'invisible' commands. Slaves in ignore are only shown in the 'wa' command.\n"                                    "usage: 'w [pattern]'\n\n"
 
@@ -71,10 +77,6 @@ For Contact information read the AUTHORS file.
 #define YSM_COMMAND_REPLY_HELP        "Send a message to the last slave who messaged you.\n(Also check the <tab> key function)\n"                                    "usage: 'r [message]'\n\n"
 
 #define YSM_COMMAND_WHOIS_HELP        "Request information on a slave or icq#\n"                    "usage: 'whois <name>'\n"                            "usage: 'whois <uin>'\n\n"
-
-#define YSM_COMMAND_BEEP_HELP        "Turn on/off message beeping!\n"                        "usage: 'beep [on|off]'\n\n"
-
-#define YSM_COMMAND_SOUNDS_HELP        "Turn on/off wave sounds globally.\n"                        "usage: 'sounds [on|off]'\n\n"
 
 #define YSM_COMMAND_AFK_HELP        "Type 'afk' to switch ON or OFF the Away from Keyboard mode. excellent, huh?\nType 'afk here_a_message' to set the afk message in runtime.\n"                                                    "usage: 'afk [auto_message]'\n\n"
 
@@ -118,8 +120,6 @@ For Contact information read the AUTHORS file.
 
 #define YSM_COMMAND_LOADCONFIG_HELP    "Reload configuration file settings.\n"                        "usage: 'loadconfig'\n\n"
 
-#define YSM_COMMAND_MINIMIZE_HELP    "Minimize YSM's console window [win32 only]\n"                    "usage: 'z'\n\n"
-
 #define YSM_COMMAND_KEY_HELP        "Set an encryption key to use between two YSM clients.\nKeys are used to send encrypted messages and encrypted file transfers.\nThe keys are specified in hexadecimal and they must be max 32 bytes [32 * 2 hex]\nIn example: 'key rad2k 616161616161616161' sets a 9 bytes long key with rad2k.\nYou should then tell the slave to set the same key with you.\nIf used with no arguments, the slave's key will be cleared.\nIf used with a '?' a 32 bytes random key will be generated, set,  and shown in the screen.\nIn example: 'key rad2k ?'.\n"                                                    "usage: 'key [name] [hex_key|?]'\n\n"
 
 #define YSM_COMMAND_BURL_HELP        "Launch a browser for a specified URL or the last received URL message.\nThe browser is configured inside the cfg file using the 'BROWSER>' setting.\n"                                                "usage: 'burl <url>' for a url\n"                        "usage: 'burl !' for last saved url\n"
@@ -162,7 +162,9 @@ For Contact information read the AUTHORS file.
 
 /* End of Help System definition */
 
-command_t * YSM_AddCommandtoList(
+void init_commands(void);
+
+command_t * add_command_to_list(
 	int8_t    *cmd_name,
     int8_t    *cmd_alias,
     int8_t    *cmd_help,
@@ -170,19 +172,4 @@ command_t * YSM_AddCommandtoList(
     u_int16_t  cmd_margs,
     void      *pfunc);
 
-void YSM_Init_Commands(void);
-
-#ifdef HAVE_LIBREADLINE
-    /* The following calls to ConsoleSetup and ConsoleRestore,
-     * fix a weird bug on readline when calling a function that
-     * makes use of the 'getkey()' function, after receiving
-     * a command from the user. (This doesn't happen for hotkeys)
-     */
-#define PRE_GETKEY_FIX    YSM_ConsoleSetup();
-#define POS_GETKEY_FIX    YSM_ConsoleRestore();
-#else
-#define PRE_GETKEY_FIX
-#define POS_GETKEY_FIX
-#endif
-
-#endif
+#endif /* _COMMANDS_H_ */

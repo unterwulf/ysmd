@@ -8,13 +8,12 @@
 #ifndef _CONFIG_H_
 #define _CONFIG_H_
 
-#define YSM_INFORMATION        "ysmICQ - Bringing ICQ back to life - "
-#define YSM_INFORMATION2       "2.9.9.1"
+#define YSM_INFORMATION        "ysmd"
+#define YSM_INFORMATION2       "0.0.1"
 
-#define YSM_CFGDIRECTORY       ".ysm"
-#define YSM_CFGFILENAME        "ysm-cfg"
+#define YSM_CFGDIRECTORY       ".ysmd"
+#define YSM_CFGFILENAME        "ysmd.conf"
 #define YSM_INCOMINGDIRECTORY  "incoming"
-#define YSM_SOUNDSDIRECTORY    "sounds"
 #define YSM_DEFAULTSRV         "login.icq.com"
 #define YSM_DEFAULTPORT        5190
 #define YSM_KEEPALIVETIME      90
@@ -30,11 +29,6 @@
  * if active, YSM output (status changes, listings, etc) is more compact.
  *********************************************************/
 #undef COMPACT_DISPLAY
-
-/* YSM_MONOCHROME:
- * if active, colors are replaced with Black and White.
- *********************************************************/
-#undef YSM_MONOCHROME
 
 /* YSM_WAR_MODE:
  * Undocumented 

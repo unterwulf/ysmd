@@ -1,8 +1,4 @@
-/*    $Id: YSM_ToolBox.c,v 1.89 2005/09/04 01:36:48 rad2k Exp $    */
 /*
--======================== ysmICQ client ============================-
-        Having fun with a boring Protocol
--======================== YSM_ToolBox.c ============================-
 
 YSM (YouSickMe) ICQ Client. An Original Multi-Platform ICQ client.
 Copyright (C) 2002 rad2k Argentina.
@@ -33,58 +29,27 @@ For Contact information read the AUTHORS file.
 #include "timers.h"
 
 extern int8_t YSM_cfgdir[MAX_PATH];
-extern int8_t YSM_CommandsFile[MAX_DATA_LEN+1];
 extern short  YSM_AFKCount;
 
 static struct timeval tv;
 static fd_set read_fds, dc_fds, net_fds;
 static int max_read_fd, max_dc_fd, max_net_fd;
-struct YSM_EVENTS g_events;
 
-void YSM_Event( int8_t    event_t,
-    uin_t        r_uin,
-    int8_t        *r_nick,
-    int32_t        m_len,
-    int8_t        *m_data,
+void YSM_Event(
+    int8_t      event_t,
+    uin_t       r_uin,
+    int8_t     *r_nick,
+    int32_t     m_len,
+    int8_t     *m_data,
     u_int8_t    m_flags )
 {
-int8_t    uinstring[MAX_UIN_LEN+1], length[10];
-int8_t    *event_action = NULL, *event_sound = NULL, event_senable = 0;
+    int8_t  uinstring[MAX_UIN_LEN+1], length[10];
+    int8_t *event_action = NULL, *event_sound = NULL, event_senable = 0;
 
     snprintf(uinstring, sizeof(uinstring), "%d", (int)r_uin);
     uinstring[sizeof(uinstring) - 1] = 0x00;
     snprintf(length, sizeof(length), "%d", (int)m_len);
     length[sizeof(length) - 1] = 0x00;
-
-    switch (event_t) {
-        case EVENT_INCOMINGMESSAGE:
-            event_action = g_events.execincoming;
-            event_sound = "incoming_msg.wav";
-            event_senable = g_events.insound;
-            break;
-        case EVENT_OUTGOINGMESSAGE:
-            event_action = g_events.execoutgoing;
-            event_sound = "outgoing_msg.wav";
-            event_senable = g_events.outsound;
-            break;
-        case EVENT_ONCOMINGUSER:
-            event_action = g_events.execoncoming;
-            event_sound = "slaveonline.wav";
-            event_senable = g_events.onsound;
-            break;
-        case EVENT_OFFGOINGUSER:
-            event_action = g_events.execoffgoing;
-            event_sound = "slaveoffline.wav";
-            event_senable = g_events.offsound;
-            break;
-        case EVENT_LOGOFF:
-            event_action = g_events.execlogoff;
-            event_sound = "logoff.wav";
-            event_senable = g_events.logoffsound;
-            break;
-        default:
-            return;
-    }
 
     /* do we have to execute a user supplied action? */
     if (event_action != 0x00 && *event_action != 0x00)
@@ -93,64 +58,9 @@ int8_t    *event_action = NULL, *event_sound = NULL, event_senable = 0;
                 r_nick,
                 length,
                 m_data );
-
-    /* do we have to play a sound for this event? */
-    if (g_cfg.sounds
-    && event_senable
-#ifndef WIN32
-    && (*g_events.sbinpath != 0x00)
-#endif
-    )
-        YSM_PlaySound(event_sound);
 }
 
-int32_t YSM_PlaySound( int8_t *filename )
-{
-int32_t        size;
-int8_t        *path = NULL, *path2 = NULL;
-struct stat    filestat;
-
-    /* get the full path to the soundfile */
-    size = strlen(YSM_cfgdir) + 1;
-    size += strlen(YSM_SOUNDSDIRECTORY) + 1;
-    size += strlen(filename) + 1;
-    path = ysm_calloc(1, size, __FILE__, __LINE__ );
-
-    snprintf( path,
-        size,
-        "%s/%s/%s",
-        YSM_cfgdir,
-        YSM_SOUNDSDIRECTORY,
-        filename );
-
-    path[size - 1] = 0x00;
-
-    if (stat(path, &filestat)) {
-        /* file not found. return an error */
-        ysm_free( path, __FILE__, __LINE__ );
-        path = NULL;
-        return -1;
-    }
-
-    /* soundfile found. concatenate the full path (binary+sound) */
-    size = strlen(g_events.sbinpath) + 1;    /* +1 == 0x20 */
-    size += strlen(path) + 1;
-    path2 = ysm_calloc(1, size, __FILE__, __LINE__ );
-
-    snprintf( path2, size, "%s %s", g_events.sbinpath, path );
-    path2[size - 1] = 0x00;
-
-    /* play the god damn sound at once! */
-    YSM_ExecuteLine( path2, NULL, NULL, NULL, NULL );
-    ysm_free( path2, __FILE__, __LINE__ );
-    path2 = NULL;
-
-    ysm_free( path, __FILE__, __LINE__ );
-    path = NULL;
-    return 0;
-}
-
-void YSM_Error(int32_t level, int8_t *file, int32_t line, int8_t verbose)
+void ysm_error(int32_t level, int8_t verbose, int8_t *file, int32_t line)
 {
     switch (level)
     {
@@ -346,57 +256,6 @@ void YSM_WriteStatus(u_int16_t status, int8_t *buf)
     buf[MAX_STATUS_LEN-1] = '\0';
 }
 
-int8_t * YSM_GetColorStatus(int8_t *status, int8_t* override)
-{
-    if (override)
-        return override;
-
-    if (YSM_IsInvalidPtr(status))
-        return GREEN;
-
-    if (!strcmp(status, "ONLINE"))    return GREEN;
-    if (!strcmp(status, "OFFLINE"))   return WHITE;
-    if (!strcmp(status, "NA"))        return BRIGHT_BLACK;
-    if (!strcmp(status, "AWAY"))      return CYAN;
-    if (!strcmp(status, "INVISIBLE")) return BRIGHT_BLUE;
-    if (!strcmp(status, "DND"))       return RED;
-    if (!strcmp(status, "OCCUPIED"))  return RED;
-    if (!strcmp(status, "FREE4CHAT")) return GREEN;
-
-    return GREEN;
-}
-
-
-int8_t * YSM_GetColorByName(int8_t *color)
-{
-    if (color == NULL)
-        return GREEN;
-
-    if(!strcasecmp(color, "BLACK"))        return BLACK;
-    if(!strcasecmp(color, "RED"))        return RED;
-    if(!strcasecmp(color, "GREEN"))        return GREEN;
-    if(!strcasecmp(color, "BROWN"))        return BROWN;
-    if(!strcasecmp(color, "BLUE"))        return BLUE;
-    if(!strcasecmp(color, "MAGENTA"))    return MAGENTA;
-    if(!strcasecmp(color, "WHITE"))        return WHITE;
-    if(!strcasecmp(color, "CYAN"))        return CYAN;
-    if(!strcasecmp(color, "GRAY"))        return GRAY;
-    if(!strcasecmp(color, "NORMAL"))    return NORMAL;
-    if(!strcasecmp(color, "TERMINAL_DEFAULT"))    return TERMINAL_DEFAULT;
-    if(!strcasecmp(color, "BRIGHT_BLACK"))    return BRIGHT_BLACK;
-    if(!strcasecmp(color, "BRIGHT_BLUE"))    return BRIGHT_BLUE;
-    if(!strcasecmp(color, "BRIGHT_RED"))    return BRIGHT_RED;
-    if(!strcasecmp(color, "BRIGHT_GREEN"))    return BRIGHT_GREEN;
-    if(!strcasecmp(color, "BRIGHT_BROWN"))    return BRIGHT_BROWN;
-    if(!strcasecmp(color, "BRIGHT_MAGENTA"))    return BRIGHT_MAGENTA;
-    if(!strcasecmp(color, "BRIGHT_CYAN"))    return BRIGHT_CYAN;
-    if(!strcasecmp(color, "BRIGHT_GRAY"))    return BRIGHT_GRAY;
-    if(!strcasecmp(color, "BRIGHT_WHITE"))    return BRIGHT_WHITE;
-    if(!strcasecmp(color, "BRIGHT_TERMINAL_DEFAULT"))    return BRIGHT_TERMINAL_DEFAULT;
-
-    return GREEN;
-}
-
 void YSM_GenerateLogEntry( int8_t    *nick,
         uin_t        uinA,
         uin_t        uinB,
@@ -486,7 +345,7 @@ int32_t    size = 0;
     snprintf(path, size, "%s/%s", YSM_cfgdir,fname);
     path[size - 1] = 0x00;
 
-    fd = YSM_fopen( path, attr );
+    fd = ysm_fopen( path, attr );
 
     ysm_free( path, __FILE__, __LINE__ );
     path = NULL;
@@ -506,7 +365,7 @@ FILE    *filefd = NULL;
 
     fprintf(filefd, "%s", data);
 
-    YSM_fclose(filefd);
+    ysm_fclose(filefd);
     return 0;
 }
 
@@ -536,13 +395,13 @@ int8_t    buf[MAX_PATH];
             fprintf(tmpfd, "%s", buf);
         }
 
-        YSM_fclose(filefd);
+        ysm_fclose(filefd);
     }
 
     /* open the filename for writing now */
     filefd = YSM_OpenFile( filename, "w" );
     if (filefd == NULL) {
-        if (tmpfd != NULL) YSM_fclose(tmpfd);
+        if (tmpfd != NULL) ysm_fclose(tmpfd);
         return -1;
     }
 
@@ -558,10 +417,10 @@ int8_t    buf[MAX_PATH];
             fprintf(filefd, "%s", buf);
         }
 
-        YSM_fclose(tmpfd);
+        ysm_fclose(tmpfd);
     }
 
-    YSM_fclose(filefd);
+    ysm_fclose(filefd);
     return 0;
 
 }
@@ -619,13 +478,12 @@ void YSM_Print_Uptime(void)
         seconds);
 }
 
-#ifndef WIN32
-
 void YSM_CheckSecurity (void)
 {
-    if ( !getuid() ) {
+    if (!getuid())
+    {
         PRINTF(VERBOSE_BASE,
-            RED "HOLD IT!" NORMAL " I'm sorry, but i WONT let you run YSM\n");
+            "HOLD IT! I'm sorry, but i WONT let you run YSM\n");
 
         PRINTF(VERBOSE_BASE,
             "with uid 0. Don't run ysm as root!. ..fag.\n");
@@ -634,9 +492,6 @@ void YSM_CheckSecurity (void)
         exit(-1);
     }
 }
-
-#endif
-
 
 /* Thanks a lot to mICQ for these convertion Functions.
         I made some Big Endian ones out of them */
@@ -670,7 +525,6 @@ u_int32_t Chars_2_DWb( u_int8_t * buf )
 
     return i;
 }
-
 
 u_int16_t Chars_2_Word (u_int8_t * buf)
 {
@@ -711,7 +565,6 @@ void DW_2_Charsb(u_int8_t * buf, u_int32_t num)
     buf[3] = (u_int8_t) (num) & 0x000000FF;
 }
 
-
 /* intel little endian */
 void Word_2_Chars (u_int8_t * buf, const int num)
 {
@@ -725,7 +578,6 @@ void Word_2_Charsb (u_int8_t * buf, const int num)
     buf[0] = (u_int8_t) (((unsigned) num) >> 8) & 0x00FF;
     buf[1] = (u_int8_t) ((unsigned) num) & 0x00FF;
 }
-
 
 void EncryptPassword (char *Password, char *output)
 {
@@ -834,7 +686,7 @@ void FD_Del( int32_t sock, int8_t whichfd )
     }
 }
 
-int FD_IsSet( int32_t sock, int8_t whichfd )
+int FD_IsSet(int32_t sock, int8_t whichfd)
 {
     if (sock < 0) return 0;
 
@@ -904,38 +756,36 @@ long YSM_GetMicroTime( long input )
     return -1;
 }
 
-
 void YSM_Thread_Sleep( unsigned long seconds, unsigned long ms )
 {
 #ifdef YSM_WITH_THREADS
-    struct timeval   now;
-    struct timespec  expected;
-    pthread_mutex_t  condition_mutex;
-    pthread_cond_t   condition_cond;
+    struct timeval  now;
+    struct timespec expected;
+    pthread_mutex_t    condition_mutex;
+    pthread_cond_t    condition_cond;
 
     /* Unix function */
-    gettimeofday(&now, NULL);
+    gettimeofday (&now, NULL);
 
     expected.tv_sec = now.tv_sec + seconds;
     expected.tv_nsec = (now.tv_usec * 1000) + (ms * 1000000);
 
-    /* don't let nsec become seconds */
-    if (expected.tv_nsec >= 1000000000)
-    {
+    /*** don't let nsec become seconds ***/
+    if (expected.tv_nsec >= 1000000000) {
         expected.tv_sec += 1;
         expected.tv_nsec -= 1000000000;
     }
 
-    pthread_mutex_init(&condition_mutex, NULL);
-    pthread_mutex_lock(&condition_mutex);
+    pthread_mutex_init( &condition_mutex, NULL );
+    pthread_mutex_lock( &condition_mutex );
 
     /* Now! Go to sleep for a second, y0 arent paid for nuthn boy */
-    pthread_cond_init(&condition_cond, NULL);
-    pthread_cond_timedwait(&condition_cond, &condition_mutex, &expected);
-    pthread_cond_destroy(&condition_cond);
+    pthread_cond_init( &condition_cond, NULL );
+    pthread_cond_timedwait( &condition_cond, &condition_mutex, &expected );
+    pthread_cond_destroy( &condition_cond );
 
-    pthread_mutex_unlock(&condition_mutex);
-    pthread_mutex_destroy(&condition_mutex);
+    pthread_mutex_unlock( &condition_mutex );
+    pthread_mutex_destroy( &condition_mutex );
 #else
     sleep(seconds);
 #endif /* YSM_WITH_THREADS */
@@ -952,102 +802,6 @@ char * YSM_gettime(time_t Time, char *Buffer, size_t Length)
         strcpy(Buffer, "Unknown");
 
     return (Buffer);
-}
-
-
-void YSM_CheckCommandsFile(void)
-{
-    FILE    *fd;
-    int8_t   data[MAX_CMD_LEN+1], *aux = NULL;
-    int8_t  *argv[MAX_CMD_ARGS], *myp = NULL, fl_multi = 0;
-    int32_t  argc = 0, x = 0;
-
-    if (YSM_CommandsFile[0] == 0x00) return;
-
-    fd = YSM_fopen(YSM_CommandsFile, "rw");
-    if (fd == NULL) return;
-
-    /* Execute each command */
-    while (!feof(fd))
-    {
-        fl_multi = 0;
-        memset(data, 0, sizeof(data));
-        myp = fgets(data, sizeof(data) - 1, fd);
-
-        aux = strchr(data, '\n');
-        if (aux != NULL) *aux = 0x00;
-
-        if (data[0] == 0x00) continue;
-
-        for (x = 0; x < MAX_CMD_ARGS; x++)
-            argv[x] = NULL;
-
-        YSM_ParseCommand(data, &argc, argv);
-        if (argv[0] == NULL) continue;
-
-        /* check if we have a multiline message first */
-        if (argc == 1 && (!strcasecmp(argv[0], "msg")
-        || !strcasecmp(argv[0], "m")
-        || !strcasecmp(argv[0], "mp")
-        || !strcasecmp(argv[0], "mplain"))) {
-            fl_multi = 1;
-        }
-
-        /* Restore parsed spaces */
-        for (x = 0; x < argc; x++)
-        {
-            aux = strchr(argv[x],'\0');
-            if (aux != NULL) *aux = 0x20;
-        }
-
-        if (fl_multi)
-        {
-            /* seems we have a multiline!
-             * read until we find a '.' or EOF then.
-             * oh and add a missing space first.
-             */
-            strncat(data+strlen(data),
-                " ",
-                sizeof(data) - strlen(data) - 1);
-            do {
-                myp = fgets( data+strlen(data),
-                    (sizeof(data) - 1) - strlen(data),
-                    fd );
-
-            } while (myp != NULL && !feof(fd)
-                && (strlen(myp) != 1 && myp[0] != '.'));
-
-            /* if we have the final '.', step on it! heh */
-            if (myp[0] == '.') myp[0] = 0x00;
-        }
-
-        /**** special case check. If we are quitting we will need
-         * to close the fd first and clear the file. otherwise we
-         * will never get out of the DoCommand function..turururu
-         */
-
-        if (!strcasecmp(data, "quit")) {
-            /* close & clear the file */
-            YSM_fclose(fd);
-            fd = YSM_fopen( YSM_CommandsFile, "w" );
-            if (fd == NULL) return;
-            YSM_fclose(fd);
-        }
-
-        PRINTF( VERBOSE_BASE,
-            "\n\rRunning command from %s\n",
-            YSM_CommandsFile );
-
-        YSM_DoCommand(data);
-    }
-    YSM_fclose(fd);
-
-    /* Clear the file */
-    fd = YSM_fopen(YSM_CommandsFile, "w");
-    if (fd != NULL)
-        YSM_fclose(fd);
-
-    return;
 }
 
 /*

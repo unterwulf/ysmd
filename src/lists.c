@@ -49,7 +49,7 @@ dl_list_node_t * list_insert_after(
 {
     if (list->start == NULL)
     {
-        YSM_Error(ERROR_CRITICAL, __FILE__, __LINE__, 1);
+        YSM_ERROR(ERROR_CRITICAL, 1);
     }
     else
     {

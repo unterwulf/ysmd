@@ -34,8 +34,6 @@ For Contact information read the AUTHORS file.
 #include "toolbox.h"
 #include "setup.h"
 
-extern slave_t *YSMSlaves_First,*YSMSlaves_LastRead,*YSMSlaves_LastSent;
-
 u_int16_t arr_status[] = {
     STATUS_OFFLINE,
     STATUS_UNKNOWN,
@@ -109,13 +107,12 @@ int32_t y = 0;
 
 void YSM_PrintSlaves( u_int16_t FilterStatus, int8_t *Fstring, int8_t FilterIgnore )
 {
-u_int32_t    x = 0, y = 0;
-int8_t        SlaveStatus[MAX_STATUS_LEN];
-int8_t        *slaveCol = "";
+    u_int32_t    x = 0, y = 0;
+    int8_t        SlaveStatus[MAX_STATUS_LEN];
 #ifdef COMPACT_DISPLAY
-char        sl_buf[MAX_SLAVELIST_LEN];    /* print here first */
+    char        sl_buf[MAX_SLAVELIST_LEN];    /* print here first */
 #endif
-slave_t    *node = (slave_t *) g_slave_list.start;
+    slave_t    *node = (slave_t *) g_slave_list.start;
 
     if (node == NULL)
         return;        /* empty list! */
@@ -124,15 +121,10 @@ slave_t    *node = (slave_t *) g_slave_list.start;
     /* print the status string to the status char buffer */
     YSM_WriteStatus(FilterStatus, SlaveStatus);
 
-    /* print the color escape code for this status */
-    strncpy(sl_buf, YSM_GetColorStatus(SlaveStatus, NULL), sizeof(sl_buf) - 1);
-    sl_buf[sizeof(sl_buf) - 1] = '\0';
+    sl_buf[0] = '\0';
 
     /* print the name of the status */
     strncat(sl_buf, SlaveStatus, sizeof(sl_buf) - 1 - strlen(sl_buf));
-
-    /* print escape to normal color */
-    strncat(sl_buf, NORMAL, sizeof(sl_buf) - 1 - strlen(sl_buf));
 
     /* colon */
     strncat(sl_buf, ": ", sizeof(sl_buf) - 1 - strlen(sl_buf));
@@ -173,26 +165,20 @@ slave_t    *node = (slave_t *) g_slave_list.start;
             if (y % 3 == 0) PRINTF(VERBOSE_BASE,"\n");
             y++;
 
-            if (node->color != NULL)
-                slaveCol = node->color;
-
             PRINTF( VERBOSE_BASE,
-            "[%s%-10.10s"
+            "[%-10.10s"
             " "
-            "%s%-2.2s" NORMAL
+            "%-2.2s" 
             " "
             "%-1.1s%-1.1s-%-1.1s%-1.1s-%-2.2s]  %s",
-            slaveCol,
             node->info.NickName,
-            YSM_GetColorStatus(SlaveStatus, NULL),
             SlaveStatus,
             node->flags & FL_LOG ? "L" : "",
             node->flags & FL_ALERT ? "A" : "",
             node->BudType.VisibleID ? "V" : "",
             node->BudType.InvisibleID ? "I" : "",
             node->BudType.IgnoreID ? "IG" : "",
-            (node->BudType.birthday)
-            ? "[ " MSG_SLAVES_BIRTHDAY " ]"  : "");
+            (node->BudType.birthday) ? "[ " MSG_SLAVES_BIRTHDAY " ]"  : "");
         }
 #else
         {
@@ -203,21 +189,9 @@ slave_t    *node = (slave_t *) g_slave_list.start;
 
             y++;    /* increase count of printed slaves */
 
-            /* print the color escape code for this slave */
-            /* so nicks appear in respective slave color */
-            if (node->Color != NULL)
-                slaveCol = node->Color;
-
-            strncat(sl_buf, slaveCol,
-                sizeof(sl_buf) - 1 - strlen(sl_buf));
-
             /* nicks */
             strncat(sl_buf, node->info.NickName, sizeof(sl_buf)
                 - 1 - strlen(SlaveStatus));
-
-            /* print escape to normal color */
-            strncat(sl_buf, NORMAL, sizeof(sl_buf) - 1
-                - strlen(sl_buf));
 
             if (node->BudType.IgnoreID ||
                 node->BudType.InvisibleID ||
@@ -284,7 +258,6 @@ slave_t * YSM_AddSlaveToList( char *Nick,
         uin_t    Uin,
         char    *flags,
         char    *c_key,
-        int8_t    *color,
         int    budID,
         int    grpID,
         int    budtype,
@@ -358,8 +331,6 @@ int8_t        StringUIN[MAX_UIN_LEN+1], goodKey[64];
     new->d_con.rSocket = -1;
 
     new->DownloadedFlag = fl;
-
-    new->color = color;
 
     /* Set the encryption key if any */
     if (c_key != NULL) {
@@ -471,14 +442,20 @@ void YSM_FreeSlaveFromList(slave_t *node)
 void YSM_DeleteSlaveFromList(char *Nick, uin_t Uin)
 {
     /* Pretty important. (for the a and r commands specially) */
-    if (YSMSlaves_LastSent != NULL) {
-        if(!strcasecmp(YSMSlaves_LastSent->info.NickName, Nick))
-                YSMSlaves_LastSent = NULL;
+    if (g_state.last_sent != NULL) {
+    if (g_state.last_sent != NULL) {
+        if(!strcasecmp(g_state.last_sent->info.NickName, Nick))
+        if(!strcasecmp(g_state.last_sent->info.NickName, Nick))
+                g_state.last_sent = NULL;
+                g_state.last_sent = NULL;
     }
 
-    if (YSMSlaves_LastRead != NULL) {
-        if(!strcasecmp(YSMSlaves_LastRead->info.NickName, Nick))
-                    YSMSlaves_LastSent = NULL;
+    if (g_state.last_read != NULL) {
+    if (g_state.last_read != NULL) {
+        if(!strcasecmp(g_state.last_read->info.NickName, Nick))
+        if(!strcasecmp(g_state.last_read->info.NickName, Nick))
+                    g_state.last_sent = NULL;
+                    g_state.last_sent = NULL;
     }
 
     YSM_FreeSlaveFromList(YSM_FindSlaveInList(NULL, Uin));
@@ -503,34 +480,36 @@ slave_t * YSM_FindSlaveInList(char *Nick, uin_t Uin)
     return NULL;
 }
 
-int32_t YSM_ParseSlave( u_int8_t *name )
+int32_t YSM_ParseSlave(u_int8_t *name)
 {
-u_int8_t    *token = NULL, *obuf = NULL;
-int32_t        size = 0, origsize = 0, x = 0, y = 0;
+    u_int8_t *token = NULL, *obuf = NULL;
+    int32_t   size = 0, origsize = 0, x = 0, y = 0;
 
-        size = origsize = strlen(name);
-        obuf = ysm_calloc(1, size + 1, __FILE__, __LINE__);
-        token = strtok(name," ");
+    size = origsize = strlen(name);
+    obuf = YSM_CALLOC(1, size + 1);
+    token = strtok(name, " ");
 
-        while(token) {
-                strncat( obuf, token, (size+1) - strlen(obuf) - 1);
-                token = strtok(NULL," ");
+    while (token)
+    {
+        strncat(obuf, token, (size+1) - strlen(obuf) - 1);
+        token = strtok(NULL," ");
         if (token != NULL) size--;    /* remove the 0x20 */
-        }
+    }
 
-        memset(name, 0, origsize);
-
-        for (x = 0; x < size; x++) {
-        if(isalnum(obuf[x]) && obuf[x] > 32) {
+    memset(name, 0, origsize);
+    
+    for (x = 0; x < size; x++)
+    {
+        if (isalnum(obuf[x]) && obuf[x] > 32)
+        {
             name[y] = obuf[x];
-                        y++;
-                }
+            y++;
         }
+    }
 
-        ysm_free(obuf, __FILE__, __LINE__);
-        obuf = NULL;
+    YSM_FREE(obuf);
 
-        return y;
+    return y;
 }
 
 void YSM_SlaveFlags( slave_t *victim, char *flags, char add, char update )
@@ -554,17 +533,18 @@ int YSM_UpdateSlave(char type, char *data, uin_t r_uin)
 {
     slave_t *result = NULL;
 
-    if (type == UPDATE_NICK) {
+    if (type == UPDATE_NICK)
+    {
         /* Can't rename to an existing name */
         result = YSM_FindSlaveInList(data, 0);
-        if(result) return -1;
+        if (result) return -1;
     }
 
-    result = YSM_FindSlaveInList( NULL, r_uin );
+    result = YSM_FindSlaveInList(NULL, r_uin);
     if (!result) return -1;
 
     /* We remove the slave from the config file but not from memory */
-    YSM_DelSlave( result, 0);
+    YSM_DelSlave(result, 0);
 
     /* We update the information on memory */
     switch (type)

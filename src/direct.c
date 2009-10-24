@@ -105,11 +105,8 @@ int32_t    tmp;
     return 0;
 }
 
-int YSM_DC_Init(void)
+int init_dc(void)
 {
-    if (g_cfg.dcdisable)
-        return 0;
-
     YSM_USER.d_con.seq_out = 0xffff;
 
     YSM_USER.d_con.rSocket = socket(AF_INET, SOCK_STREAM, 0);
@@ -559,7 +556,7 @@ u_int32_t    rIP;
             inet_ntoa(r_addr),
             victim->d_con.rPort);
 
-        g_promptstatus.flags |= FL_REDRAW;
+        g_promptstatus.flags |= FL_RAW;
 
         victim->d_con.rSocket = YSM_Connect(
                     inet_ntoa(r_addr),
@@ -597,7 +594,7 @@ u_int32_t    rIP;
     /* Seq num init */
     victim->d_con.seq_in = 0xffff;
 
-    g_promptstatus.flags |= FL_REDRAW;
+    g_promptstatus.flags |= FL_RAW;
 }
 
 /* Close a direct connection with a slave.    */
@@ -620,7 +617,7 @@ void YSM_CloseDC( slave_t *victim )
     PRINTF( VERBOSE_BASE,
         "\nDC session to %s closed.\n", victim->info.NickName );
 #endif
-    g_promptstatus.flags |= FL_REDRAW;
+    g_promptstatus.flags |= FL_RAW;
     g_promptstatus.flags |= FL_OVERWRITTEN;
 }
 
@@ -635,7 +632,7 @@ void YSM_CloseTransfer( slave_t *victim )
         close( victim->d_con.finfo.rSocket );
 
     if (victim->d_con.finfo.fd != 0) {
-        YSM_fclose( victim->d_con.finfo.fd );
+        ysm_fclose( victim->d_con.finfo.fd );
         victim->d_con.finfo.fd = 0;
     }
 
@@ -834,7 +831,7 @@ int8_t        *pfname = NULL;
 
     } else ret = 0;
 
-    g_promptstatus.flags |= FL_REDRAW;
+    g_promptstatus.flags |= FL_RAW;
     return ret;
 }
 
@@ -1168,7 +1165,7 @@ int32_t ret = TRUE;
                 victim->d_con.flags |= DC_CONNECTED;
                 victim->d_con.flags &= ~DC_EXPECTNEG;
 
-                g_promptstatus.flags |= FL_REDRAW;
+                g_promptstatus.flags |= FL_RAW;
             }
 
             break;
@@ -1806,7 +1803,7 @@ int8_t        *pfname = NULL, *preason = NULL;
             (m_flags & MFLAGTYPE_CRYPTACK) ? "ENCRYPTED " : "");
         }
 
-        g_promptstatus.flags |= FL_REDRAW;
+        g_promptstatus.flags |= FL_RAW;
 
     } else if (m_flags & MFLAGTYPE_NORM) {
 
@@ -1816,7 +1813,7 @@ int8_t        *pfname = NULL, *preason = NULL;
 
             PRINTF( VERBOSE_BASE,
                 "\nIncoming ENCRYPTED file transfer from: %s "
-                "was IGNORED.\n"
+                "was IGNO.\n"
                 "The key used to encrypt the transfer isn't "
                 "known by\n"
                 "your ysm client. read about the 'key' command."
@@ -1842,7 +1839,7 @@ int8_t        *pfname = NULL, *preason = NULL;
             YSM_CharsetConvertOutputString(&preason, 1));
         }
 
-        g_promptstatus.flags |= FL_REDRAW;
+        g_promptstatus.flags |= FL_RAW;
 
     } else {
         /* File transfer cancelled */
@@ -1998,7 +1995,7 @@ fd_set        net_fd;
         "You may cancel it by using the 'fcancel' command.\n"
         "You can check its status by using the 'fstatus' command.\n" );
 
-    g_promptstatus.flags |= FL_REDRAW;
+    g_promptstatus.flags |= FL_RAW;
 
     /* Send File Init! */
     YSM_DC_InitA( victim, victim->d_con.finfo.rSocket );
@@ -2330,7 +2327,7 @@ struct stat    filestat;
     if (desc == NULL) desc = "File sent with ysmICQ";
 
     /* Open the file and save its FD */
-    victim->d_con.finfo.fd = YSM_fopen(fname, "rb");
+    victim->d_con.finfo.fd = ysm_fopen(fname, "rb");
     if (victim->d_con.finfo.fd == NULL) {
         PRINTF( VERBOSE_BASE, "Unable to open the file for reading.\n");
         return -1;
@@ -2825,7 +2822,7 @@ keyInstance    *crypt_key = NULL;
         transbytes,
         transkb );
 
-    g_promptstatus.flags |= FL_REDRAW;
+    g_promptstatus.flags |= FL_RAW;
 
     ysm_free( pread_buf, __FILE__, __LINE__ );
     pread_buf = NULL;
@@ -2897,7 +2894,7 @@ struct stat    filestat;
 
     path[size - 1] = 0x00;
 
-    victim->d_con.finfo.fd = YSM_fopen( path, "ab" );
+    victim->d_con.finfo.fd = ysm_fopen( path, "ab" );
     if (victim->d_con.finfo.fd == NULL) {
         PRINTF( VERBOSE_BASE, "Unable to open %s for write.\n", path);
         ysm_free( path, __FILE__, __LINE__ );
@@ -2905,8 +2902,7 @@ struct stat    filestat;
         return -1;
     }
 
-    ysm_free( path, __FILE__, __LINE__ );
-    path = NULL;
+    YSM_FREE(path);
 
     return 0;
 }
@@ -2982,7 +2978,7 @@ keyInstance    *key = NULL;
                 transkb );
         }
 
-        g_promptstatus.flags |= FL_REDRAW;
+        g_promptstatus.flags |= FL_RAW;
         return 0;
     }
 

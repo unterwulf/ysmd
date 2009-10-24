@@ -46,7 +46,6 @@ slave_t * YSM_AddSlaveToList(
     uin_t   uin,
     char   *flags,
     char   *c_key,
-    int8_t *color,
     int     budID,
     int     grpID,
     int     budtype,

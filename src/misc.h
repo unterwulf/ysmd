@@ -1,9 +1,4 @@
-/*    $Id: YSM_Win32.h,v 1.14 2005/09/04 01:36:48 rad2k Exp $    */
 /*
--======================== ysmICQ client ============================-
-        Having fun with a boring Protocol
--========================= YSM_Win32.h =============================-
-
 
 YSM (YouSickMe) ICQ Client. An Original Multi-Platform ICQ client.
 Copyright (C) 2002 rad2k Argentina.
@@ -33,26 +28,10 @@ int getkey(void);
 void do_backspace(void);
 char * YSM_fgets(char *str, int size, char hide);
 int PRINTF(int verbose_level, char *fmt, ...);
-void YSM_PrintWizardBox(int8_t *string);
 
 void CtrlHandler(int32_t sig);
 int putch(int c);
-int getxy(int32_t *x, int32_t *y);
-
-typedef struct _COORD
-{
-    int16_t X;
-    int16_t Y;
-} COORD, *PCOORD;
-
-typedef struct _SMALL_RECT {
-    int16_t Left;
-    int16_t Top;
-    int16_t Right;
-    int16_t Bottom;
-} SMALL_RECT, *PSMALL_RECT;
 
 int8_t * YSM_getpass(int8_t *text);
-void YSM_WindowAlert(void);
 
 #endif

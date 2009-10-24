@@ -90,7 +90,7 @@ Your message has been saved. I'll be back shortly! :)"
 #define VERBOSE_STCHANGE    1
 #define VERBOSE_CONNINFO    2
 #define VERBOSE_DCON        20
-#define VERBOSE_MOREDATA    21
+#define VERBOSE_MOATA       21
 #define VERBOSE_PACKET      22
 #define VERBOSE_SDOWNLOAD   23
 
@@ -152,7 +152,7 @@ Your message has been saved. I'll be back shortly! :)"
 #define YSM_INFO_EMAIL     0x01
 
 /* Definition of Message Types for Displaying functions */
-#define YSM_MESSAGE_NORMAL   0x01
+#define YSM_MESSAGE_         0x01
 #define YSM_MESSAGE_FILE     0x03
 #define YSM_MESSAGE_URL      0x04
 #define YSM_MESSAGE_AUTH     0x06
@@ -272,7 +272,7 @@ struct YSM_PROXY_INFO
 struct YSM_PROMPTSTATUS
 {
 #define FL_OVERWRITTEN  0x01
-#define FL_REDRAW       0x02
+#define FL_RAW       0x02
 #define FL_BUSYDISPLAY  0x04
 #define FL_COMFORTABLEM 0x08
 #define FL_AFKM         0x10
@@ -280,6 +280,9 @@ struct YSM_PROMPTSTATUS
 #define FL_AUTOAWAY     0x40
     u_int8_t    flags;
 };
+
+#define FL_LOGGEDIN          0x01
+#define FL_DOWNLOADEDSLAVES  0x02
 
 struct YSM_SERVERINFORMATION
 {
@@ -297,9 +300,6 @@ struct YSM_SERVERINFORMATION
     int8_t      *blusersid;
     u_int32_t    blysmgroupid;
     u_int16_t    blprivacygroupid;
-
-#define FL_LOGGEDIN        0x01
-#define FL_DOWNLOADEDSLAVES    0x02
     u_int8_t     flags;
 };
 
@@ -341,11 +341,15 @@ typedef struct
     void         (*cmd_func)(int32_t argc, int8_t **argv);
 } command_t;
 
+#define FL_SCANNED       0x01
+#define FL_LOG           0x02
+#define FL_ALERT         0x04
+#define FL_CHAT          0x08
+
 typedef struct
 {
     COMMON_LIST
 
-    int8_t              *color;
     uin_t                uin;
     u_int32_t            fprint;
     u_int8_t             caps;
@@ -353,10 +357,6 @@ typedef struct
     u_int16_t            status;
     u_int16_t            status_flags;
     int8_t               DownloadedFlag;
-#define FL_SCANNED       0x01
-#define FL_LOG           0x02
-#define FL_ALERT         0x04
-#define FL_CHAT          0x08
     u_int8_t             flags;
     time_t               LastAFK;
     struct YSM_SPECIAL_STATUS    BudType;
@@ -370,9 +370,6 @@ typedef struct {
     COMMON_LIST
 
     FILE            *fd;
-    int32_t          pos;
-    int32_t          size;
-    int8_t          *data;
 } filemap_t;
 
 typedef struct {
@@ -380,37 +377,37 @@ typedef struct {
     short      newlogsfirst;
     short      verbose;
     short      version_check;
-    short      beep;
-    short      sounds;
     short      afkmaxshown;
     short      afkminimumwait;
     short      awaytime;
     short      spoof;
-    short      winalert;
     short      antisocial;
     short      updatenicks;
     short      dcdisable;
     short      dclan;
     u_int16_t  dcport1;
     u_int16_t  dcport2;
-    char       hot_key_maximize;
     int32_t    forward;
     char       charset_trans[MAX_CHARSET + 4];
     char       charset_local[MAX_CHARSET + 4];
-    int8_t    *color_message;
-    int8_t    *color_text;
-    int8_t    *color_statuschangename;
-    int8_t    *color_statuschangestatus;
-    int8_t    *color_text2;
+
+    int8_t     AFKMessage[MAX_DATA_LEN+1];
+    int8_t     CHATMessage[MAX_DATA_LEN+1];
+    int8_t     BrowserPath[MAX_DATA_LEN+1];
 } ysm_config_t;
+
+typedef struct {
+    int      reason_to_suicide;
+    slave_t *last_read;
+    slave_t *last_sent;
+} ysm_state_t;
 
 /* exports */
 extern struct YSM_MODEL             YSM_USER;
 extern struct YSM_SERVERINFORMATION g_sinfo;
 extern struct YSM_PROMPTSTATUS      g_promptstatus;
 extern ysm_config_t                 g_cfg;
-
-extern short      YSM_Redraw_Console;
+extern ysm_state_t                  g_state;
 
 #ifdef YSM_TRACE_MEMLEAK
 extern int unfreed_blocks;

@@ -36,7 +36,7 @@ For Contact information read the AUTHORS file.
 #define YSM_ICONV_MAXLEN MAX_DATA_LEN * 4
 #endif
 
-void YSM_CharsetInit(void);
+void init_charset(void);
 
 int32_t YSM_Charset(
     int8_t     direction,

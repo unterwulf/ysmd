@@ -1,4 +1,8 @@
+/*    $Id: YSM_Prompt.c,v 1.202 2006/01/02 00:14:14 rad2k Exp $    */
 /*
+-======================== ysmICQ client ============================-
+        Having fun with a boring Protocol
+-========================= YSM_Prompt.c ============================-
 
 YSM (YouSickMe) ICQ Client. An Original Multi-Platform ICQ client.
 Copyright (C) 2002 rad2k Argentina.
@@ -36,41 +40,9 @@ For Contact information read the AUTHORS file.
 #include "crypt.h"
 #include "timers.h"
 
-#ifndef YSM_WITH_THREADS
-#include "cmdline/ysmline.h"
-#else
-#ifdef HAVE_LIBREADLINE
-#  if defined(HAVE_READLINE_READLINE_H)
-#    include <readline/readline.h>
-#  elif defined(HAVE_READLINE_H)
-#    include <readline.h>
-#  else /* !defined(HAVE_READLINE_H) */
-extern char *readline ();
-#  endif /* !defined(HAVE_READLINE_H) */
-char *cmdline = NULL;
-
-#ifdef HAVE_READLINE_HISTORY
-#  if defined(HAVE_READLINE_HISTORY_H)
-#    include <readline/history.h>
-#  elif defined(HAVE_HISTORY_H)
-#    include <history.h>
-#  else /* !defined(HAVE_HISTORY_H) */
-extern void add_history();
-extern int write_history();
-extern int read_history();
-#  endif /* defined(HAVE_READLINE_HISTORY_H) */
- /* no history */
-#endif /* HAVE_READLINE_HISTORY */
-
-#else /* HAVE_LIBREADLINE */
-#include "cmdline/getline.h"
-#endif
-#endif
-
 #include <errno.h>
 #include <string.h>
 #include <stdlib.h>
-#include <termios.h>
 
 struct YSM_PROMPTSTATUS g_promptstatus;
 
@@ -78,152 +50,36 @@ int16_t   YSM_AFKCount = 0;
 time_t    YSM_AFK_Time = 0;
 u_int16_t YSM_TabCount = 1;
 
-static struct termios console_attrs;
-static int8_t fl_setattr = 0;
-
-extern slave_t    *YSMSlaves_LastSent, *YSMSlaves_LastRead;
-extern slave_t    *YSMSlaves_TabSlave;
-extern int8_t      YSM_AFKMessage[MAX_DATA_LEN + 1];
-extern int8_t      YSM_CHATMessage[MAX_DATA_LEN + 1];
+extern slave_t    *g_state.last_sent, *g_state.last_read;
+extern slave_t    *g_state.last_sent, *g_state.last_read;
+extern slave_t    *g_state.last_sent, *g_state.last_read;
+extern slave_t    *g_state.last_sent, *g_state.last_read;
 extern int8_t      YSM_LastMessage[MAX_DATA_LEN + 1];
 extern int8_t      YSM_LastURL[MAX_DATA_LEN + 1];
 extern char        YSM_cfgdir[MAX_PATH];
 
-int8_t * YSM_ConsoleGetPrompt(void)
-{
-    static int8_t g_prompt[80];
-    int8_t status[MAX_STATUS_LEN];
-
-    /* get our status string */
-    YSM_WriteStatus(YSM_USER.status, status);
-    memset(g_prompt, 0, sizeof(g_prompt));
-
-    if (g_promptstatus.flags & FL_AFKM) {
-        /* we are in AFK MODE */
-        snprintf( g_prompt,
-            sizeof(g_prompt),
-            "\r%s%-2.2s" NORMAL
-            " " BRIGHT_BLUE "AFK[%d]" NORMAL "> ",
-            YSM_GetColorStatus(status, NULL),
-            status,
-            YSM_AFKCount
-            );
-
-        g_prompt[sizeof(g_prompt)-1] = 0x00;
-
-    } else if (g_promptstatus.flags & FL_CHATM) {
-        /* we are in CHAT MODE */
-        snprintf( g_prompt,
-            sizeof(g_prompt),
-            "\r%s[%d]" NORMAL "> ",
-            YSM_GetColorStatus(status, NULL),
-            YSM_AFKCount);
-        g_prompt[sizeof(g_prompt)-1] = 0x00;
-    } else {
-        /* we are in NORMAL MODE */
-        snprintf( g_prompt,
-            sizeof(g_prompt),
-            "\r%s%-2.2s" NORMAL "> ",
-            YSM_GetColorStatus(status, NULL),
-            status
-            );
-        g_prompt[sizeof(g_prompt)-1] = 0x00;
-    }
-    return g_prompt;
-}
-
-void YSM_ConsoleRedrawPrompt(int8_t redrawbuf)
-{
-    if (redrawbuf) {
-#ifndef YSM_WITH_THREADS
-        PRINTF(VERBOSE_BASE,
-            "\r%s%s",
-            YSM_ConsoleGetPrompt(),
-            g_cmdstring);
-#else
-#ifdef HAVE_LIBREADLINE
-        PRINTF(VERBOSE_BASE,
-            "\r%s%s",
-            YSM_ConsoleGetPrompt(),
-            rl_line_buffer);
-#else
-        gl_fixup(YSM_ConsoleGetPrompt(), -2, GL_BUF_SIZE);
-#endif
-#endif
-    } else
-        PRINTF(VERBOSE_BASE, "\r%s", YSM_ConsoleGetPrompt());
-
-    fflush(stdout);
-}
-
-void YSM_ConsoleClearLine(int8_t redrawprompt, int32_t cmdlen)
-{
-    int32_t x = 0, y = 0;
-
-    fprintf(stdout, "\r");
-    if (cmdlen > 0)
-        y = cmdlen + 9; /* +9 in case it was AFK prompt */
-    else
-        y = 11;        /* no command, but afk prompt */
-
-    for (x = 0; x < y; x++)
-        fprintf(stdout, " ");
-
-    fprintf(stdout, "\r");
-
-    if (redrawprompt)
-        YSM_ConsoleRedrawPrompt(0);
-
-    fflush(stdout);
-}
-
-void YSM_ConsoleRestore(void)
-{
-    if (fl_setattr)
-        tcsetattr(STDIN_FILENO, TCSANOW, &console_attrs);
-}
-
-void YSM_ConsoleSetup(void)
-{
-    struct termios t;
-
-    if (tcgetattr(STDIN_FILENO, &t) != 0) {
-        /* dont panic if we dont have a console */
-        return;
-    }
-
-    console_attrs = t;
-    t.c_lflag &= ~(ICANON | ECHO);
-    t.c_cc[VTIME] = 0;
-    t.c_cc[VMIN] = 1;
-
-    if (tcsetattr(STDIN_FILENO, TCSANOW, &t)) {
-        return;
-    }
-
-    fl_setattr = 1;
-    atexit(YSM_ConsoleRestore);
-}
+void YSM_Command_HELP(int argc, char **argv);
+void YSM_Command_FILESTATUS(int argc, char **argv);
+void YSM_Command_CHAT(int argc, char **argv);
 
 /* only ansi stringz messages for this function.
  * encryption, if neccesary, is done inside.
  * if verbous, print any messages.
  */
 
-void YSM_SendMessage(
-    uin_t      r_uin,
-    int8_t    *data,
-    int8_t     logflag,
-    slave_t   *slave,
-    u_int8_t   verbous)
+void YSM_SendMessage( uin_t         r_uin,
+        int8_t        *data,
+        int8_t        logflag,
+        slave_t    *slave,
+        u_int8_t    verbous )
 {
-    int32_t      data_len = 0;
-    int8_t       time_string[10], status_string[MAX_STATUS_LEN];
-    int8_t      *oldmark1 = NULL, *oldmark2 = NULL, *r_nick = NULL;
-    u_int8_t     flags = 0;
-    time_t       log_time;
-    struct       tm *time_stamp;
-    keyInstance *crypt_key = NULL;
+    int32_t        data_len = 0;
+    int8_t         time_string[10], status_string[MAX_STATUS_LEN];
+    int8_t        *oldmark1 = NULL, *oldmark2 = NULL, *r_nick = NULL;
+    u_int8_t       flags = 0;
+    time_t         log_time;
+    struct tm     *time_stamp;
+    keyInstance   *crypt_key = NULL;
 
     /* we save these marks to check if we need to free data
      * at the end of this function. */
@@ -253,7 +109,7 @@ void YSM_SendMessage(
         YSM_SendMessage2Client( slave,
                 slave->uin,
                 0x02,
-                YSM_MESSAGE_NORMAL,
+                YSM_MESSAGE_,
                 data,
                 data_len,
                 0x00,
@@ -263,7 +119,7 @@ void YSM_SendMessage(
         YSM_SendMessage2Client( slave,
                 r_uin,
                 0x01,
-                YSM_MESSAGE_NORMAL,
+                YSM_MESSAGE_,
                 data,
                 data_len,
                 0x00,
@@ -280,7 +136,7 @@ void YSM_SendMessage(
         if (crypt_key != NULL) {
             if (verbous) {
                 PRINTF( VERBOSE_BASE,
-                    "%s %s %s"NORMAL" [%s]. (%d).\n",
+                    "%s %s %s"" [%s]. (%d).\n",
                     time_string,
                     MSG_MESSAGE_SENT3,
                     slave->info.NickName,
@@ -290,7 +146,7 @@ void YSM_SendMessage(
         } else {
             if (verbous) {
                 PRINTF( VERBOSE_BASE,
-                    "%s %s %s"NORMAL" [%s]. (%d).\n",
+                    "%s %s %s"" [%s]. (%d).\n",
                     time_string,
                     MSG_MESSAGE_SENT1,
                     slave->info.NickName,
@@ -311,8 +167,7 @@ void YSM_SendMessage(
 #endif
 
     /* what do we need to free? */
-    if (data != oldmark1)
-    {
+    if (data != oldmark1) {
         if (data != oldmark2 && oldmark2 != oldmark1) {
             ysm_free( oldmark2, __FILE__, __LINE__ );
             oldmark2 = NULL;
@@ -322,14 +177,11 @@ void YSM_SendMessage(
         data = NULL;
     }
 
-    if (slave != NULL)
-        r_nick = slave->info.NickName;
-    else
-        r_nick = "NOT a SLAVE";
+    if (slave != NULL) r_nick = slave->info.NickName;
+    else r_nick = "NOT a SLAVE";
 
-    YSM_PostOutgoing(r_uin, r_nick, strlen(oldmark1), oldmark1);
+    YSM_PostOutgoing( r_uin, r_nick, strlen(oldmark1), oldmark1 );
 }
-
 
 void YSM_PasswdCheck(void)
 {
@@ -352,301 +204,58 @@ void YSM_PasswdCheck(void)
     }
 }
 
-/* YSM_ConsoleIsHotKey ************************************
- * Must be called sometime for every first character in a
- * line by all of our console handling libraries. If ret
- * is >= 1, then its a hotkey, libraries should ignore the
- * pressed key. Else, proceed as usual.
- */
-
-#ifdef HAVE_LIBREADLINE
-int32_t YSM_ConsoleIsHotKey(int count, int key)
-#else
-int32_t YSM_ConsoleIsHotKey(int32_t key)
-#endif
+void YSM_ConsoleRead(int fd)
 {
-
-#ifdef HAVE_LIBREADLINE
-    /* we have to check HERE that the typed char is the first one */
-    if (rl_point || (g_promptstatus.flags & FL_COMFORTABLEM)) {
-        /* and..we have to insert it manually if its not :( */
-        rl_insert_text((char *)&key);
-        return 0;
-
-    }
-#else
-    /* don't trigger hotkeys during comfortable messages */
-    if (g_promptstatus.flags & FL_COMFORTABLEM)
-        return 0;
-#endif
-
-    switch (key) {
-        case '1':
-            PRINTF(VERBOSE_BASE, "\n");
-            YSM_Command_HELP(0x00, 0x00);
-            break;
-
-        case '2':
-#ifndef COMPACT_DISPLAY
-            PRINTF(VERBOSE_BASE, "\n");
-#else
-            PRINTF(VERBOSE_BASE, "\r");
-#endif
-            YSM_PrintOrganizedSlaves(STATUS_ONLINE, NULL, 0x01);
-            break;
-
-        case '3':
-#ifndef COMPACT_DISPLAY
-            PRINTF(VERBOSE_BASE, "\n");
-#else
-            PRINTF(VERBOSE_BASE, "\r");
-#endif
-            YSM_PrintOrganizedSlaves(STATUS_OFFLINE, NULL, 0x00);
-
-            break;
-
-        case '4':
-#ifndef COMPACT_DISPLAY
-            PRINTF(VERBOSE_BASE, "\n");
-#else
-            #if defined(YSM_WITH_THREADS)
-            #if defined(HAVE_LIBREADLINE)
-                YSM_ConsoleClearLine(0, strlen(rl_line_buffer));
-            #else
-                YSM_ConsoleClearLine(0, strlen(gl_buf));
-            #endif
-            #else
-                YSM_ConsoleClearLine(0, strlen(g_cmdstring));
-            #endif
-#endif
-            if (!(g_promptstatus.flags & FL_AFKM)) {
-                strncpy(YSM_AFKMessage,
-                    YSM_AFK_MESSAGE,
-                    sizeof(YSM_AFKMessage) - 1);
-
-                YSM_AFKMessage[sizeof(YSM_AFKMessage)-1] = 0x00;
-            }
-
-            YSM_AFKMode((u_int8_t)!(g_promptstatus.flags & FL_AFKM));
-            break;
-
-        case '5':
-            PRINTF(VERBOSE_BASE, "\n");
-            PRINTF(VERBOSE_BASE, "%s\n", MSG_AFK_READ_MSG);
-            YSM_ReadLog(YSM_AFKFILENAME, 0);
-            break;
-
-#ifdef YSM_WITH_THREADS
-        case '6':
-            PRINTF(VERBOSE_BASE, "\n");
-            YSM_Command_FILESTATUS(0x00, 0x00);
-            break;
-#endif
-        default:
-            return 0;
-    }
-
-    g_promptstatus.flags |= FL_REDRAW;
-
-    return 1;
-}
-
-/* YSM_ConsoleTabHook *************************************
- *
- * what about it:
- * This is a wrapper for the 3 <TAB> key hooks in order
- * to use a common code for readline, getline and ysmline.
- * These hooks DONT use any completion functionality from
- * any of those libraries, they implement it themselves.
- ***********************************************************/
-
-#ifndef YSM_WITH_THREADS
-int YSM_ConsoleTabHook(void)
-#else
-#ifdef HAVE_LIBREADLINE
-int YSM_ConsoleTabHook(int count, int key)
-#else
-int YSM_ConsoleTabHook(char *buf, int offset, int *loc, size_t bufsize)
-#endif
-#endif
-{
-    int8_t  *pbuf = NULL;
-    int32_t *pos = 0, maxsize = 0;
-
-    /* don't trigger TAB during comfortable messages */
-    if (g_promptstatus.flags & FL_COMFORTABLEM)
-        return 0;
-
-#ifndef YSM_WITH_THREADS
-    pbuf    = &g_cmdstring[0];
-    pos     = &g_cmdlen;
-    maxsize = sizeof(g_cmdstring);
-#else
-#ifdef HAVE_LIBREADLINE
-    pbuf    = rl_line_buffer;
-    pos     = &rl_point;
-    maxsize = rl_end;
-#else
-    pbuf    = buf;
-    pos     = loc;
-    maxsize = sizeof(gl_buf);
-#endif
-#endif
-
-    YSM_ConsoleTab(pbuf, pos, maxsize);
-
-#ifndef YSM_WITH_THREADS
-    /* redisplay everything */
-    YSM_ConsoleRedrawPrompt(TRUE);
-#else
-#ifdef HAVE_LIBREADLINE
-    /* when rl_point is at the end of the line, rl_end and rl_point
-     * are equal */
-    rl_point = rl_end;
-
-    /* refresh the screen */
-    rl_redisplay();
-#else
-    /* getline is so wonderful it needs nothing afterwards */
-#endif
-#endif
-
-    return 0;
-}
-
-
-void YSM_ConsoleReadInit(void)
-{
-#ifdef HAVE_LIBREADLINE
-    int8_t inputrc[MAX_PATH];
-#endif
-
-    memset(&g_promptstatus, 0, sizeof(g_promptstatus));
-
-#ifndef YSM_WITH_THREADS
-    /* set out tab hook */
-    ysm_tab_hook = &YSM_ConsoleTabHook;
-#else
-#ifdef HAVE_LIBREADLINE
-    /* readline seems to have trouble with the way we set up
-     * our console to read from the keyboard. hence disable
-     * our settings -here- before we start reading. We don't
-     * do this at the very beginning because some stuff does
-     * require our console configuration changed.
-     */
-    YSM_ConsoleRestore();
-
-    /* Set default readline values */
-    rl_variable_bind("editing-mode", "emacs");
-    rl_bind_key('\t', YSM_ConsoleTabHook);    /* Tab hook for emacs */
-    /* ysm hot keys */
-    rl_bind_key('1', YSM_ConsoleIsHotKey);
-    rl_bind_key('2', YSM_ConsoleIsHotKey);
-    rl_bind_key('3', YSM_ConsoleIsHotKey);
-    rl_bind_key('4', YSM_ConsoleIsHotKey);
-    rl_bind_key('5', YSM_ConsoleIsHotKey);
-    rl_bind_key('6', YSM_ConsoleIsHotKey);
-
-    rl_variable_bind("editing-mode", "vi");
-    rl_variable_bind("keymap", "vi-insert");
-    rl_bind_key('\t', YSM_ConsoleTabHook);    /* Tab hook for vi-insert */
-    /* ysm hot keys */
-    rl_bind_key('1', YSM_ConsoleIsHotKey);
-    rl_bind_key('2', YSM_ConsoleIsHotKey);
-    rl_bind_key('3', YSM_ConsoleIsHotKey);
-    rl_bind_key('4', YSM_ConsoleIsHotKey);
-    rl_bind_key('5', YSM_ConsoleIsHotKey);
-    rl_bind_key('6', YSM_ConsoleIsHotKey);
-
-
-    rl_variable_bind("horizontal-scroll-mode", "on");
-
-    /* Read user readline configuration */
-    snprintf(inputrc, sizeof(inputrc), "%s/inputrc", YSM_cfgdir);
-    inputrc[sizeof(inputrc) - 1] = 0x00;
-    if (rl_read_init_file(inputrc) != 0) {
-        /* there isn't an inputrc in ysm's directory.
-         * go for the default locations.
-         */
-        rl_read_init_file(NULL);
-    }
-
-#else    /* getline */
-
-    /* initialize tab completion and set our tab hook */
-    gl_tab_hook = &YSM_ConsoleTabHook;
-#endif
-#endif
-}
-
-void YSM_ConsoleRead(void)
-{
+    int8_t *tmp = NULL;
     int8_t *retline = NULL;
+    int8_t *pos = NULL;
+    size_t  size = BUFSIZ;
+    ssize_t readsize;
 
-#ifndef DAEMON
-#ifndef YSM_WITH_THREADS
-    retline = ysmreadline(YSM_ConsoleGetPrompt());
-#else
-#ifdef HAVE_LIBREADLINE
-    retline = readline(YSM_ConsoleGetPrompt());
-
-    /* Add it to the readline history */
-    if (retline && *retline)
-        add_history(retline);
-#else
-int8_t    *aux = NULL;
-    retline = getline(YSM_ConsoleGetPrompt());
-
-    /* getline leaves a \n at the end.. */
-    if (retline != NULL) {
-        aux = strchr(retline, '\n');
-        if (aux != NULL) *aux = 0x00;
-    }
-
-    if (retline && *retline)
-        gl_histadd(retline);
-#endif
-#endif
     /* update the idle keyboard timestamp */
     reset_timer(IDLE_TIMEOUT);
 
-#else /* ifdef DAEMON */
+    retline = YSM_MALLOC(size);
+    if (retline == NULL)
+        return;
+    pos = retline;
 
-    retline = ysm_malloc(BUFSIZ, __FILE__, __LINE__);
-
-    if (freopen(YSM_FIFO, "r", stdin) == NULL)
+    while ((readsize = read(fd, pos, size - (pos - retline))) > 0)
     {
-        printf("Error stdin");
-        exit(1);
+        if (readsize == size)
+        {
+            tmp = YSM_MALLOC(size*2);
+            if (tmp == NULL)
+            {
+                YSM_FREE(retline);
+                return;
+            }
+            memcpy(tmp, retline, size);
+            YSM_FREE(retline);
+            retline = tmp;
+            pos = retline + size;
+            size *= 2;
+        }
+        else if (readsize == -1)
+        {
+            return;
+        }
+        else
+        {
+            pos[readsize - 1] = '\0'; // trim ending CR
+            break;
+        }
     }
-
-    fgets(&retline, BUFSIZ, stdin);
-
-#endif
 
     /* did we get a command or not? */
     if (retline == NULL)
         return;
 
-    /***************************** ysm chat mode **************
-     * if we are in chat mode, we treat new commands directly as messages
-     * and send them to the slaves who have the FL_CHAT flag in them
-     ****************************************************************/
-    if (g_promptstatus.flags & FL_CHATM)
-    {
-        YSM_DoChatCommand(retline);
-    }
-    else
-    {
-        /* parse and process the command */
-        YSM_DoCommand(retline);
-    }
+    /* parse and process the command */
+    YSM_DoCommand(retline);
 
-#if defined(HAVE_LIBREADLINE) || defined(DAEMON)
     /* dont you dare to leak on me! */
-    ysm_free(retline, __FILE__, __LINE__);
-    retline = NULL;
-#endif
+    YSM_FREE(retline);
 }
 
 void YSM_ParseCommand(int8_t *_input, int32_t *argc, int8_t *argv[])
@@ -725,22 +334,20 @@ while_loop_goto_sucks:
 
 void YSM_DoCommand(char *cmd)
 {
-    int8_t      *argv[MAX_CMD_ARGS], found = FALSE;
+    int8_t      *argv[MAX_CMD_ARGS];
     int32_t      argc = 0;
-    u_int32_t    x = 0;
-    command_t   *node = (command_t *) g_command_list.start;
+    command_t   *node;
 
     if (!strlen(cmd)) return;
 
-    for (x = 0; x < MAX_CMD_ARGS; x++)
-        argv[x] = NULL;
+    memset(argv, 0, sizeof(argv));
 
     YSM_ParseCommand(cmd, &argc, argv);
 
-    for (x = 0; x < g_command_list.length; x++)
+    for (node = (command_t *) g_command_list.start;
+         node != NULL;
+         node = (command_t *) node->suc)
     {
-        if (!node) break;
-
         /* speed up with first checks */
         if (node->cmd_name[0] != (int8_t)tolower(argv[0][0])
         || strcasecmp(node->cmd_name, argv[0]))
@@ -749,41 +356,38 @@ void YSM_DoCommand(char *cmd)
             {
                 if (node->cmd_alias[0] != (int8_t)tolower(argv[0][0])
                 || strcasecmp(node->cmd_alias, argv[0])) {
-                    node = (command_t *) node->suc;
                     continue;
                 }
             }
             else
             {
-                node = (command_t *) node->suc;
                 continue;
             }
         }
 
-        found = TRUE;
-
-        if (argc < node->cmd_margs) {
-            PRINTF( VERBOSE_BASE,
+        if (argc < node->cmd_margs)
+        {
+            PRINTF(VERBOSE_BASE,
                 "Missing parameters. Use the 'help'"
                 " command for detailed information.\n"
                 );
-        } else {
-
+        }
+        else
+        {
             /* use the low caps argv[0], just in case */
             /* who knows when batman may come 2 kill us (?!) */
             argv[0] = node->cmd_name;
 
             if (node->cmd_func != NULL)
-                node->cmd_func( argc, argv );
+                node->cmd_func(argc, argv);
 
-            g_promptstatus.flags |= FL_REDRAW;
+            g_promptstatus.flags |= FL_RAW;
         }
 
-        break;
+        return;
     }
 
-    if (!found)
-        PRINTF(VERBOSE_BASE, "%s: command not found\n", argv[0]);
+    PRINTF(VERBOSE_BASE, "%s: command not found\n", argv[0]);
 }
 
 void YSM_DoChatCommand(int8_t *cmd)
@@ -817,232 +421,32 @@ void YSM_DoChatCommand(int8_t *cmd)
     }
 }
 
-int8_t * YSM_ReadLongMessage(void)
+static void YSM_PreIncoming(
+    slave_t      *contact,
+    int16_t       m_type,
+    int32_t      *m_len,
+    uin_t         r_uin,
+    int8_t      **m_data,
+    int8_t       *r_nick,
+    u_int8_t      m_flags,
+    keyInstance **key)
 {
-static    int8_t msgdata[MAX_DATA_LEN + 1];
-int8_t    *retline = NULL, *tmp = NULL;
-size_t    x = 0, y = 0;
-#ifndef HAVE_LIBREADLINE
-int8_t    *backup = NULL;
-#endif
-    tmp = &msgdata[0];
-    memset(msgdata, '\0', sizeof(msgdata));
-
-    /* Once we are in here, don't let the command line autogenerate
-     * if we are in the middle of a message.
-     */
-    g_promptstatus.flags |= FL_BUSYDISPLAY;
-
-    /* disable hotkeys */
-    g_promptstatus.flags |= FL_COMFORTABLEM;
-
-    /* Since getline and ysmreadline use the same buffer for command line
-     * as they will use in here. We have an aweful (really) fix for not
-     * overwriting useful data (we will need it outside this function).
-     * We make a backup of the command line buffers and restore them before
-     * leaving.
-     */
-
-#ifndef YSM_WITH_THREADS
-    backup = ysm_calloc(1, sizeof(g_cmdstring), __FILE__, __LINE__);
-    memcpy(backup, g_cmdstring, sizeof(g_cmdstring));
-#else
-#ifndef HAVE_LIBREADLINE
-    backup = ysm_calloc(1, sizeof(gl_buf), __FILE__, __LINE__);
-    memcpy(backup, gl_buf, sizeof(gl_buf));
-#endif
-#endif
-    do {
-#ifndef YSM_WITH_THREADS
-        retline = ysmreadline(NULL);
-#else
-#ifdef HAVE_LIBREADLINE
-        retline = readline(NULL);
-#else
-int8_t    *aux = NULL;
-        retline = getline(NULL);
-        if (retline) {
-            /* getline leaves a \n at the end.. */
-            aux = strchr(retline, '\n');
-            if (aux != NULL) *aux = 0x00;
-        }
-#endif
-#endif
-        if (retline != NULL) {
-
-            y = strlen(retline) + 1;    /* +1 of the \n */
-
-            /* if the input exceeds the maximum length, resize it
-             * to the maximum. no exploitable integer overflow here.
-             */
-
-            if ((x + y) > (sizeof(msgdata) - 1))
-                y = MAX_DATA_LEN - x;
-
-            x += y;
-
-            /* if !y then we have no more space left.
-             * Warn and return what we read so far
-             */
-            if (!y) {
-                PRINTF( VERBOSE_BASE,
-                    "\nMaximum Data Reached. \a!\n");
-
-                g_promptstatus.flags &= ~FL_BUSYDISPLAY;
-                g_promptstatus.flags &= ~FL_COMFORTABLEM;
-
-            /* restore the original input buffers on ysmline and
-             * on getline. read above for further details. */
-#ifndef YSM_WITH_THREADS
-                memcpy(g_cmdstring,
-                    backup,
-                    sizeof(g_cmdstring));
-                ysm_free(backup, __FILE__, __LINE__);
-                backup = NULL;
-#else
-#ifdef HAVE_LIBREADLINE
-                /* dont you dare to leak on me! */
-                ysm_free(retline, __FILE__, __LINE__);
-                retline = NULL;
-#else
-                memcpy(gl_buf, backup, sizeof(gl_buf));
-                ysm_free(backup, __FILE__, __LINE__);
-                backup = NULL;
-#endif
-#endif
-                return (tmp);
-            }
-
-            /* did the user supply a control character? */
-            if (strlen(retline) == 1) {
-
-                /* end of message? */
-                if (retline[0] == '.') {
-                    g_promptstatus.flags &= ~FL_BUSYDISPLAY;
-                    g_promptstatus.flags &= ~FL_COMFORTABLEM;
-            /* restore the original input buffers on ysmline and
-             * on getline. read above for further details. */
-#ifndef YSM_WITH_THREADS
-                memcpy(g_cmdstring,
-                    backup,
-                    sizeof(g_cmdstring));
-                ysm_free(backup, __FILE__, __LINE__);
-                backup = NULL;
-#else
-#ifdef HAVE_LIBREADLINE
-                /* dont you dare to leak on me! */
-                ysm_free(retline, __FILE__, __LINE__);
-                retline = NULL;
-#else
-                memcpy(gl_buf, backup, sizeof(gl_buf));
-                ysm_free(backup, __FILE__, __LINE__);
-                backup = NULL;
-#endif
-#endif
-                    return (tmp);
-
-                /* cancel message? */
-                } else if (retline[0] == '#') {
-                    g_promptstatus.flags &= ~FL_BUSYDISPLAY;
-                    g_promptstatus.flags &= ~FL_COMFORTABLEM;
-            /* restore the original input buffers on ysmline and
-             * on getline. read above for further details. */
-#ifndef YSM_WITH_THREADS
-                memcpy(g_cmdstring,
-                    backup,
-                    sizeof(g_cmdstring));
-                ysm_free(backup, __FILE__, __LINE__);
-                backup = NULL;
-#else
-#ifdef HAVE_LIBREADLINE
-                /* dont you dare to leak on me! */
-                ysm_free(retline, __FILE__, __LINE__);
-                retline = NULL;
-#else
-                memcpy(gl_buf, backup, sizeof(gl_buf));
-                ysm_free(backup, __FILE__, __LINE__);
-                backup = NULL;
-#endif
-#endif
-                    return (NULL);
-                }
-            }
-
-            /* ok then, plug the new data at the end */
-            strncat( msgdata, retline,
-                sizeof(msgdata) - strlen(msgdata) - 1);
-
-            /* add a newline to separate lines */
-            strncat( msgdata, "\n",
-                sizeof(msgdata) - strlen(msgdata) - 1);
-
-#ifdef HAVE_LIBREADLINE
-            /* dont you dare to leak on me! */
-            ysm_free(retline, __FILE__, __LINE__);
-#endif
-        }
-
-    } while (retline != NULL);
-
-    g_promptstatus.flags &= ~FL_BUSYDISPLAY;
-    g_promptstatus.flags &= ~FL_COMFORTABLEM;
-
-    return tmp;
-}
-
-/* YSM_AlertUser()
- *    - Beeps
- *    - configurable deconify & flashing window (win32/OS2)
- */
-
-static void YSM_AlertUser(void)
-{
-    u_int32_t x;
-
-    if (g_cfg.beep)
-    {
-        for(x = 0; x < (unsigned)g_cfg.beep; x++)
-        {
-            PRINTF(VERBOSE_BASE, "\a");
-            YSM_Thread_Sleep(0, 200);
-        }
-    }
-
-    YSM_WindowAlert();
-}
-
-static void YSM_PreIncoming( slave_t    *contact,
-        int16_t        m_type,
-        int32_t        *m_len,
-        uin_t        r_uin,
-        int8_t        **m_data,
-        int8_t        *r_nick,
-        u_int8_t    m_flags,
-        keyInstance    **key )
-{
-int8_t *data_conv = NULL, do_conv = 0;
-
-    /* alert the user of an incoming Message */
-    YSM_AlertUser();
+    int8_t *data_conv = NULL, do_conv = 0;
 
     /* procedures applied to normal messages only */
-    if (m_type == YSM_MESSAGE_NORMAL) {
-
+    if (m_type == YSM_MESSAGE_)
+    {
         /* decrypt the incoming message if neccesary.
          * the function will return < 0 if decryption failed.
          * though it might be because we don't have a key with
          * this contact (or we don't have her on our list).
          */
 
-        if (YSM_DecryptMessage( contact,
-                    m_data,
-                    m_len,
-                    key ) >= 0) {
-
+        if (YSM_DecryptMessage(contact, m_data, m_len, key) >= 0)
+        {
             /* if decryption went ok, do convertion */
             do_conv = 1;
         }
-
 
         /* pre-Incoming Message Event */
         YSM_Event( EVENT_PREINCOMINGMESSAGE,
@@ -1052,7 +456,8 @@ int8_t *data_conv = NULL, do_conv = 0;
             *m_data,
             m_flags );
 
-        if (do_conv) {
+        if (do_conv)
+        {
             /* Charset convertion time */
             YSM_Charset( CHARSET_INCOMING,
                 *m_data,
@@ -1060,7 +465,8 @@ int8_t *data_conv = NULL, do_conv = 0;
                 &data_conv,
                 m_flags );
 
-            if (data_conv != NULL) {
+            if (data_conv != NULL)
+            {
                 /* m_data is freed in the callers function */
                 *m_data = data_conv;
             }
@@ -1073,11 +479,9 @@ int8_t *data_conv = NULL, do_conv = 0;
         (*m_len) = strlen(*m_data)+1;
 
         /* store last message */
-        if ( contact != NULL ) {
-            strncpy( YSM_LastMessage,
-                *m_data,
-                sizeof(YSM_LastMessage) - 1 );
-
+        if (contact != NULL)
+        {
+            strncpy(YSM_LastMessage, *m_data, sizeof(YSM_LastMessage) - 1);
             YSM_LastMessage[sizeof(YSM_LastMessage)-1] = '\0';
         }
     }
@@ -1139,7 +543,7 @@ int    arg_index = 0, x = 0, y = 0;
         arg_index++;
     }
 
-    YSM_ExecuteCommand( arg_index, exec_args );
+    YSM_ExecuteCommand(arg_index, exec_args);
 }
 
 static void YSM_PostIncoming( slave_t    *victim,
@@ -1153,7 +557,7 @@ static void YSM_PostIncoming( slave_t    *victim,
 
     int8_t fl_inchat = 0, fl_vinchat = 0, fl_inafk = 0;
 
-    if (m_type == YSM_MESSAGE_NORMAL) {
+    if (m_type == YSM_MESSAGE_) {
 
         if (g_promptstatus.flags & FL_CHAT) fl_inchat = 1;
         if (victim != NULL && (victim->flags & FL_CHAT)) fl_vinchat = 1;
@@ -1186,7 +590,7 @@ static void YSM_PostIncoming( slave_t    *victim,
                         > g_cfg.afkminimumwait) {
 
                 YSM_SendMessage( victim->uin,
-                    YSM_AFKMessage,
+                    g_cfg.AFKMessage,
                     (int8_t)(victim->flags & FL_LOG),
                     victim,
                     1 );
@@ -1197,7 +601,7 @@ static void YSM_PostIncoming( slave_t    *victim,
 
             } else {
                 YSM_SendMessage(r_uin,
-                        YSM_AFKMessage,
+                        g_cfg.AFKMessage,
                         0,
                         NULL,
                         1);
@@ -1211,13 +615,13 @@ static void YSM_PostIncoming( slave_t    *victim,
 
                 if (victim) {
                     YSM_SendMessage( victim->uin,
-                        YSM_CHATMessage,
+                        g_cfg.CHATMessage,
                         (int8_t)(victim->flags & FL_LOG),
                         victim,
                         0);
                 } else {
                     YSM_SendMessage(r_uin,
-                        YSM_CHATMessage,
+                        g_cfg.CHATMessage,
                         0,
                         NULL,
                         0);
@@ -1226,7 +630,7 @@ static void YSM_PostIncoming( slave_t    *victim,
         }
     }
 
-    g_promptstatus.flags |= FL_REDRAW;
+    g_promptstatus.flags |= FL_RAW;
 
     /* Incoming Messages Event */
     YSM_Event(EVENT_INCOMINGMESSAGE, r_uin, r_nick, m_len, m_data, 0);
@@ -1238,9 +642,8 @@ void YSM_PreOutgoing( slave_t    *victim,
         int32_t        *m_len,
         int8_t        logflag )
 {
-int8_t    *data_conv = NULL;
-u_int8_t m_flags = 0;
-
+    int8_t    *data_conv = NULL;
+    u_int8_t m_flags = 0;
 
     if ((victim == NULL && (g_cfg.logall || logflag))
         || ((g_cfg.logall || logflag) && (victim && !(victim->flags & FL_CHAT))))
@@ -1271,36 +674,32 @@ void YSM_PostOutgoing(
     YSM_Event(EVENT_OUTGOINGMESSAGE, r_uin, r_nick, m_len, m_data, 0);
 }
 
-void YSM_DisplayMsg( int16_t        m_type,
-        uin_t        r_uin,
-        u_int16_t    r_status,
-        int32_t        m_len,
-        int8_t        *m_data,
-        u_int8_t    m_flags,
-        int8_t        *r_nick,
-        int32_t        log_flag )
+void YSM_DisplayMsg(
+    int16_t      m_type,
+    uin_t        r_uin,
+    u_int16_t    r_status,
+    int32_t      m_len,
+    int8_t      *m_data,
+    u_int8_t     m_flags,
+    int8_t      *r_nick,
+    int32_t      log_flag)
 {
-
-char        status_string[MAX_STATUS_LEN];
-char        time_string[10], *aux = NULL, *auxb = NULL;
-keyInstance    *crypt_key = NULL;
-time_t        log_time;
-struct tm    *time_stamp;
-int        x = 0;
-int8_t        *msgCol = g_cfg.color_message;
-slave_t    *contact = NULL;
-int8_t        *old_m_data = NULL;
-int        free_m_data = 0;
-
+    char          status_string[MAX_STATUS_LEN];
+    char          time_string[10], *aux = NULL, *auxb = NULL;
+    keyInstance  *crypt_key = NULL;
+    time_t        log_time;
+    struct tm    *time_stamp;
+    int           x = 0;
+    slave_t      *contact = NULL;
+    int8_t       *old_m_data = NULL;
+    int           free_m_data = 0;
 
     YSM_WriteStatus(r_status, status_string);
 
-    if (r_nick == NULL) {
+    if (r_nick == NULL)
         r_nick = "NOT a SLAVE";
-    } else {
+    else
         contact = YSM_QuerySlaves(SLAVE_NAME, r_nick, 0, 0);
-         if (contact->color!=NULL) msgCol = contact->color;
-    }
 
 #if defined(YSM_WITH_THREADS)
     /* If the display is busy, make the thread sleep for half a sec */
@@ -1329,19 +728,9 @@ int        free_m_data = 0;
 
     g_promptstatus.flags |= FL_OVERWRITTEN;
 
-    /* this is ugly but we need to clear the prompt on incoming messages */
-#if defined(YSM_WITH_THREADS)
-#if defined(HAVE_LIBREADLINE)
-    YSM_ConsoleClearLine(0, strlen(rl_line_buffer));
-#else
-    YSM_ConsoleClearLine(0, strlen(gl_buf));
-#endif
-#else
-    YSM_ConsoleClearLine(0, strlen(g_cmdstring));
-#endif
     switch (m_type) {
 
-    case YSM_MESSAGE_NORMAL:
+    case YSM_MESSAGE_:
 
         /* Check if its an Action! */
         if (contact != NULL
@@ -1359,48 +748,41 @@ int        free_m_data = 0;
             if (m_data[0] == 0x20) m_data++;
 
             PRINTF( VERBOSE_BASE,
-                "\r" BRIGHT_BLUE "* " NORMAL "%s %s" BRIGHT_BLUE
-                " *\n" NORMAL, contact->info.NickName, m_data);
-
-
-        } else {
-
+                "\r* " "%s %s" 
+                " *\n" , contact->info.NickName, m_data);
+        }
+        else
+        {
             time_stamp = localtime( &log_time );
             strftime( time_string, 9, "%H:%M:%S", time_stamp );
 
-            if (contact != NULL) {
-
-                PRINTF( VERBOSE_BASE,
-                    NORMAL "\r%s " BRIGHT_BLUE "%s" NORMAL
-                    "%s" BRIGHT_BLUE "%s " NORMAL
-                    "%s%s%s\n" NORMAL,
+            if (contact != NULL)
+            {
+                PRINTF(VERBOSE_BASE,
+                    "\r%s %s" 
+                    "%s%s " 
+                    "%s%s\n",
                     time_string,
                     (crypt_key != NULL) ? "<*" : "<",
                     r_nick,
                     (crypt_key != NULL) ? "*>" : ">",
-                    msgCol,
-                    (strchr(m_data,'\n') != NULL)
-                    ? "\n" : "",
-                    m_data );
-
-            } else {
-
-                PRINTF( VERBOSE_BASE,
-                     NORMAL "\r%s " BRIGHT_BLUE "%s" NORMAL
-                    "%d" BRIGHT_BLUE "%s " NORMAL
-                    "%s%s%s\n" NORMAL,
+                    (strchr(m_data,'\n') != NULL) ? "\n" : "",
+                    m_data);
+            }
+            else
+            {
+                PRINTF(VERBOSE_BASE,
+                    "\r%s %s" 
+                    "%d%s " 
+                    "%s%s\n" ,
                     time_string,
                     (crypt_key != NULL) ? "<*" : "<",
                     r_uin,
                     (crypt_key != NULL) ? "*>" : ">",
-                    msgCol,
-                    (strchr(m_data,'\n') != NULL)
-                    ? "\n" : "",
-                    m_data );
+                    (strchr(m_data,'\n') != NULL) ? "\n" : "",
+                    m_data);
             }
-
         }    /* else */
-
         break;
 
     case YSM_MESSAGE_PAGER:
@@ -1445,15 +827,14 @@ int        free_m_data = 0;
         break;
 
     case YSM_MESSAGE_CONTACTS:
-
         for (x = 0; x < m_len; x++) {
             if ((unsigned char)m_data[x] == 0xfe)
                     m_data[x] = 0x20;
         }
 
         PRINTF( VERBOSE_BASE,
-            "\n\r" MAGENTA "Incoming CONTACTS from: "
-            NORMAL "%s [ICQ# %d].\n",
+            "\n\rIncoming CONTACTS from: "
+            "%s [ICQ# %d].\n",
             r_nick,
             r_uin );
 
@@ -1463,14 +844,14 @@ int        free_m_data = 0;
         aux = strtok(NULL, " ");
         while (aux != NULL && x < atoi(m_data)) {
             PRINTF( VERBOSE_BASE,
-                "\r" WHITE "UIN" NORMAL " %-14.14s\t", aux );
+                "\r" "UIN %-14.14s\t", aux );
 
             aux = strtok(NULL, " ");
             if (!aux) PRINTF( VERBOSE_BASE,
-                    WHITE "Nick" NORMAL " Unknown\n");
+                    "Nick Unknown\n");
 
             else PRINTF( VERBOSE_BASE,
-                    WHITE "Nick" NORMAL " %s\n", aux);
+                    "Nick %s\n", aux);
 
             aux = strtok(NULL, " ");
             x++;
@@ -1509,7 +890,7 @@ int        free_m_data = 0;
         break;
 
     default:
-        YSM_Error(ERROR_CODE, __FILE__, __LINE__, 1);
+        YSM_ERROR(ERROR_CODE, 1);
         break;
     }
 
@@ -1524,19 +905,21 @@ displaymsg_exit:
             r_nick,
             log_flag );
 
-    if (free_m_data) {
-        ysm_free(m_data, __FILE__, __LINE__);
-        m_data = NULL;
+    if (free_m_data)
+    {
+        YSM_FREE(m_data);
     }
 }
 
-int32_t YSM_ParseMessageData( u_int8_t *data, u_int32_t length )
+int32_t YSM_ParseMessageData(u_int8_t *data, u_int32_t length)
 {
-u_int32_t x = 0;
+    u_int32_t x = 0;
 
-    if (!length) return 0;
+    if (!length)
+        return 0;
 
-    for ( x = 0; x <= length-1; x++) {
+    for (x = 0; x <= length-1; x++)
+    {
         /* lets make all < 32 ascii characters
          * be replaced by a space. but the ones we need :P
          */
@@ -1551,256 +934,4 @@ u_int32_t x = 0;
 
     /* by now we just keep the same length going */
     return length;
-}
-
-
-void YSM_ConsoleTabCommand(int32_t argc, int8_t **argv, int32_t *pos, size_t msize)
-{
-int8_t      *incomplete = argv[0], *match = NULL;
-u_int32_t    x = 0;
-command_t    *node = (command_t *) g_command_list.start;
-
-    for (x = 0; x < strlen(incomplete); x++)
-        incomplete[x] = tolower(incomplete[x]);
-
-    /* Find Matching bytes of the command */
-    for (x = 0; x < g_command_list.length; x++)
-    {
-        if (!node) break;
-
-        if (!memcmp(node->cmd_name, incomplete, strlen(incomplete)))
-        {
-            match = node->cmd_name;
-            break;
-        }
-        else if (node->cmd_alias != NULL)
-        {
-            if (!memcmp(node->cmd_alias, incomplete, strlen(incomplete)))
-            {
-                match = node->cmd_alias;
-                break;
-            }
-        }
-
-        node = (command_t *) node->suc;
-    }
-
-    if (match != NULL)
-    {
-        char tmpbuf[100];
-
-        memset(tmpbuf, 0, sizeof(tmpbuf));
-        snprintf( tmpbuf,
-            sizeof(tmpbuf),
-            "%s ",
-            match );
-
-        tmpbuf[sizeof(tmpbuf) - 1] = 0x00;
-
-        /* go back to where the command starts. */
-#if defined(YSM_WITH_THREADS) && defined(HAVE_LIBREADLINE)
-        (*pos) = 0;
-#else
-        (*pos) -= strlen(incomplete);
-#endif
-
-#if defined(YSM_WITH_THREADS) && defined(HAVE_LIBREADLINE)
-    /* for readline its different because the buffer is allocated
-     * and this means its got nothing in it. We cant overwrite past
-     * its end. This is why we use rl_insert_text()
-     */
-
-        /* first delete the current incomplete string. Then insert
-         * the new complete one */
-        rl_delete_text(*pos, msize);
-
-        /* now insert the new name */
-        rl_insert_text(tmpbuf);
-#else
-        if (*pos + strlen(tmpbuf) <= msize) {
-            memcpy(incomplete, tmpbuf, strlen(tmpbuf));
-            /* ending space included already */
-            (*pos) += strlen(incomplete);
-
-            /* end the string */
-            incomplete[strlen(tmpbuf)] = 0x00;
-
-        /* else set pos again to what it was */
-        } else (*pos) += strlen(incomplete);
-#endif
-    }
-}
-
-void YSM_ConsoleTabSlave(int32_t argc, int8_t **argv, int32_t *pos, size_t msize)
-{
-slave_t    *node = NULL;
-int8_t        *incomplete = argv[argc], cycle_flag = FALSE;
-#if defined(YSM_WITH_THREADS) && defined(HAVE_LIBREADLINE)
-#else
-int32_t        x = 0;
-#endif
-
-    /* Only do this if at least 1 user is online
-     * else its just a waste of time.
-     */
-
-    if (!g_sinfo.onlineslaves) return;
-
-    /* find matching bytes of the incomplete slave name */
-    node = (slave_t *) g_slave_list.start;
-    while (node != NULL)
-    {
-        if (!strncasecmp( node->info.NickName,
-                incomplete,
-                strlen(incomplete) )) break;
-
-        node = (slave_t *) node->suc;
-    }
-
-    /* if the incomplete pointer is exactly what the found
-     * node pointer is, then it means the user provided the
-     * whole slave name. This means it's not calling TAB to
-     * complete the rest of the name but instead to cycle
-     * through the next slaves (they are sorted alphabetically).
-     */
-
-    if (node != NULL) {
-
-        if (!strcasecmp(node->info.NickName, incomplete)) {
-            /* user chose to use TAB for cycling. */
-            cycle_flag = TRUE;
-
-            /* we care only about connected slaves */
-            if (node->suc != NULL)
-                node = (slave_t *) node->suc;
-            else
-                node = (slave_t *) g_slave_list.start;
-
-            while (node->status == STATUS_OFFLINE) {
-                if (node->suc != NULL)
-                    node = (slave_t *) node->suc;
-                else
-                    node = (slave_t *) g_slave_list.start;
-            }
-
-        } else {
-
-            /* the cycle_flag helps us prevent a problem
-             * afterwards. There is an extra space we need
-             * to add if the TAB key wasn't used for cycling
-             */
-            cycle_flag = FALSE;
-        }
-
-    }
-
-    if (node != NULL) {
-        int8_t tmpbuf[100];
-
-        memset(tmpbuf, 0, sizeof(tmpbuf));
-        snprintf( tmpbuf,
-            sizeof(tmpbuf),
-            "%s ",
-            node->info.NickName );
-        tmpbuf[sizeof(tmpbuf) - 1] = 0x00;
-
-        /* go back to the beginning of the slave name */
-        *pos -= strlen(incomplete);
-
-        /* note one thing, if we are cycling, it means theres
-         * one more space we have to handle at the end.
-         */
-
-        if (cycle_flag) (*pos)--;
-
-#if defined(YSM_WITH_THREADS) && defined(HAVE_LIBREADLINE)
-    /* for readline its different because the buffer is allocated
-     * and this means its got nothing in it. We cant overwrite past
-     * its end. This is why we use rl_insert_text()
-     */
-
-        /* first delete the current incomplete string. Then insert
-         * the new complete one */
-        rl_delete_text(*pos, msize);
-
-        /* now insert the new name */
-        rl_insert_text(tmpbuf);
-#else
-        if (*pos + strlen(tmpbuf) <= msize) {
-            if (strlen(node->info.NickName)
-                < strlen(incomplete) ) {
-                    memset( incomplete,
-                        0, strlen(incomplete) );
-            }
-
-            memcpy(incomplete, tmpbuf, strlen(tmpbuf));
-
-            /* end the string */
-            incomplete[strlen(tmpbuf)] = 0x00;
-        }
-
-        *pos = 0;
-        for( x = 0; x <= argc; x++ ) {
-            (*pos) += strlen(argv[x]);
-            if (x < argc) (*pos)++;
-        }
-#endif
-    }
-}
-
-void YSM_ConsoleTab(int8_t *string, int32_t *size, int32_t maxsize)
-{
-    int8_t   *aux = NULL;
-    int8_t   *argv[MAX_CMD_ARGS];
-    int32_t   argc = 0;
-    int32_t   x = 0;
-
-    if (*size && string[0] != ' ')
-    {
-        /* Parse the current input */
-        for (x = 0; x < MAX_CMD_ARGS; x++)
-            argv[x] = NULL;
-
-        YSM_ParseCommand(string, &argc, argv);
-
-        if (argc < 1)    /* COMMAND COMPLETE */
-            YSM_ConsoleTabCommand(argc, argv, size, maxsize);
-        else             /* SLAVE NAME COMPLETE */
-            YSM_ConsoleTabSlave(argc, argv, size, maxsize);
-
-        /* Restore parsed spaces */
-        for (x = 0; x < argc; x++)
-        {
-            aux = strchr(argv[x],'\0');
-            if (aux != NULL)
-                *aux = 0x20;
-        }
-    }
-    /* Nothing was typed and <TAB> was pressed. We have
-    a default 'msg' command policy. Fill the pleasure. */
-    else
-    {
-        if (YSMSlaves_TabSlave)
-        {
-            int8_t tmpbuf[100];
-
-            memset(tmpbuf, 0, sizeof(tmpbuf));
-            snprintf(tmpbuf, sizeof(tmpbuf), "msg %s ",
-                YSMSlaves_TabSlave->info.NickName);
-            tmpbuf[sizeof(tmpbuf) - 1] = 0x00;
-
-#if defined(YSM_WITH_THREADS) && defined(HAVE_LIBREADLINE)
-    /* for readline its different because the buffer is allocated
-     * and this means its got nothing in it. We cant overwrite past
-     * its end. This is why we use rl_insert_text()
-     */
-            rl_insert_text(tmpbuf);
-#else
-            memset(string, '\0', *size);
-            strncpy(string, tmpbuf, maxsize-1);
-#endif
-        }
-
-        *size = strlen(string);
-    }
 }
