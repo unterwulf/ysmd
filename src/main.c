@@ -1,7 +1,6 @@
-/*	$Id: YSM_Main.c,v 1.104 2004/08/22 00:12:03 rad2k Exp $	*/
 /*
 -======================== ysmICQ client ============================-
-		Having fun with a boring Protocol
+        Having fun with a boring Protocol
 -========================= YSM_Main.c ==============================-
 
 YSM (YouSickMe) ICQ Client. An Original Multi-Platform ICQ client.
@@ -25,313 +24,157 @@ For Contact information read the AUTHORS file.
 
 */
 
-#include "YSM.h"
-__RCSID("$Id: YSM_Main.c,v 1.104 2004/08/22 00:12:03 rad2k Exp $");
+#include "ysm.h"
+#include "main.h"
+#include "direct.h"
+#include "setup.h"
+#include "prompt.h"
+#include "toolbox.h"
+#include "network.h"
+#include "commands.h"
+#include "timers.h"
 
-#include "YSM_Main.h"
-#include "YSM_Direct.h"
-#include "YSM_Setup.h"
-#include "YSM_Prompt.h"
-#include "YSM_Win32.h"
-#include "YSM_ToolBox.h"
-#include "YSM_Network.h"
-#include "YSM_Commands.h"
-#include "YSM_FishGUI.h"
+short        YSM_Reason_To_Suicide = FALSE;
+ysm_config_t g_cfg;
+dl_list_t    g_slave_list = { NULL, 0 };
+dl_list_t    g_command_list = { NULL, 0 };
+dl_list_t    g_filemap_list = { NULL, 0 };
 
-short	YSM_Reason_To_Suicide = FALSE;
+slave_t *YSMSlaves_LastSent=0, *YSMSlaves_LastRead=0;
+slave_t *YSMSlaves_TabSlave = NULL;
 
-short	YSM_SETTING_VERBOSE = 0x5;
-short	YSM_SETTING_BEEP = 1;
-short	YSM_SETTING_SOUNDS = TRUE;
-short	YSM_SETTING_LOGALL = FALSE;
-short	YSM_SETTING_NEWLOGSFIRST = TRUE;
-short	YSM_SETTING_SPOOF = FALSE;
-short	YSM_SETTING_AWAYTIME = 5;
-short	YSM_SETTING_AFKMAXSHOWN = 3;
-short	YSM_SETTING_AFKMINIMUMWAIT = MINIMUM_AFK_WAIT;
-short	YSM_SETTING_WINALERT = 0x3;
-short	YSM_SETTING_VERSION_CHECK = TRUE;
-short	YSM_SETTING_ANTISOCIAL = 0;
-short	YSM_SETTING_UPDATENICKS = TRUE;
+struct    YSM_MODEL    YSM_USER;
 
-short	YSM_SETTING_DCDISABLE = FALSE;
-short	YSM_SETTING_DCLAN = FALSE;
-
-int8_t	*YSM_SETTING_COLOR_MESSAGE = GREEN;
-int8_t	*YSM_SETTING_COLOR_TEXT	= NORMAL;
-int8_t	*YSM_SETTING_COLOR_STATUSCHANGENAME = BLUE;
-int8_t	*YSM_SETTING_COLOR_STATUSCHANGESTATUS = NULL;
-int8_t	*YSM_SETTING_COLOR_TEXT2 = MAGENTA;
-
-u_int16_t YSM_SETTING_DCPORT1 = 0;
-u_int16_t YSM_SETTING_DCPORT2 = 0;
-
-/* needs to store a 4 bytes UIN */
-uin_t	YSM_SETTING_FORWARD = 0;
-
-char	YSM_SETTING_HOT_KEY_MAXIMIZE = 's';
-char	YSM_SETTING_CHARSET_TRANS[MAX_CHARSET + 4];
-char	YSM_SETTING_CHARSET_LOCAL[MAX_CHARSET + 4];
-
-extern	char	YSM_AFKMessage[MAX_DATA_LEN + 1];
-extern	char	YSM_cfgfile[MAX_PATH];
-extern	char	YSM_cfgdir[MAX_PATH];
-
-#ifdef WIN32
-extern	HANDLE	g_hSuicideEvent, g_hThreadDiedEvent;
-#endif
-
-YSM_SLAVE *YSMSlaves_LastSent=0, *YSMSlaves_LastRead=0;
-YSM_SLAVE *YSMSlaves_TabSlave = NULL;
-
-struct	YSM_MODEL	YSM_USER;
-
-time_t	YSM_LastKA, YSM_idletime;
-time_t	YSM_StartTime, YSM_LastCmdsTime;
+extern char YSM_AFKMessage[MAX_DATA_LEN + 1];
+extern char YSM_cfgfile[MAX_PATH];
+extern char YSM_cfgdir[MAX_PATH];
 
 #ifdef YSM_WITH_THREADS
-
-#ifdef WIN32
-HANDLE	_thHandle[THREADS_COUNT];
-DWORD	_thid[THREADS_COUNT];
-#elif OS2
-int	t_netid, t_cycleid, t_dcid;
-#else
-pthread_t	t_netid, t_cycleid, t_dcid;
-#endif
-
+pthread_t    t_netid, t_cycleid, t_dcid;
 #endif
 
 
-int
-main( int argc, char **argv )
+int main(int argc, char **argv)
 {
+    char buf[MAX_TIME_LEN];
 
-char buf[MAX_TIME_LEN];
+    YSM_CheckSecurity();
+    reset_timer(UPTIME);
+    reset_timer(COMMAND_FILE_CHECK_TIMEOUT);
 
-#if !defined (WIN32) && !defined (OS2)
-	YSM_CheckSecurity();
-#endif
+    /* Check for arguments - alternate config file */
+    if (argc > 2)
+    {
+        if (!strcmp(argv[1], "-c"))
+        {
+            /* Use this configuration file */
+            if (argv[2] != NULL)
+            {
+                char *aux = NULL;
 
-#ifdef OS2
-	/* init of the OS2 PM function */
-	os2_init();	
-#endif
+                strncpy(YSM_cfgfile, argv[2], sizeof(YSM_cfgfile) - 1);
+                YSM_cfgfile[sizeof(YSM_cfgfile) - 1] = '\0';
 
-	YSM_StartTime = YSM_LastCmdsTime = time( NULL );
+                strncpy(YSM_cfgdir, argv[2], sizeof(YSM_cfgdir) - 1);
+                YSM_cfgdir[sizeof(YSM_cfgdir) - 1] = '\0';
+                aux = strrchr(YSM_cfgdir, '/');
 
-	/* Check for arguments - alternate config file */
-	if (argc > 2) {
-		if (!strcmp( argv[1],"-c" )) {
-			/* Use this configuration file */
-			if (argv[2] != NULL) {
-				char *aux = NULL;
+                if (NULL != aux)
+                    *(aux+1) = '\0';
+                else
+                {
+                    strncpy(YSM_cfgdir, "./", sizeof(YSM_cfgdir) - 1);
+                    YSM_cfgdir[sizeof(YSM_cfgdir) - 1] = '\0';
+                }
+            }
+        }
+    }
 
-				strncpy( YSM_cfgfile,
-					argv[2],
-					sizeof(YSM_cfgfile) - 1);
-				YSM_cfgfile[sizeof(YSM_cfgfile)-1] = '\0';
+    if (YSM_Initialize() < 0) return -1;
 
-				strncpy( YSM_cfgdir,
-					argv[2],
-					sizeof(YSM_cfgdir) - 1);
-				YSM_cfgdir[sizeof(YSM_cfgdir)-1] = '\0';
-#ifdef WIN32
-				aux = strrchr( YSM_cfgdir,'\\' );
-#else
-				aux = strrchr( YSM_cfgdir,'/' );
-#endif
-				if (NULL != aux) *(aux+1) = '\0';
-				else {
-#ifdef WIN32
-					strncpy( YSM_cfgdir,
-						".\\",
-						sizeof(YSM_cfgdir) - 1);
-#else
-					strncpy( YSM_cfgdir,
-						"./",
-						sizeof(YSM_cfgdir) - 1);
-#endif
-					YSM_cfgdir[sizeof(YSM_cfgdir)-1] = '\0';
-				}
-					
-			}
-		}
-	}
+    YSM_ConsoleSetup();
+    YSM_Setup();
 
-	if (YSM_Initialize() < 0) return -1;
-
-	YSM_ConsoleSetup();
-	YSM_PrintGreetingBox();
-	YSM_Setup();
-
-	/* Moved direct connections intialization to main() because
-	 * we need a few configuration file settings loaded before.
-	 */
+    /* Moved direct connections intialization to main() because
+     * we need a few configuration file settings loaded before.
+     */
 #ifdef YSM_WITH_THREADS
-	YSM_DC_Init();
+    YSM_DC_Init();
 #endif
 
-	YSM_SetConsoleTitle();
+    PRINTF(VERBOSE_BASE,
+        "\n%s %d ]\n",
+        MSG_STARTING_TWO,
+        YSM_USER.Uin );
 
-        PRINTF( VERBOSE_BASE,
-		"\n%s %d ]\n",
-		MSG_STARTING_TWO,
-		YSM_USER.Uin );
+    PRINTF(VERBOSE_BASE,
+        GREEN "love ysm? " NORMAL "make your contribution! " GREEN "(ysmv7.sourceforge.net)" NORMAL "\n");
 
-	PRINTF( VERBOSE_BASE,
-		"Cronica TV hora Actual : %s\n",
-		YSM_gettime(YSM_StartTime, buf, sizeof(buf)));
+    YSM_PasswdCheck();
 
-	PRINTF( VERBOSE_BASE,
-		GREEN "love ysm? " NORMAL "make your contribution! " GREEN "(ysmv7.sourceforge.net)" NORMAL "\n");
+    reset_timer(KEEP_ALIVE_TIMEOUT);
+    reset_timer(IDLE_TIMEOUT);
 
+#ifdef DAEMON
+    /* daemonize */
+    chdir("/");
+    unlink(YSM_FIFO);
+    mkfifo(YSM_FIFO, 0600);
 
-	YSM_PasswdCheck();
+    if (fork())
+        exit(0);
 
-	if (YSM_SETTING_VERSION_CHECK) YSM_VersionCheck();
+    setsid();
+
+//    for (sig = 1; sig < 32; sig++)
+//        signal(sig, fsignal);
+#endif
 
 #ifdef YSM_WITH_THREADS
-#ifdef WIN32
-		_thHandle[0] = CreateThread(
-				NULL,
-				0,
-				(LPTHREAD_START_ROUTINE)&YSM_Start_Network,
-				NULL,
-				0,
-				(LPDWORD)&_thid[0] );
+    pthread_create(&t_netid, NULL, (void *) &network_thread, NULL);
+    pthread_create(&t_cycleid, NULL, (void *) &YSM_Start_Cycle, NULL);
 
-		_thHandle[1] = CreateThread(
-				NULL,
-				0,
-				(LPTHREAD_START_ROUTINE)&YSM_Start_Cycle,
-				NULL,
-				0,
-				(LPDWORD)&_thid[1] );
+    if (!g_cfg.dcdisable)
+        pthread_create(&t_dcid, NULL, (void *) &dc_thread, NULL);
 
-	if (!YSM_SETTING_DCDISABLE)
-		_thHandle[2] = CreateThread(
-				NULL,
-				0,
-				(LPTHREAD_START_ROUTINE)&YSM_Start_DC,
-				NULL,
-				0,
-				&_thid[2] );
-
-#elif OS2
-	t_netid = _beginthread( (void *)&YSM_Start_Network,
-				NULL,
-				THREADSTACKSIZE,
-				NULL
-				);
-
-	t_cycleid = _beginthread( (void *)&YSM_Start_Cycle,
-				NULL,
-				THREADSTACKSIZE,
-				NULL
-				);
-
-	if (!YSM_SETTING_DCDISABLE)
-		t_dcid = _beginthread( (void *)&YSM_Start_DC,
-				NULL,
-				THREADSTACKSIZE,
-				NULL
-				);
+    /* Take the main thread for the prompt */
+    prompt_thread();
 #else
-	pthread_create( &t_netid, NULL, (void *)&YSM_Start_Network, NULL );
-	pthread_create( &t_cycleid, NULL, (void *)&YSM_Start_Cycle, NULL );
-	
-	if (!YSM_SETTING_DCDISABLE)
-		pthread_create( &t_dcid, NULL, (void *)&YSM_Start_DC, NULL );
-
-#endif
-	/* Take the main thread for the prompt */
-	YSM_Start_Prompt();
-#else
-	YSM_Start ();
+    start();
 #endif
 
-	return( 0 );
+    return 0;
 }
 
 
-void
-YSM_Start_Prompt( void )
+void start_prompt(void)
 {
+    YSM_ConsoleReadInit();
 
-	YSM_ConsoleReadInit();
-
-#ifdef YSM_WITH_THREADS
-	YSM_LastKA = YSM_idletime = time(NULL);
-	
-	while (!YSM_Reason_To_Suicide) {
-
-#endif
-		FD_Init(FD_KEYBOARD);
-		FD_Add(0, FD_KEYBOARD);
-
-#ifndef YSM_WITH_THREADS
-
-		FD_Select(FD_KEYBOARD);
-
-		if (FD_IsSet(0, FD_KEYBOARD))
-#endif
-			YSM_ConsoleRead();
-
-#ifdef YSM_WITH_THREADS
-		YSM_Thread_Sleep( 0, 10 );
-#ifdef WIN32
-		/* This function will make the thread exit cleanly	*/
-		/* in case YSM is called to exit			*/
-		YSM_CommitSuicide();
-#endif
-	}
-#endif
-
+    FD_Init(FD_KEYBOARD);
+    FD_Add(0, FD_KEYBOARD);
+    FD_Select(FD_KEYBOARD);
+    if (FD_IsSet(0, FD_KEYBOARD))
+        YSM_ConsoleRead();
 }
 
-void
-YSM_Start_Network( void )
+static void start_network(void)
 {
+    FD_Timeout(0, 1000);
+    FD_Init(FD_NETWORK);
+    if (YSM_USER.network.rSocket)
+        FD_Add(YSM_USER.network.rSocket, FD_NETWORK);
 
-#ifdef YSM_WITH_THREADS
+    FD_Select(FD_NETWORK);
 
-	if (YSM_SignIn() < 0) YSM_Error(ERROR_NETWORK, __FILE__, __LINE__, 0);
+    if (FD_IsSet(YSM_USER.network.rSocket, FD_NETWORK))
+        YSM_SrvResponse();
 
-	while (!YSM_Reason_To_Suicide) {
-#ifdef OS2
-		/* fixes an infinite loop with 100% cpu? */
-		usleep(1);
-#endif
-#else
-		FD_Timeout(0, 1000);
-		FD_Init(FD_NETWORK);
-		if (YSM_USER.network.rSocket)
-			FD_Add(YSM_USER.network.rSocket, FD_NETWORK);
-
-		FD_Select(FD_NETWORK);
-
-		if (FD_IsSet(YSM_USER.network.rSocket, FD_NETWORK))
-#endif
-			YSM_SrvResponse();
-
-#ifndef YSM_WITH_THREADS
-		YSM_CycleChecks ();
-#endif
-
-#ifdef YSM_WITH_THREADS
-#ifdef WIN32
-		/* This function will make the thread exit cleanly	*/
-		/* in case YSM is called to exit			*/
-		YSM_CommitSuicide();
-#endif
-	}
-#endif
-
+    YSM_CycleChecks();
 }
 
-/* 
- * YSM_Start()  used when there is no Threads Support.
+/*
+ * start() used when there is no Threads Support.
  * What it does? Instead of re-writing a big function
  * we only write stuff that needs to be done once, and
  * on each Start function we leave out the while loops.
@@ -339,180 +182,157 @@ YSM_Start_Network( void )
  */
 
 #ifndef YSM_WITH_THREADS
-void
-YSM_Start( void )
+static void start(void)
 {
-	YSM_LastKA = YSM_idletime = time(NULL);
+    if (YSM_SignIn() < 0)
+        YSM_Error(ERROR_NETWORK, __FILE__, __LINE__, 0);
 
-	if (YSM_SignIn() < 0) YSM_Error(ERROR_NETWORK, __FILE__, __LINE__, 0);
-
-	while (!YSM_Reason_To_Suicide) {
-		YSM_Start_Prompt ();
-		YSM_Start_Network ();
-	}
+    while (!YSM_Reason_To_Suicide)
+    {
+        start_prompt();
+        start_network();
+    }
 }
 
 #else
-void 
-YSM_Start_Cycle( void )
+
+static void prompt_thread(void)
 {
-#ifdef WIN32
+    YSM_ConsoleReadInit();
 
-	if (YSM_USER.fishgui.port 
-		&& YSM_USER.fishgui.socket > 0 
-		&& YSM_USER.fishgui.hide_console) {
-
-		/* Hide the console for FishGUI */
-		HWND YSM_HWND = getConsoleWindowHandlebyTitle();
-
-		if (YSM_HWND != NULL) 
-			ShowWindow(YSM_HWND, SW_HIDE);
-
-	} else {
-		if (YSM_CreateHotKeyWindow() >= 0) {
-			/* register our YSM super dope hot key! */
-			YSM_WindowRegisterHotKey();
-		}
-	}
-
-#endif
-	while(!YSM_Reason_To_Suicide) {
-	
-		YSM_CycleChecks();
-		YSM_Thread_Sleep(0, 100);
-
-		YSM_DC_Select();
-
-#ifdef WIN32
-		/* This function will make the thread exit cleanly	*/
-		/* in case YSM is called to exit			*/
-		YSM_CommitSuicide();
-#endif
-	}
-
+    while (!YSM_Reason_To_Suicide)
+    {
+        FD_Init(FD_KEYBOARD);
+        FD_Add(0, FD_KEYBOARD);
+        YSM_ConsoleRead();
+        YSM_Thread_Sleep(0, 10);
+    }
 }
 
-void 
-YSM_Start_DC( void )
+static void network_thread(void)
 {
-YSM_SLAVE *slave = NULL;
+    if (YSM_SignIn() < 0)
+        YSM_Error(ERROR_NETWORK, __FILE__, __LINE__, 0);
 
-	while(!YSM_Reason_To_Suicide) {
-
-		slave = YSM_DC_Wait4Client();
-
-		if ( slave == NULL ) {
-			PRINTF( VERBOSE_DCON,
-				"Incoming DC request failed. "
-				"Connection closed.\n" );
-		} else {
-			PRINTF( VERBOSE_DCON,
-				"New DC connection request from slave %s\n",
-				slave->info.NickName );
-		}
-
-#ifdef WIN32
-		/* This function will make the thread exit cleanly	*/
-		/* in case YSM is called to exit			*/
-		YSM_CommitSuicide();
-#endif
-
-	}
+    while (!YSM_Reason_To_Suicide)
+    {
+        YSM_SrvResponse();
+    }
 }
 
+void YSM_Start_Cycle(void)
+{
+    while (!YSM_Reason_To_Suicide)
+    {
+        YSM_CycleChecks();
+        YSM_Thread_Sleep(0, 100);
+        YSM_DC_Select();
+    }
+}
+
+static void dc_thread(void)
+{
+    slave_t *slave = NULL;
+
+    while (!YSM_Reason_To_Suicide)
+    {
+        slave = YSM_DC_Wait4Client();
+
+        if (slave == NULL)
+        {
+            PRINTF(VERBOSE_DCON,
+                "Incoming DC request failed. "
+                "Connection closed.\n");
+        }
+        else
+        {
+            PRINTF(VERBOSE_DCON,
+                "New DC connection request from slave %s\n",
+                slave->info.NickName);
+        }
+    }
+}
 #endif
 
 
-/* SignIn to the ICQ Network			*/
-/* moduled for being able to 'reconnect'	*/
+/* SignIn to the ICQ Network             */
+/* moduled for being able to 'reconnect' */
 
-int
-YSM_SignIn( void ) 
+int YSM_SignIn(void)
 {
-u_int16_t	port = 0;
+    u_int16_t port = 0;
 
-	if (YSM_USER.proxy.proxy_flags & YSM_PROXY_HTTPS)
-		port = 443;
-	else
-		port = YSM_USER.network.auth_port;
+    if (YSM_USER.proxy.proxy_flags & YSM_PROXY_HTTPS)
+        port = 443;
+    else
+        port = YSM_USER.network.auth_port;
 
-	YSM_USER.network.rSocket = YSM_Connect(
-				YSM_USER.network.auth_host,
-				port,
-				0x1
-				);
+    YSM_USER.network.rSocket = YSM_Connect(
+        YSM_USER.network.auth_host,
+        port,
+        0x1);
 
-	if (YSM_USER.network.rSocket < 0) return YSM_USER.network.rSocket;
+    if (YSM_USER.network.rSocket < 0)
+        return YSM_USER.network.rSocket;
 
-	PRINTF(VERBOSE_BASE, "\rLogging in.. [");
-	YSM_Init_LoginA( YSM_USER.Uin, YSM_USER.password );
+    PRINTF(VERBOSE_BASE, "\rLogging in.. [");
+    YSM_Init_LoginA(YSM_USER.Uin, YSM_USER.password);
 
-	return YSM_USER.network.rSocket;
+    return YSM_USER.network.rSocket;
 }
 
-/*	This function takes care of the regular checks to be	
- *	done every 1, or 2 seconds. cool huh :) 	
+/*    This function takes care of the regular checks to be
+ *    done every 1, or 2 seconds. cool huh :)
  */
 
-void
-YSM_CycleChecks( void )
+void YSM_CycleChecks(void)
 {
-#ifdef WIN32
-	MSG		msg;
-#endif
+    if (g_sinfo.flags & FL_LOGGEDIN)
+    {
+        /* check if it is time to send keep alive */
+        if (get_timer(KEEP_ALIVE_TIMEOUT) > 58)
+        {
+            reset_timer(KEEP_ALIVE_TIMEOUT);
+            YSM_KeepAlive();
+        }
 
-	if (g_sinfo.flags & FL_LOGGEDIN) {
-		YSM_KeepAlive ();
+        /* check if we have to switch to away status */
+        if (g_cfg.awaytime > 0               /* is it enabled? */
+        && !(g_promptstatus.flags & FL_AFKM) /* we are not in AFK */
+        && (get_timer(IDLE_TIMEOUT)/60       /* minutes */
+            >= g_cfg.awaytime))              /* are over */
+        {
+            /* then check if we are in -online status-
+             * OR Free 4 Chat, which would be the same */
+            if (YSM_USER.status == STATUS_ONLINE
+            || YSM_USER.status == STATUS_FREE_CHAT)
+            {
+                /* finally. change status */
+                YSM_ChangeStatus(STATUS_AWAY);
+                g_promptstatus.flags |= FL_REDRAW;
+                g_promptstatus.flags |= FL_AUTOAWAY;
+            }
+        }
 
-		/********** check if we have to switch to away status *****/
-		if (YSM_SETTING_AWAYTIME > 0	/* is it enabled? */
-		&& !(g_promptstatus.flags & FL_AFKM) /* we are not in AFK */	
-		&& ((time(NULL) - YSM_idletime)/60	/* minutes */
-			>= YSM_SETTING_AWAYTIME))	/* are over */
-		{
-			/* then check if we are in -online status- 
-			 * OR Free 4 Chat, which would be the same */
-			if (YSM_USER.status == STATUS_ONLINE 
-			|| YSM_USER.status == STATUS_FREE_CHAT) {
-				/* finally. change status */
-				YSM_ChangeStatus(STATUS_AWAY);
-				g_promptstatus.flags |= FL_REDRAW;
-				g_promptstatus.flags |= FL_AUTOAWAY;
-			}
-			
-		}
+        /* check if we have to check the command file */
+        if (get_timer(COMMAND_FILE_CHECK_TIMEOUT) >= YSM_COMMANDSTIME)
+        {
+            YSM_CheckCommandsFile();
+            reset_timer(COMMAND_FILE_CHECK_TIMEOUT);
+        }
 
-		/*************** read commands from the fish gui ****/
-		FishGUI_runcmds();
+        /* only redraw console if display isn't busy (Threads) */
+        if ((g_promptstatus.flags & FL_REDRAW)
+        && !(g_promptstatus.flags & FL_BUSYDISPLAY))
+        {
+            /* only redraw the prompt fully if it was overwritten */
+            if (g_promptstatus.flags & FL_OVERWRITTEN)
+                YSM_ConsoleRedrawPrompt(TRUE);
+            else
+                YSM_ConsoleRedrawPrompt(FALSE);
 
-		if ((time(NULL) - YSM_LastCmdsTime) >= YSM_COMMANDSTIME) {
-			YSM_CheckCommandsFile();
-			YSM_LastCmdsTime = time(NULL);
-		}
-
-		/* Only redraw console if display isn't busy (Threads) */
-		if ((g_promptstatus.flags & FL_REDRAW)
-			&& !(g_promptstatus.flags & FL_BUSYDISPLAY)) {
-
-			/* only redraw the prompt fully if it was overwritten */
-			if (g_promptstatus.flags & FL_OVERWRITTEN)
-				YSM_ConsoleRedrawPrompt(TRUE);
-			else
-				YSM_ConsoleRedrawPrompt(FALSE);
-
-			g_promptstatus.flags &= ~FL_OVERWRITTEN;
-			g_promptstatus.flags &= ~FL_REDRAW;
-		}
-
-	}
-
-#ifdef WIN32
-	if ( PeekMessage( &msg, g_hYSMHiddenWnd, 0, 0, PM_REMOVE ) ) {		
-			TranslateMessage( &msg );
-			DispatchMessage( &msg );
-	}
-#endif
-	
+            g_promptstatus.flags &= ~FL_OVERWRITTEN;
+            g_promptstatus.flags &= ~FL_REDRAW;
+        }
+    }
 }
-
-

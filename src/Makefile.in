@@ -20,7 +20,7 @@ DESTDIR=
 
 PROG=		ysm
 PROG_FLAGS=	$(CFLAGS) $(CPPFLAGS)
-SRCS=		YSM_Main.c YSM_Network.c YSM_Setup.c YSM_ToolBox.c YSM_Charset.c YSM_Win32.c YSM_Lists.c YSM_Slaves.c YSM_Commands.c YSM_Prompt.c YSM_Wrappers.c YSM_Crypt.c YSM_Direct.c YSM_FishGUI.c
+SRCS=		main.c network.c setup.c toolbox.c charset.c lists.c slaves.c commands.c prompt.c wrappers.c crypt.c direct.c misc.c timers.c
 OBJS=		$(SRCS:.c=.o)
 EXTERN_OBJS=	rijndael/rijndael-alg-fst.o rijndael/rijndael-api-fst.o $(CMDOBJS)
 

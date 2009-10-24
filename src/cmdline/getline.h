@@ -10,8 +10,9 @@
 /* Result codes available for gl_get_result() */
 #define GL_OK 0				/* Valid line of input entered */
 #define GL_EOF (-1)			/* End of input */
-#define GL_INTERRUPT (-2)		/* User hit Ctrl+C */
-#define GL_SUSPEND (-3)			/* User hit Ctrl+Z */
+#define GL_INTERRUPT (-2)   /* User hit Ctrl+C */
+#define GL_SUSPEND (-3)     /* User hit Ctrl+Z */
+#define GL_FAIL 0xffff      /* Max int value don't overflow any charcode */
 
 typedef int (*gl_in_hook_proc)(char *);
 typedef int (*gl_out_hook_proc)(char *);

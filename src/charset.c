@@ -25,12 +25,10 @@ For Contact information read the AUTHORS file.
 
 */
 
-#include "YSM.h"
-__RCSID("$Id: YSM_Charset.c,v 1.32 2005/09/04 01:36:48 rad2k Exp $");
-
-#include "YSM_Wrappers.h"
-#include "YSM_Charset.h"
-#include "YSM_Direct.h"
+#include "ysm.h"
+#include "wrappers.h"
+#include "charset.h"
+#include "direct.h"
 
 #ifdef YSM_USE_CHARCONV
 
@@ -62,14 +60,14 @@ int8_t	converr_marker = FALSE;
 	if (strlen(charset_from) <= 1 || strlen(charset_to) <= 1)
 		return -1;
 
-	if (!(buffy = YSM_Calloc(1, YSM_ICONV_MAXLEN, __FILE__, __LINE__))) 
+	if (!(buffy = ysm_calloc(1, YSM_ICONV_MAXLEN, __FILE__, __LINE__))) 
 		return -1;
 
 	/* Do we need to alloc buf_to? is it already in the heap? */
 	if (*buf_to == NULL) {
-		if (!(*buf_to = YSM_Calloc(1, maxlen, __FILE__, __LINE__)))
+		if (!(*buf_to = ysm_calloc(1, maxlen, __FILE__, __LINE__)))
 		{ 
-			YSM_Free(buffy, __FILE__, __LINE__ );	
+			ysm_free(buffy, __FILE__, __LINE__ );	
 			buffy = NULL;
 			return -1;
 		}
@@ -84,7 +82,7 @@ int8_t	converr_marker = FALSE;
 	|| (ucs4_2_output == (iconv_t)(-1)) )
 	{
 		/* probably the charset passed to iconv isnt supported */
-		YSM_Free(buffy, __FILE__, __LINE__ );
+		ysm_free(buffy, __FILE__, __LINE__ );
 		buffy = NULL;
 
 		if (ASCII_2_ucs4 != (iconv_t)(-1))
@@ -198,7 +196,7 @@ int8_t	converr_marker = FALSE;
 	/* update length */
 	*buf_fromlen = (maxlen - 1) - bytes_out;
 	
-	YSM_Free(buffy, __FILE__, __LINE__ );	
+	ysm_free(buffy, __FILE__, __LINE__ );	
 	buffy = NULL;
 	iconv_close(ASCII_2_ucs4);
 	iconv_close(input_2_ucs4);
@@ -226,7 +224,7 @@ u_int16_t	c;
 	}
 
 	/* Get enough space in the heap */
-	out = YSM_Calloc( 1, size+1, __FILE__, __LINE__ );
+	out = ysm_calloc( 1, size+1, __FILE__, __LINE__ );
 	if (out == NULL) return NULL;
 
 	/* Reset index and start the convertion */
@@ -270,7 +268,7 @@ u_int16_t	c;
 	}
 
 	/* Get enough space in the heap */
-	out = YSM_Malloc( (size+1) * sizeof( wchar_t ), __FILE__, __LINE__ );
+	out = ysm_malloc( (size+1) * sizeof( wchar_t ), __FILE__, __LINE__ );
 	if (out == NULL) return NULL;
 
 	/* Reset index and start the convertion */
@@ -314,7 +312,7 @@ int32_t	wchars, err;
 		return -1;
 
 	/* unicode is always freed */	
-	unicode = YSM_Calloc( wchars + 1,
+	unicode = ysm_calloc( wchars + 1,
 			sizeof( u_int16_t ),
 			__FILE__,
 			__LINE__ );	
@@ -329,7 +327,7 @@ int32_t	wchars, err;
 			wchars );
 
 	if (err != wchars) {
-		YSM_Free( unicode, __FILE__, __LINE__ );
+		ysm_free( unicode, __FILE__, __LINE__ );
 		unicode = NULL;
 		return -1;
 	}
@@ -337,12 +335,12 @@ int32_t	wchars, err;
 	if (*to != NULL) {
 		/* freaking weird,
 		 * but we need to free whatever was on *to before */
-		YSM_Free( *to, __FILE__, __LINE__ );
+		ysm_free( *to, __FILE__, __LINE__ );
 		*to = NULL;
 	}
 
 	*to = unicode_utf8( unicode );
-	YSM_Free( unicode, __FILE__, __LINE__ );
+	ysm_free( unicode, __FILE__, __LINE__ );
 	unicode = NULL;
 
 	return 0;
@@ -379,7 +377,7 @@ u_int32_t codepage = CP_ACP;
 	 * chars CONTAINS the ending NULL byte, no need to + 1
 	 */
 	if (*to == NULL) {
-		if (!(*to = YSM_Calloc( chars,
+		if (!(*to = ysm_calloc( chars,
 					sizeof(u_int8_t),
 					__FILE__,
 					__LINE__))) {
@@ -428,7 +426,7 @@ u_int32_t codepage = CP_ACP;
 				NULL );
 
 	if (!chars) {
-		YSM_Free( unicode, __FILE__, __LINE__ );
+		ysm_free( unicode, __FILE__, __LINE__ );
 		unicode = NULL;
 		return -1;
 	}
@@ -437,11 +435,11 @@ u_int32_t codepage = CP_ACP;
 	 * chars CONTAINS the ending NULL byte, no need to + 1
 	 */
 	if (*to == NULL) {
-		if (!(*to = YSM_Calloc( chars,
+		if (!(*to = ysm_calloc( chars,
 					sizeof(u_int8_t),
 					__FILE__,
 					__LINE__))) {
-			YSM_Free( unicode, __FILE__, __LINE__ );
+			ysm_free( unicode, __FILE__, __LINE__ );
 			unicode = NULL;
 			return -1;
 		}
@@ -456,12 +454,12 @@ u_int32_t codepage = CP_ACP;
 				NULL,
 				NULL );
 	if (err != chars) {
-		YSM_Free( unicode, __FILE__, __LINE__ );
+		ysm_free( unicode, __FILE__, __LINE__ );
 		unicode = NULL;
 		return -1;
 	}
 
-	YSM_Free( unicode, __FILE__, __LINE__ );
+	ysm_free( unicode, __FILE__, __LINE__ );
 	unicode = NULL;
 	return 1;
 }
@@ -473,58 +471,58 @@ u_int32_t codepage = CP_ACP;
  */
 
 void
-YSM_CharsetInit( void )
+YSM_CharsetInit(void)
 {
 #ifdef WIN32
 u_int32_t	cp = 0;
 
 	/* Did the user specify a CHARSET_LOCAL? */
-	if (!YSM_SETTING_CHARSET_LOCAL[0]) {
+	if (!g_cfg.charset_local[0]) {
 		/* Use CP_ACP(1252) as the default CHARSET_LOCAL.
 		 * Its Western Europe */
 		cp = 1252;
-		memset( YSM_SETTING_CHARSET_LOCAL, 0, MAX_CHARSET + 4 );
-		strncpy( YSM_SETTING_CHARSET_LOCAL,
+		memset( g_cfg.charset_local, 0, MAX_CHARSET + 4 );
+		strncpy( g_cfg.charset_local,
 			"1252",
-			sizeof(YSM_SETTING_CHARSET_LOCAL) - 1);
+			sizeof(g_cfg.charset_local) - 1);
 	} else
-		cp = atoi(YSM_SETTING_CHARSET_LOCAL);
+		cp = atoi(g_cfg.charset_local);
 
 	/* only continue if it didn't fail */	
 	if (SetConsoleOutputCP( cp ) != 0) {
 		
 		/* Did the user specify a CHARSET_TRANS? */
-		if (!YSM_SETTING_CHARSET_TRANS[0]) {
+		if (!g_cfg.charset_trans[0]) {
 			/* Use CP_ACP(1252) as the default CHARSET_TRANS.
 			 * Its Western Europe */
 			cp = 1252;
-			memset( YSM_SETTING_CHARSET_TRANS, 0, MAX_CHARSET + 4 );
-			strncpy( YSM_SETTING_CHARSET_TRANS,
+			memset( g_cfg.charset_trans, 0, MAX_CHARSET + 4 );
+			strncpy( g_cfg.charset_trans,
 				"1252",
-				sizeof(YSM_SETTING_CHARSET_TRANS) - 1);
+				sizeof(g_cfg.charset_trans) - 1);
 		} else
-			cp = atoi(YSM_SETTING_CHARSET_TRANS);
+			cp = atoi(g_cfg.charset_trans);
 
 		SetConsoleCP( cp );
 
 	}
 #else
 	/* Did the user specify a CHARSET_LOCAL? */
-	if (!YSM_SETTING_CHARSET_LOCAL[0]) {
+	if (!g_cfg.charset_local[0]) {
 		/* Use CP1252 as the default CHARSET_LOCAL */
-		memset( YSM_SETTING_CHARSET_LOCAL, 0, MAX_CHARSET + 4 );
-		strncpy( YSM_SETTING_CHARSET_LOCAL,
+		memset( g_cfg.charset_local, 0, MAX_CHARSET + 4 );
+		strncpy( g_cfg.charset_local,
 			"CP1252",
-			sizeof(YSM_SETTING_CHARSET_LOCAL) - 1);
+			sizeof(g_cfg.charset_local) - 1);
 	}
 
 	/* Did the user specify a CHARSET_TRANS? */
-	if (!YSM_SETTING_CHARSET_TRANS[0]) {
+	if (!g_cfg.charset_trans[0]) {
 		/* Use CP1252 as the default CHARSET_TRANS */
-		memset( YSM_SETTING_CHARSET_TRANS, 0, MAX_CHARSET + 4 );
-		strncpy( YSM_SETTING_CHARSET_TRANS,
+		memset( g_cfg.charset_trans, 0, MAX_CHARSET + 4 );
+		strncpy( g_cfg.charset_trans,
 			"CP1252",
-			sizeof(YSM_SETTING_CHARSET_TRANS) - 1);
+			sizeof(g_cfg.charset_trans) - 1);
 	}
 #endif
 }
@@ -550,11 +548,11 @@ int8_t	*cfrom = NULL, *cto = NULL;
 int32_t ret = 0;
 
 	if (direction == CHARSET_INCOMING) {
-                cfrom   = YSM_SETTING_CHARSET_TRANS;
-                cto     = YSM_SETTING_CHARSET_LOCAL;
+                cfrom   = g_cfg.charset_trans;
+                cto     = g_cfg.charset_local;
 	} else if (direction == CHARSET_OUTGOING) {
-		cto	= YSM_SETTING_CHARSET_TRANS;
-		cfrom	= YSM_SETTING_CHARSET_LOCAL;
+		cto	= g_cfg.charset_trans;
+		cfrom	= g_cfg.charset_local;
 	} else return -1;
 
 	if (!cfrom || !cto || !buf_from || !buf_fromlen || !buf_to) 
@@ -608,19 +606,19 @@ int32_t ret = 0;
 			int8_t		*cbuf = NULL, *outstring = NULL;
 			
 				size = strlen(*buf_to) + 1;	
-				us = (FriBidiChar *) YSM_Malloc(
+				us = (FriBidiChar *) ysm_malloc(
 						size * sizeof(FriBidiChar),
 						__FILE__,
 						__LINE__
 						);
 
-				out_us = (FriBidiChar *) YSM_Malloc(
+				out_us = (FriBidiChar *) ysm_malloc(
 						size * sizeof(FriBidiChar),
 						__FILE__,
 						__LINE__
 						);
 
-				outstring = (int8_t *) YSM_Malloc( 
+				outstring = (int8_t *) ysm_malloc( 
 						size * sizeof(int8_t),
 						__FILE__,
 						__LINE__
@@ -629,11 +627,11 @@ int32_t ret = 0;
 				cbuf = strdup(*buf_to);
 				if (cbuf == NULL) {
 					/* if failed continue normally */
-					YSM_Free(us, __FILE__, __LINE__);
+					ysm_free(us, __FILE__, __LINE__);
 					us = NULL;
-					YSM_Free(out_us, __FILE__, __LINE__);
+					ysm_free(out_us, __FILE__, __LINE__);
 					out_us = NULL;
-					YSM_Free(outstring, __FILE__, __LINE__);
+					ysm_free(outstring, __FILE__, __LINE__);
 					outstring = NULL;
 				} else {
 					base = FRIBIDI_TYPE_N;
@@ -652,13 +650,13 @@ int32_t ret = 0;
 								size - 1,
 								outstring );
 
-					YSM_Free(us, __FILE__, __LINE__);
+					ysm_free(us, __FILE__, __LINE__);
 					us = NULL;
-					YSM_Free(out_us, __FILE__, __LINE__);
+					ysm_free(out_us, __FILE__, __LINE__);
 					out_us = NULL;
-					YSM_Free(cbuf, __FILE__, __LINE__);
+					ysm_free(cbuf, __FILE__, __LINE__);
 					cbuf = NULL;
-					YSM_Free(*buf_to, __FILE__, __LINE__);
+					ysm_free(*buf_to, __FILE__, __LINE__);
 					*buf_to = NULL;
 
 					*buf_to = outstring;
@@ -671,7 +669,7 @@ int32_t ret = 0;
 			/* else leave things as they are */
 		} else  {
 			if (*buf_to) {
-				YSM_Free(*buf_to, __FILE__, __LINE__);
+				ysm_free(*buf_to, __FILE__, __LINE__);
 				*buf_to = NULL;
 			}
 			return ret;
@@ -693,7 +691,7 @@ int32_t ret = 0;
 #endif
 		if (ret < 0) {
 			if (*buf_to) {
-				YSM_Free(*buf_to, __FILE__, __LINE__);
+				ysm_free(*buf_to, __FILE__, __LINE__);
 				*buf_to = NULL;
 			}
 			return ret;
@@ -716,7 +714,7 @@ int32_t ret = 0;
 
 		if (ret < 0) {
 			if (*buf_to) {
-				YSM_Free(*buf_to, __FILE__, __LINE__);
+				ysm_free(*buf_to, __FILE__, __LINE__);
 				*buf_to = NULL;
 			}
 			return ret;
@@ -743,7 +741,7 @@ int32_t		bits = 0, data = 0, src_len = 0, dst_len = 0;
 	/* make base64 string */
         src_len = strlen(str);
         dst_len = (src_len+2)/3*4;
-        buf = YSM_Malloc( dst_len+1, __FILE__, __LINE__ );
+        buf = ysm_malloc( dst_len+1, __FILE__, __LINE__ );
         src = str; dst = (u_int8_t *)buf;
 
         while ( dst_len-- ) {
@@ -829,7 +827,7 @@ int8_t		*newp = NULL;
 
 	/* free the original buffer if required */
 	if (fl_dofree) {
-		YSM_Free( *stringp, __FILE__, __LINE__ );
+		ysm_free( *stringp, __FILE__, __LINE__ );
 		*stringp = NULL;
 	}
 

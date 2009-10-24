@@ -25,16 +25,19 @@ For Contact information read the AUTHORS file.
 
 */
 
-#ifndef _YSMMAINH_
-#define _YSMMAINH_
+#ifndef _MAIN_H_
+#define _MAIN_H_
 
-void YSM_Start_Prompt( void );
-void YSM_Start_Network( void );
-void YSM_Start_DC( void );
+static void start(void);
+static void start_prompt(void);
+static void start_network(void);
 
-void YSM_Start( void );
-void YSM_Start_Cycle( void );
-int YSM_SignIn( void );
-void YSM_CycleChecks( void );
+static void prompt_thread(void);
+static void network_thread(void);
+static void dc_thread(void);
+static void YSM_Start_Cycle(void);
+
+int YSM_SignIn(void);
+void YSM_CycleChecks(void);
 
 #endif

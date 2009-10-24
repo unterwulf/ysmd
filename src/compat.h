@@ -1,7 +1,7 @@
-/*	$Id: YSM_Compat.h,v 1.3 2005/02/06 01:10:20 rad2k Exp $	*/
+/*    $Id: YSM_Compat.h,v 1.3 2005/02/06 01:10:20 rad2k Exp $    */
 /*
 -======================== ysmICQ client ============================-
-		Having fun with a boring Protocol
+        Having fun with a boring Protocol
 -======================== YSM_Compat.h ================================-
 
 YSM (YouSickMe) ICQ Client. An Original Multi-Platform ICQ client.
@@ -25,31 +25,18 @@ For Contact information read the AUTHORS file.
 
 */
 
-#ifndef _YSMCOMPATH_
-#define _YSMCOMPATH_
+#ifndef _COMPAT_H_
+#define _COMPAT_H_
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
-#include <time.h>
 #include <assert.h>
 #include <ctype.h>
 #include <errno.h>
 #include <sys/types.h>
 
-#ifdef OS2
-#include "YSM_os2.h"
-#endif
-
-#ifdef WIN32
-#include <conio.h>
-#include <winsock.h>
-#include <sys/timeb.h>
-#include <sys/stat.h>
-#include <windows.h>
-#include <mmsystem.h>
-#else
 #include <unistd.h>
 #include <sys/wait.h>
 #include <sys/time.h>
@@ -58,13 +45,8 @@ For Contact information read the AUTHORS file.
 #include <signal.h>
 #include <termios.h>
 #include <unistd.h>
-#endif
 
-#if defined(BEOS) || defined(OS2)
-#include <sys/select.h>
-#endif
-
-#include "YSM_Lang.h"
+#include "lang.h"
 #include "rijndael/rijndael-api-fst.h"
 
 #ifdef WIN32
@@ -75,69 +57,45 @@ For Contact information read the AUTHORS file.
 #define YSM_WITH_THREADS
 #endif
 
-#define THREADS_COUNT	0x3
+#define THREADS_COUNT    0x3
 
 #if defined(YSM_WITH_THREADS)
-#if !defined(WIN32) && (!defined(OS2))
 #include <pthread.h>
-#endif
-#endif
-
-#ifdef WIN32
-#define putch		_putch
-#define	close		closesocket
-#define snprintf	_snprintf
-#define strcasecmp	_stricmp
-#define strncasecmp	_strnicmp
 #endif
 
 /* used in *nix systems lacking posix data types */
-#ifdef MISSING_SIGNED	
-typedef signed char	int8_t;
-typedef signed short	int16_t;
-typedef signed int	int32_t;
-#endif
-#ifdef MISSING_UNSIGNED
-typedef	unsigned char	u_int8_t;
-typedef unsigned short	u_int16_t;
-typedef unsigned int	u_int32_t;
+#ifdef MISSING_SIGNED
+typedef signed char    int8_t;
+typedef signed short   int16_t;
+typedef signed int     int32_t;
 #endif
 
-#ifdef WIN32
-typedef signed char	int8_t;
-typedef	unsigned char	u_int8_t;
-typedef signed short	int16_t;
-typedef unsigned short	u_int16_t;
-typedef signed int	int32_t;
-typedef unsigned int	u_int32_t;
-typedef SSIZE_T		ssize_t;
-#else
+#ifdef MISSING_UNSIGNED
+typedef unsigned char  u_int8_t;
+typedef unsigned short u_int16_t;
+typedef unsigned int   u_int32_t;
+#endif
+
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
-#endif
 
 #ifndef __RCSID
 #define __RCSID(x)
 #endif
 
-#if !defined (WIN32) && !defined (TRUE)
+#if !defined (TRUE)
 #define FALSE 0
-#define TRUE !FALSE 
+#define TRUE !FALSE
 #endif
 
-#ifdef WIN32
-#define SOCK_READ(x,y,z) recv(x,y,z,0)
-#define SOCK_WRITE(x,y,z) send(x,y,z,0)
-#else
 #define SOCK_READ(x,y,z) read(x,y,z)
 #define SOCK_WRITE(x,y,z) write(x,y,z)
-#endif
 
-#define NUM_ELEM_ARR(arr)	((ssize_t)(sizeof((arr))/sizeof((arr)[0])))
+#define NUM_ELEM_ARR(arr)    ((ssize_t)(sizeof((arr))/sizeof((arr)[0])))
 
 #define WHITE "\x1B[0;1;37m"
 #define TERMINAL_DEFAULT "\x1B[0m"
@@ -154,41 +112,41 @@ typedef SSIZE_T		ssize_t;
 #define GRAY "\x1B[1;30m"
 #define NORMAL "\x1B[0;37m"
 
-#define BRIGHT_BLACK	"\x1B[0;1;30m"
-#define BRIGHT_RED	"\x1B[0;1;31m"
-#define BRIGHT_GREEN	"\x1B[0;1;32m"
-#define BRIGHT_BROWN	"\x1B[0;1;33m"
-#define BRIGHT_BLUE	"\x1B[0;1;34m"
-#define BRIGHT_MAGENTA	"\x1B[0;1;35m"
-#define BRIGHT_CYAN	"\x1B[0;1;36m"
-#define BRIGHT_GRAY	"\x1B[0;0;37m"
-#define BRIGHT_WHITE	"\x1B[0;1;37m"
+#define BRIGHT_BLACK   "\x1B[0;1;30m"
+#define BRIGHT_RED     "\x1B[0;1;31m"
+#define BRIGHT_GREEN   "\x1B[0;1;32m"
+#define BRIGHT_BROWN   "\x1B[0;1;33m"
+#define BRIGHT_BLUE    "\x1B[0;1;34m"
+#define BRIGHT_MAGENTA "\x1B[0;1;35m"
+#define BRIGHT_CYAN    "\x1B[0;1;36m"
+#define BRIGHT_GRAY    "\x1B[0;0;37m"
+#define BRIGHT_WHITE   "\x1B[0;1;37m"
 #else
-#define RED	WHITE
-#define GREEN	WHITE
-#define BROWN	WHITE
-#define BLUE	WHITE
-#define MAGENTA	WHITE
-#define CYAN	WHITE
-#define GRAY	WHITE
-#define NORMAL	WHITE
+#define RED            WHITE
+#define GREEN          WHITE
+#define BROWN          WHITE
+#define BLUE           WHITE
+#define MAGENTA        WHITE
+#define CYAN           WHITE
+#define GRAY           WHITE
+#define NORMAL         WHITE
 
-#define BRIGHT_BLACK	WHITE
-#define BRIGHT_RED	WHITE
-#define BRIGHT_GREEN	WHITE
-#define BRIGHT_BROWN	WHITE
-#define BRIGHT_BLUE	WHITE
-#define BRIGHT_MAGENTA	WHITE
-#define BRIGHT_CYAN	WHITE
-#define BRIGHT_GRAY	WHITE
-#define BRIGHT_WHITE	WHITE
+#define BRIGHT_BLACK   WHITE
+#define BRIGHT_RED     WHITE
+#define BRIGHT_GREEN   WHITE
+#define BRIGHT_BROWN   WHITE
+#define BRIGHT_BLUE    WHITE
+#define BRIGHT_MAGENTA WHITE
+#define BRIGHT_CYAN    WHITE
+#define BRIGHT_GRAY    WHITE
+#define BRIGHT_WHITE   WHITE
 #endif
 
-#define CLRSCR		"\033[2J"
-#define HOMECUR		"\033[0;0H"
-#define BOLD		"\x1B[1m"
+#define CLRSCR         "\033[2J"
+#define HOMECUR        "\033[0;0H"
+#define BOLD           "\x1B[1m"
 
-#define DECONIFY	"\x1B[1;1;1t"
-#define ICONIFY		"\x1B[2;2;2t"
+#define DECONIFY       "\x1B[1;1;1t"
+#define ICONIFY        "\x1B[2;2;2t"
 
 #endif

@@ -25,8 +25,8 @@ For Contact information read the AUTHORS file.
 
 */
 
-#ifndef _YSMWRAPPERSH_
-#define _YSMWRAPPERSH_
+#ifndef _WRAPPERS_H_
+#define _WRAPPERS_H_
 int YSM_WRITE( int32_t sock, void *data, int32_t data_len );
 
 int
@@ -41,15 +41,15 @@ YSM_READ_LN(int32_t sock, int8_t *obuf, size_t maxsize);
 
 
 int32_t
-YSM_WRITE_DC( YSM_SLAVE *victim, int32_t sock, void *data, int32_t data_len);
+YSM_WRITE_DC( slave_t *victim, int32_t sock, void *data, int32_t data_len);
 
-void * YSM_Malloc( size_t size, char *file, int line );
-void * YSM_Calloc( size_t nmemb, size_t size, char *file, int line );
-void YSM_Free( void *what, char *file, int line );
+void * ysm_malloc( size_t size, char *file, int line );
+void * ysm_calloc( size_t nmemb, size_t size, char *file, int line );
+void ysm_free( void *what, char *file, int line );
 
 void YSM_Exit( int32_t status, int8_t ask );
 
-void YSM_Reconnect( void );
+void YSM_Reconnect(void);
 
 
 FILE * YSM_fopen(const char *path, const char *mode);

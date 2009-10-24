@@ -5,8 +5,21 @@
  * You may switch from an #undef to a #define in order to ACTIVATE a feature.
  * You may as well switch from a #define to an #undef in order to DISABLE it.
  */
-#ifndef _YSMCONFIGH_
-#define _YSMCONFIGH_
+#ifndef _CONFIG_H_
+#define _CONFIG_H_
+
+#define YSM_INFORMATION        "ysmICQ - Bringing ICQ back to life - "
+#define YSM_INFORMATION2       "2.9.9.1"
+
+#define YSM_CFGDIRECTORY       ".ysm"
+#define YSM_CFGFILENAME        "ysm-cfg"
+#define YSM_INCOMINGDIRECTORY  "incoming"
+#define YSM_SOUNDSDIRECTORY    "sounds"
+#define YSM_DEFAULTSRV         "login.icq.com"
+#define YSM_DEFAULTPORT        5190
+#define YSM_KEEPALIVETIME      90
+#define YSM_COMMANDSTIME       15
+#define YSM_FIFO               "/tmp/ysm"
 
 /* YSM_SILENT_SLAVES_STATUS:
  * if active, only 'x to offline' and 'offline to x' status changes are shown.
@@ -33,5 +46,4 @@
  *********************************************************/
 #undef YSM_TRACE_MEMLEAK
 
-
-#endif /* #ifndef _YSMCONFIGH_ */
+#endif /* _CONFIG_H_ */

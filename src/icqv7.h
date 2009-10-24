@@ -1,7 +1,7 @@
-/*	$Id: YSM_ICQv7.h,v 1.16 2005/08/16 00:21:22 rad2k Exp $	*/
+/*    $Id: YSM_ICQv7.h,v 1.16 2005/08/16 00:21:22 rad2k Exp $    */
 /*
 -======================== ysmICQ client ============================-
-		Having fun with a boring Protocol
+        Having fun with a boring Protocol
 -========================= YSM_ICQv7.h =============================-
 
 YSM (YouSickMe) ICQ Client. An Original Multi-Platform ICQ client.
@@ -25,13 +25,13 @@ For Contact information read the AUTHORS file.
 
 */
 
-#ifndef _YSMICQV7H_
-#define _YSMICQV7H_
+#ifndef _ICQV7_H_
+#define _ICQV7_H_
 
-#define FLAP_HEAD_SIZE 6	/* unaligned FLAP header size */
-#define SNAC_HEAD_SIZE 10	/* unaligned SNAC header size */
+#define FLAP_HEAD_SIZE 6    /* unaligned FLAP header size */
+#define SNAC_HEAD_SIZE 10    /* unaligned SNAC header size */
 
-#define YSM_PROTOCOL_VERSION	0x08
+#define YSM_PROTOCOL_VERSION    0x08
 
 /* Definicion de los tipos de Mensaje */
 
@@ -51,158 +51,158 @@ For Contact information read the AUTHORS file.
 
 /* Definicion de los Canales de habla (?) JA! */
 
-#define YSM_CHANNEL_NEWCON	0x01
-#define YSM_CHANNEL_SNACDATA	0x02
-#define YSM_CHANNEL_FLAPERR	0x03
-#define YSM_CHANNEL_CLOSECONN	0x04
-#define YSM_CHANNEL_CONNALIVE	0x05
+#define YSM_CHANNEL_NEWCON      0x01
+#define YSM_CHANNEL_SNACDATA    0x02
+#define YSM_CHANNEL_FLAPERR     0x03
+#define YSM_CHANNEL_CLOSECONN   0x04
+#define YSM_CHANNEL_CONNALIVE   0x05
 
 
 /* Capabilities */
 
-#define CAP_PRECAP	"\x09\x46\x13"
-#define CAP_PRERTF	"\x97\xb1\x27"
-#define CAP_POSCAP	"\x4c\x7f\x11\xd1\x82\x22\x44\x45\x53\x54\x00\x00"
-#define CAP_POSRTF	"\x24\x3c\x43\x34\xad\x22\xd6\xab\xf7\x3f\x14\x92" 
+#define CAP_PRECAP    "\x09\x46\x13"
+#define CAP_PRERTF    "\x97\xb1\x27"
+#define CAP_POSCAP    "\x4c\x7f\x11\xd1\x82\x22\x44\x45\x53\x54\x00\x00"
+#define CAP_POSRTF    "\x24\x3c\x43\x34\xad\x22\xd6\xab\xf7\x3f\x14\x92"
 
-#define CAP_SRVRELAY	"\x49"
-#define CAP_ISICQ	"\x44"
-#define CAP_UTF8	"\x4e"
-#define CAP_RTF		"\x51"	
+#define CAP_SRVRELAY  "\x49"
+#define CAP_ISICQ     "\x44"
+#define CAP_UTF8      "\x4e"
+#define CAP_RTF       "\x51"
 
-#define CAP_UTF8_GUID	"{0946134E-4C7F-11D1-8222-444553540000}"
-#define CAP_RTF_GUID	"{97B12751-243C-4334-AD22-D6ABF73F1492}"
+#define CAP_UTF8_GUID "{0946134E-4C7F-11D1-8222-444553540000}"
+#define CAP_RTF_GUID  "{97B12751-243C-4334-AD22-D6ABF73F1492}"
 
 /* Fingerprinting Capabilities */
 
-#define CAP_M2001	"\x2e\x7a\x64"									"\x75"										"\xfa\xdf\x4d\xc8\x88\x6f\xea\x35\x95\xfd\xb6\xdf"
+#define CAP_M2001    "\x2e\x7a\x64"                                    "\x75"                                        "\xfa\xdf\x4d\xc8\x88\x6f\xea\x35\x95\xfd\xb6\xdf"
 
-#define CAP_M2001_2	"\xa0\xe9\x3f"									"\x37"										"\x4f\xe9\xd3\x11\xbc\xd2\x00\x04\xac\x96\xdd\x96"	
+#define CAP_M2001_2    "\xa0\xe9\x3f"                                    "\x37"                                        "\x4f\xe9\xd3\x11\xbc\xd2\x00\x04\xac\x96\xdd\x96"
 
-#define CAP_M2002	"\x10\xcf\x40"									"\xd1"										"\x4f\xe9\xd3\x11\xbc\xd2\x00\x04\xac\x96\xdd\x96"
+#define CAP_M2002    "\x10\xcf\x40"                                    "\xd1"                                        "\x4f\xe9\xd3\x11\xbc\xd2\x00\x04\xac\x96\xdd\x96"
 
-#define CAP_MLITE	"\x56\x3f\xc8"									"\x09"										"\x0b\x6f\x41\xbd\x9f\x79\x42\x26\x09\xdf\xa2\xf3"
+#define CAP_MLITE    "\x56\x3f\xc8"                                    "\x09"                                        "\x0b\x6f\x41\xbd\x9f\x79\x42\x26\x09\xdf\xa2\xf3"
 
-#define CAP_SIMICQ	"\x97\xb1\x27"									"\x51"										"\x24\x3c\x43\x34\xad\x22\xd6\xab\xf7\x3f\x14\x48"
+#define CAP_SIMICQ    "\x97\xb1\x27"                                    "\x51"                                        "\x24\x3c\x43\x34\xad\x22\xd6\xab\xf7\x3f\x14\x48"
 
-#define CAP_MICQ	"mICQ \xa9 R.K. \x00\x00\x00\x00"
+#define CAP_MICQ    "mICQ \xa9 R.K. \x00\x00\x00\x00"
 
-#define CAP_TRILL_NORM	"\x97\xb1\x27"									"\x51"										"\x24\x3c\x43\x34\xad\x22\xd6\xab\xf7\x3f\x14\x09"
+#define CAP_TRILL_NORM    "\x97\xb1\x27"                                    "\x51"                                        "\x24\x3c\x43\x34\xad\x22\xd6\xab\xf7\x3f\x14\x09"
 
-#define CAP_TRILL_CRYPT	"\xf2\xe7\xc7"									"\xf4"										"\xfe\xad\x4d\xfb\xb2\x35\x36\x79\x8b\xdf\x00\x00"
+#define CAP_TRILL_CRYPT    "\xf2\xe7\xc7"                                    "\xf4"                                        "\xfe\xad\x4d\xfb\xb2\x35\x36\x79\x8b\xdf\x00\x00"
 
-#define CAP_LICQ	"\x09\x49\x13"									"\x49" CAP_POSCAP
+#define CAP_LICQ    "\x09\x49\x13"                                    "\x49" CAP_POSCAP
 
 
 
-enum CAP_FLAGS {	CAPFL_SRVRELAY	= 1, 
-			CAPFL_ISICQ	= 2,
-			CAPFL_UTF8	= 4,
-			CAPFL_RTF	= 8  };
- 
+enum CAP_FLAGS {    CAPFL_SRVRELAY    = 1,
+            CAPFL_ISICQ    = 2,
+            CAPFL_UTF8    = 4,
+            CAPFL_RTF    = 8  };
+
 /* Definicion de las familias de SNACs y Sub IDs en un arbol */
 
-#define YSM_BASIC_SERVICE_SNAC	0x01
-	#define YSM_CLI_SRV_ERROR	0x01
-	#define YSM_CLIENT_ONLINE	0x02
-	#define	YSM_SERVER_IS_READY	0x03 
-	#define YSM_REQUEST_SERVICE	0x04
-	#define YSM_SRV_REDIRECT	0x05
-	#define YSM_RATE_INFO_REQ	0x06
-	#define YSM_RATE_INFO_RESP	0x07
-	#define YSM_RATE_INFO_ACK	0x08
-	#define YSM_RATE_INFO_CHANGE	0x0a
-	#define YSM_SERVER_PAUSE	0x0b
-	#define YSM_SERVER_RESUME	0x0c
-	#define YSM_SCREEN_INFO_REQ	0x0e
-	#define YSM_SCREEN_INFO_RESP	0x0f
-	#define YSM_STATUS_CHANGE_ACK	0x0f
-	#define YSM_SERVER_EVIL_NOT	0x10
-	#define YSM_SERVER_MIGRATE	0x12
-	#define YSM_SERVER_MOTD		0x13
-	#define YSM_SET_PRIVACY_FLAGS	0x14
-	#define YSM_SERVER_KNOWN_URLS	0x15
-	#define YSM_SERVER_NOT_OPER	0x16
-	#define YSM_ICQ_CLIENT_NOTICE	0x17
-	#define YSM_ACK_ICQ_CLIENT	0x18
+#define YSM_BASIC_SERVICE_SNAC    0x01
+    #define YSM_CLI_SRV_ERROR    0x01
+    #define YSM_CLIENT_ONLINE    0x02
+    #define    YSM_SERVER_IS_READY    0x03
+    #define YSM_REQUEST_SERVICE    0x04
+    #define YSM_SRV_REDIRECT    0x05
+    #define YSM_RATE_INFO_REQ    0x06
+    #define YSM_RATE_INFO_RESP    0x07
+    #define YSM_RATE_INFO_ACK    0x08
+    #define YSM_RATE_INFO_CHANGE    0x0a
+    #define YSM_SERVER_PAUSE    0x0b
+    #define YSM_SERVER_RESUME    0x0c
+    #define YSM_SCREEN_INFO_REQ    0x0e
+    #define YSM_SCREEN_INFO_RESP    0x0f
+    #define YSM_STATUS_CHANGE_ACK    0x0f
+    #define YSM_SERVER_EVIL_NOT    0x10
+    #define YSM_SERVER_MIGRATE    0x12
+    #define YSM_SERVER_MOTD        0x13
+    #define YSM_SET_PRIVACY_FLAGS    0x14
+    #define YSM_SERVER_KNOWN_URLS    0x15
+    #define YSM_SERVER_NOT_OPER    0x16
+    #define YSM_ICQ_CLIENT_NOTICE    0x17
+    #define YSM_ACK_ICQ_CLIENT    0x18
 
 
-#define YSM_LOCATION_SRVC_SNAC	0x02
-#define YSM_BUDDY_LIST_SNAC	0x03
-	#define YSM_CLI_SRV_ERRMESG	0x01
-	#define YSM_CLI_REQ_RIGHTSINF	0x02
-	#define YSM_SRV_RIGHTS_INFO	0x03
-	#define YSM_CLI_ADD_BUDDY	0x04
-	#define YSM_CLI_REMOVE_BUDDY	0x05
-	#define YSM_CLI_WATCHER_QUERY	0x06
-	#define YSM_SRV_WATCHER_RESP	0x07
-	#define YSM_CLI_WATCHER_SUBREQ	0x08
-	#define YSM_SRV_WATCHER_NOTICE	0x09
-	#define YSM_SRV_REJECT_NOTICE	0x0a
-	#define YSM_SRV_ONCOMING_BUD	0x0b
-	#define YSM_SRV_OFFGOING_BUD	0x0c
+#define YSM_LOCATION_SRVC_SNAC    0x02
+#define YSM_BUDDY_LIST_SNAC    0x03
+    #define YSM_CLI_SRV_ERRMESG    0x01
+    #define YSM_CLI_REQ_RIGHTSINF    0x02
+    #define YSM_SRV_RIGHTS_INFO    0x03
+    #define YSM_CLI_ADD_BUDDY    0x04
+    #define YSM_CLI_REMOVE_BUDDY    0x05
+    #define YSM_CLI_WATCHER_QUERY    0x06
+    #define YSM_SRV_WATCHER_RESP    0x07
+    #define YSM_CLI_WATCHER_SUBREQ    0x08
+    #define YSM_SRV_WATCHER_NOTICE    0x09
+    #define YSM_SRV_REJECT_NOTICE    0x0a
+    #define YSM_SRV_ONCOMING_BUD    0x0b
+    #define YSM_SRV_OFFGOING_BUD    0x0c
 
-#define YSM_MESSAGING_SNAC	0x04
-	#define YSM_CLI_SRV_ERRORMSG	0x01
-	#define YSM_ADD_ICBM_PARAM	0x02
-	#define YSM_REMOVE_ICBM_PARAM	0x03
-	#define YSM_REQUEST_PARAM_INFO	0x04
-	#define YSM_PARAMETER_INFO	0x05
-	#define YSM_MESSAGE_FROM_CLIENT	0x06
-	#define YSM_MESSAGE_TO_CLIENT	0x07
-	#define YSM_EVIL_REQUEST	0x08
-	#define YSM_EVIL_REQ_REPLY	0x09
-	#define YSM_SRV_MISSED_CALLS	0x0a
-	#define YSM_CLIENT_ACK		0x0b
-	#define YSM_HOST_ACK		0x0c
+#define YSM_MESSAGING_SNAC    0x04
+    #define YSM_CLI_SRV_ERRORMSG    0x01
+    #define YSM_ADD_ICBM_PARAM    0x02
+    #define YSM_REMOVE_ICBM_PARAM    0x03
+    #define YSM_REQUEST_PARAM_INFO    0x04
+    #define YSM_PARAMETER_INFO    0x05
+    #define YSM_MESSAGE_FROM_CLIENT    0x06
+    #define YSM_MESSAGE_TO_CLIENT    0x07
+    #define YSM_EVIL_REQUEST    0x08
+    #define YSM_EVIL_REQ_REPLY    0x09
+    #define YSM_SRV_MISSED_CALLS    0x0a
+    #define YSM_CLIENT_ACK        0x0b
+    #define YSM_HOST_ACK        0x0c
 
-#define YSM_ICQV8FUNC_SNAC	0x13
-	#define YSM_CLI_REQ_ROSTER	0x05
-	#define YSM_SRV_SEND_ROSTER	0x06
-	#define YSM_SRV_CHANGE_ACK	0x0e
-	#define	YSM_SRV_ROSTER_OK	0x0f
+#define YSM_ICQV8FUNC_SNAC    0x13
+    #define YSM_CLI_REQ_ROSTER    0x05
+    #define YSM_SRV_SEND_ROSTER    0x06
+    #define YSM_SRV_CHANGE_ACK    0x0e
+    #define    YSM_SRV_ROSTER_OK    0x0f
 
-/* 	These are some extra definitions for uploading
-	the contacts to the servers.	*/
+/*     These are some extra definitions for uploading
+    the contacts to the servers.    */
 
-	#define YSM_SRV_BUDDY_AUTH	0x0e
-	#define YSM_SRV_BUDDY_NOAUTH	0x00
-	#define YSM_SRV_BUDDY_ERRADD	0x0a
+    #define YSM_SRV_BUDDY_AUTH    0x0e
+    #define YSM_SRV_BUDDY_NOAUTH    0x00
+    #define YSM_SRV_BUDDY_ERRADD    0x0a
 
 
-#define YSM_MULTIUSE_SNAC	0x15
-	#define YSM_CLI_SEND_REQ	0x02
-	#define YSM_SRV_SEND_RESP	0x03
+#define YSM_MULTIUSE_SNAC    0x15
+    #define YSM_CLI_SEND_REQ    0x02
+    #define YSM_SRV_SEND_RESP    0x03
 
-#define YSM_REGISTRATION_SNAC	0x17
-	#define YSM_CLI_SEND_REG	0x04
-	#define YSM_SRV_REPLY_REG	0x05
-	#define YSM_SRV_REFUSED_REG	0x01
+#define YSM_REGISTRATION_SNAC    0x17
+    #define YSM_CLI_SEND_REG    0x04
+    #define YSM_SRV_REPLY_REG    0x05
+    #define YSM_SRV_REFUSED_REG    0x01
 
-#define YSM_ADVERTISEMENT_SNAC	0x05
-#define YSM_INVITATION_C2C_SNAC	0x06
-#define YSM_ADMINISTRATIVE_SNAC	0x07
-#define YSM_POPUP_NOTICES_SNAC	0x08
-#define YSM_BOS_SPECIFIC_SNAC	0x09
-#define YSM_USER_LOOKUP_SNAC	0x0a
-#define YSM_STATS_SNAC		0x0b
-#define YSM_TRANSLATE_SNAC	0x0c
-#define YSM_CHAT_NAVIGAT_SNAC	0x0d
-#define YSM_CHAT_SNAC		0x0e
-#define YSM_UNKNOWN_SNAC	0x45
+#define YSM_ADVERTISEMENT_SNAC    0x05
+#define YSM_INVITATION_C2C_SNAC    0x06
+#define YSM_ADMINISTRATIVE_SNAC    0x07
+#define YSM_POPUP_NOTICES_SNAC    0x08
+#define YSM_BOS_SPECIFIC_SNAC    0x09
+#define YSM_USER_LOOKUP_SNAC    0x0a
+#define YSM_STATS_SNAC        0x0b
+#define YSM_TRANSLATE_SNAC    0x0c
+#define YSM_CHAT_NAVIGAT_SNAC    0x0d
+#define YSM_CHAT_SNAC        0x0e
+#define YSM_UNKNOWN_SNAC    0x45
 
 /* DC Packet Types */
-#define PEER_INIT		0xff
-#define PEER_INITACK		0x01
-#define PEER_MSG		0x02
-#define PEER_INIT2		0x03
+#define PEER_INIT        0xff
+#define PEER_INITACK        0x01
+#define PEER_MSG        0x02
+#define PEER_INIT2        0x03
 
-#define PEER_FILE_INIT		0x00
-#define PEER_FILE_INIT_ACK	0x01
-#define PEER_FILE_START		0x02
-#define PEER_FILE_START_ACK	0x03
-#define PEER_FILE_STOP		0x04
-#define PEER_FILE_SPEED		0x05
-#define PEER_FILE_DATA		0x06
+#define PEER_FILE_INIT        0x00
+#define PEER_FILE_INIT_ACK    0x01
+#define PEER_FILE_START       0x02
+#define PEER_FILE_START_ACK   0x03
+#define PEER_FILE_STOP        0x04
+#define PEER_FILE_SPEED       0x05
+#define PEER_FILE_DATA        0x06
 
 #endif

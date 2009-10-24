@@ -34,27 +34,27 @@ Take any of these definitions out of the comments.
 */
 
 #if defined (SPANISH)
-#include "YSMLangs/spanish.h"
+#include "langs/spanish.h"
 #elif defined (ENGLISH)
-#include "YSMLangs/english.h"
+#include "langs/english.h"
 #elif defined (RUSSIAN)
-#include "YSMLangs/russian.h"
+#include "langs/russian.h"
 #elif defined (SWEDISH)
-#include "YSMLangs/swedish.h"
+#include "langs/swedish.h"
 #elif defined (ITALIAN)
-#include "YSMLangs/italian.h"
+#include "langs/italian.h"
 #elif defined (GERMAN)
-#include "YSMLangs/german.h"
+#include "langs/german.h"
 #elif defined (BR_PORTUGUESE)
-#include "YSMLangs/portuguesebr.h"
+#include "langs/portuguesebr.h"
 #elif defined (FRENCH_ONE)
-#include "YSMLangs/french_1.h"
+#include "langs/french_1.h"
 #elif defined (FRENCH_TWO)
-#include "YSMLangs/french_2.h"
+#include "langs/french_2.h"
 #elif defined (CROATIAN)
-#include "YSMLangs/croatian.h"
+#include "langs/croatian.h"
 #elif defined (CZ)
-#include "YSMLangs/czech.h"
+#include "langs/czech.h"
 #else
-#include "YSMLangs/english.h"
+#include "langs/english.h"
 #endif

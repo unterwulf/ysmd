@@ -1,7 +1,7 @@
-/*	$Id: YSM_Setup.h,v 1.14 2005/09/04 01:36:48 rad2k Exp $	*/
+/*    $Id: YSM_Setup.h,v 1.14 2005/09/04 01:36:48 rad2k Exp $    */
 /*
 -======================== ysmICQ client ============================-
-		Having fun with a boring Protocol
+        Having fun with a boring Protocol
 -========================== YSM_Setup.h ============================-
 
 YSM (YouSickMe) ICQ Client. An Original Multi-Platform ICQ client.
@@ -25,40 +25,38 @@ For Contact information read the AUTHORS file.
 
 */
 
-#ifndef _YSMSETUPH_
-#define _YSMSETUPH_
+#ifndef _SETUP_H_
+#define _SETUP_H_
 
-int YSM_Initialize( void );
+int YSM_Initialize(void);
 void YSM_Setup(void);
+void init_default_config(ysm_config_t *cfg);
 
-void YSM_ReadConfig( FILE *fd, char reload );
-
+void YSM_ReadConfig(FILE *fd, char reload);
 void YSM_CreateConfig(void);
-
 void YSM_SaveConfig(void);
-void YSM_ReadSlaves( FILE *fd );
+void YSM_ReadSlaves(FILE *fd);
 
-YSM_SLAVE * YSM_QuerySlaves( unsigned short TYPE,
-	unsigned char	*Extra,
-	uin_t 		Uin,
-	unsigned int	reqid ) ;
+slave_t * YSM_QuerySlaves( unsigned short TYPE,
+    unsigned char    *Extra,
+    uin_t         Uin,
+    unsigned int    reqid ) ;
 
-void YSM_AddSlave ( char *Name, uin_t Uin ) ;
-void YSM_AddSlavetoDisk( YSM_SLAVE *victim );
-void YSM_DelSlave( YSM_SLAVE *victim, int fl);
+void YSM_AddSlave(char *Name, uin_t Uin);
+void YSM_AddSlaveToDisk(slave_t *victim);
+void YSM_DelSlave(slave_t *victim, int fl);
 
-FILE * YSM_OpenCFG ( void );
+FILE * YSM_OpenCFG(void);
 
-void YSM_CFGStatus ( char *validate ); 
+void YSM_CFGStatus(char *validate);
 void YSM_AFKMode(u_int8_t turnflag);
-void YSM_ReadLog (char *FileName, int logType);
+void YSM_ReadLog(char *FileName, int logType);
 int YSM_DisplayLogEntry(int8_t *buf, int32_t messageNum);
 
 int32_t YSM_VersionCheck(void);
 
-void YSM_AskProxyConfiguration( void );
-void YSM_HandleCommand (char *_argone);
-
-void YSM_ExecuteCommand( int argc, char **argv );
+void YSM_AskProxyConfiguration(void);
+void YSM_HandleCommand(char *_argone);
+void YSM_ExecuteCommand(int argc, char **argv);
 
 #endif

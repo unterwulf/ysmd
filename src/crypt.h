@@ -1,7 +1,7 @@
-/*	$Id: YSM_Crypt.h,v 1.10 2004/04/02 01:34:16 rad2k Exp $	*/
+/*    $Id: YSM_Crypt.h,v 1.10 2004/04/02 01:34:16 rad2k Exp $    */
 /*
 -======================== ysmICQ client ============================-
-		Having fun with a boring Protocol
+        Having fun with a boring Protocol
 -========================== YSM_Crypt.h ============================-
 
 YSM (YouSickMe) ICQ Client. An Original Multi-Platform ICQ client.
@@ -25,42 +25,39 @@ For Contact information read the AUTHORS file.
 
 */
 
-#ifndef _YSMCRYPTH_
-#define _YSMCRYPTH_
+#ifndef _CRYPT_H_
+#define _CRYPT_H_
 
 #include "rijndael/rijndael-api-fst.h"
 
-int YSM_EncryptData( char *plain_data, int len, keyInstance *cipherKey );
-int YSM_DecryptData( char *enc_data, keyInstance *cipherKey );
+int YSM_EncryptData(char *plain_data, int len, keyInstance *cipherKey);
+int YSM_DecryptData(char *enc_data, keyInstance *cipherKey);
 
-keyInstance * 
-YSM_EncryptAnyData( YSM_SLAVE	*contact,
-		int8_t		**m_data,
-		int32_t		*m_len,
-		u_int32_t	maxsize );
+keyInstance * YSM_EncryptAnyData(
+    slave_t *contact,
+    int8_t   **m_data,
+    int32_t   *m_len,
+    u_int32_t  maxsize);
 
-int32_t
-YSM_DecryptMessage( YSM_SLAVE	*contact,
-		int8_t		**m_data,
-		int32_t		*m_len,
-		keyInstance 	**crypt_key);
+int32_t YSM_DecryptMessage(
+    slave_t     *contact,
+    int8_t      **m_data,
+    int32_t      *m_len,
+    keyInstance **crypt_key);
 
-int32_t
-YSM_DecryptFileData( YSM_SLAVE	*contact,
-		int8_t		**m_data,
-		int32_t		*m_len,
-		keyInstance	**crypt_key );
+int32_t YSM_DecryptFileData(
+    slave_t    *contact,
+    int8_t      **m_data,
+    int32_t      *m_len,
+    keyInstance **crypt_key);
 
-int32_t
-YSM_KeyEmpty( char *key );
-
-int32_t
-YSM_ClearKey( YSM_SLAVE *slave );
+int32_t YSM_KeyEmpty(char *key);
+int32_t YSM_ClearKey(slave_t *slave);
 
 struct YSMCryptH
 {
-	unsigned char	id[2];
-	unsigned char	d_len[2];
+    unsigned char id[2];
+    unsigned char d_len[2];
 };
 
 #endif

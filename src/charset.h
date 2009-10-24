@@ -1,7 +1,7 @@
-/*	$Id: YSM_Charset.h,v 1.6 2004/03/21 02:12:26 rad2k Exp $	*/
+/*    $Id: YSM_Charset.h,v 1.6 2004/03/21 02:12:26 rad2k Exp $    */
 /*
 -======================== ysmICQ client ============================-
-		Having fun with a boring Protocol
+        Having fun with a boring Protocol
 -======================== YSM_Charset.h ============================-
 
 YSM (YouSickMe) ICQ Client. An Original Multi-Platform ICQ client.
@@ -25,37 +25,36 @@ For Contact information read the AUTHORS file.
 
 */
 
-#ifndef _YSM_UNICODE_H
-#define _YSM_UNICODE_H
+#ifndef _CHARSET_H_
+#define _CHARSET_H_
 
-#define CHARSET_INCOMING	0x00
-#define CHARSET_OUTGOING	0x01
+#define CHARSET_INCOMING    0x00
+#define CHARSET_OUTGOING    0x01
 
 #ifdef YSM_USE_CHARCONV
-#ifndef WIN32
 #include <iconv.h>
 #define YSM_ICONV_MAXLEN MAX_DATA_LEN * 4
 #endif
-#endif
 
-void YSM_CharsetInit( void );
+void YSM_CharsetInit(void);
 
-int32_t
-YSM_Charset( int8_t	direction,
-	int8_t		*buf_from,
-	int32_t		*buf_fromlen,
-	int8_t		**buf_to,
-	u_int8_t	m_flags );
+int32_t YSM_Charset(
+    int8_t     direction,
+    int8_t    *buf_from,
+    int32_t   *buf_fromlen,
+    int8_t   **buf_to,
+    u_int8_t   m_flags);
 
-int8_t * 
-YSM_CharsetConvertOutputString(int8_t	**stringp,
-			int8_t		fl_dofree );
+int8_t * YSM_CharsetConvertOutputString(
+    int8_t **stringp,
+    int8_t   fl_dofree);
 
-int32_t
-YSM_CharsetConvertString( int8_t	**stringp,
-			int8_t		direction,
-			u_int8_t	flags,	
-			int8_t		fl_dofree );
+int32_t YSM_CharsetConvertString(
+    int8_t **stringp,
+    int8_t   direction,
+    u_int8_t flags,
+    int8_t   fl_dofree);
 
-int8_t * YSM_encode64( const int8_t *str );
+int8_t * YSM_encode64(const int8_t *str);
+
 #endif

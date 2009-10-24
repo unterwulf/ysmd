@@ -1,11 +1,9 @@
-/*	$Id: YSM_Lists.h,v 1.4 2003/10/01 01:48:50 rad2k Exp $	*/
 /*
--======================== ysmICQ client ============================-
-		Having fun with a boring Protocol
--========================= YSM_Lists.h =============================-
+-================================ lists.h ===================================-
 
 YSM (YouSickMe) ICQ Client. An Original Multi-Platform ICQ client.
-Copyright (C) 2002 rad2k Argentina.
+Copyright (c) 2007 rad2k Argentina.
+Copyright (c) 2008 vs Russia
 
 YSM is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -26,24 +24,32 @@ For Contact information read the AUTHORS file.
 
 */
 
-#ifndef _YSMLISTSH_
-#define _YSMLISTSH_
+#ifndef _LISTS_H_
+#define _LISTS_H_
 
-extern YSM_SLAVE	*plist_firstSLAVE;
-extern YSM_COMMAND	*plist_firstCOMMAND;
-extern FileMap		*plist_firstFILEMAP;
-extern u_int32_t List_amountSLAVE, List_amountCOMMAND;
+#define COMMON_LIST \
+    struct _dl_list_node_t *pre; \
+    struct _dl_list_node_t *suc;
 
-void List_init( void );
-void List_freelistSLAVE( void );
-void List_freelistCOMMAND( void );
-void List_freelistFILEMAP( void );
-void List_freelist( void );
-YSM_SLAVE * List_addSLAVE( YSM_SLAVE *node );
-YSM_COMMAND * List_addCOMMAND( YSM_COMMAND *node );
-pFileMap List_addFILEMAP( pFileMap node );
-void List_delSLAVE( YSM_SLAVE *node );
-void List_delCOMMAND( YSM_COMMAND *node );
-void List_delFILEMAP( pFileMap node );
+typedef struct _dl_list_node_t
+{
+    COMMON_LIST
+} dl_list_node_t;
+
+typedef struct
+{
+    dl_list_node_t* start;
+    u_int32_t length;
+} dl_list_t;
+
+void        freelist(dl_list_t *list);
+dl_list_node_t * list_unshift(dl_list_t *list, dl_list_node_t *node);
+
+dl_list_node_t * list_insert_after(
+    dl_list_t *list,
+    dl_list_node_t *node,
+    dl_list_node_t *pre);
+
+void        list_delete(dl_list_t *list, dl_list_node_t *node);
 
 #endif

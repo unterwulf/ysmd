@@ -1,7 +1,7 @@
-/*	$Id: YSM_Slaves.h,v 1.8 2004/08/22 00:12:03 rad2k Exp $	*/
+/*    $Id: YSM_Slaves.h,v 1.8 2004/08/22 00:12:03 rad2k Exp $    */
 /*
 -======================== ysmICQ client ============================-
-		Having fun with a boring Protocol
+        Having fun with a boring Protocol
 -========================= YSM_Slaves.h ============================-
 
 YSM (YouSickMe) ICQ Client. An Original Multi-Platform ICQ client.
@@ -26,37 +26,40 @@ For Contact information read the AUTHORS file.
 
 */
 
-#ifndef _YSMSLAVESH_
-#define _YSMSLAVESH_
+#ifndef _SLAVES_H_
+#define _SLAVES_H_
 
-void YSM_PrintOrganizedSlaves ( 
-		u_int16_t	FilterStatus,
-		int8_t		*Fstring,
-		int8_t		FilterIgnore 
-		);
+void YSM_PrintOrganizedSlaves(
+    u_int16_t FilterStatus,
+    int8_t   *Fstring,
+    int8_t    FilterIgnore
+);
 
-void YSM_PrintSlaves ( 
-		u_int16_t	FilterStatus,
-		int8_t 		*Fstring,
-		int8_t		FilterIgnore );
+void YSM_PrintSlaves(
+    u_int16_t FilterStatus,
+    int8_t   *Fstring,
+    int8_t    FilterIgnore
+);
 
-YSM_SLAVE * YSM_AddSlavetoList( char	*Nick,
-		uin_t	Uin,
-		char	*flags,
-		char	*c_key,
-		int8_t	*color,
-		int	budID,
-		int	grpID,
-		int	budtype,
-		int	fl );
+slave_t * YSM_AddSlaveToList(
+    char   *nick,
+    uin_t   uin,
+    char   *flags,
+    char   *c_key,
+    int8_t *color,
+    int     budID,
+    int     grpID,
+    int     budtype,
+    int     fl
+);
 
-void YSM_FreeSlavefromList( YSM_SLAVE *node );
-void YSM_FreeSlavesList( void );
-void YSM_DeleteSlavefromList( char *Nick, uin_t Uin);
-YSM_SLAVE * YSM_FindSlaveinList( char *Nick, uin_t Uin );
-int32_t YSM_ParseSlave( u_int8_t *name );
-int YSM_UpdateSlave( char type, char *data, uin_t r_uin );
-void YSM_SlaveFlags( YSM_SLAVE *victim, char *flags, char add, char update );
-
+void YSM_FreeSlaveFromList(slave_t *node);
+void YSM_FreeSlavesList(void);
+void YSM_DeleteSlaveFromList(char *Nick, uin_t Uin);
+slave_t * YSM_FindSlaveInList(char *Nick, uin_t Uin);
+int32_t YSM_ParseSlave(u_int8_t *name);
+int YSM_UpdateSlave(char type, char *data, uin_t r_uin);
+void YSM_SlaveFlags(slave_t *victim, char *flags, char add, char update);
+slave_t * list_add_slave(slave_t *new);
 
 #endif
