@@ -1,8 +1,4 @@
-/*    $Id: YSM_Direct.h,v 1.20 2003/06/16 19:39:53 rad2k Exp $    */
 /*
--======================== ysmICQ client ============================-
-        Having fun with a boring Protocol
--========================= YSM_Direct.h ============================-
 
 YSM (YouSickMe) ICQ Client. An Original Multi-Platform ICQ client.
 Copyright (C) 2002 rad2k Argentina.

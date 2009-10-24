@@ -44,19 +44,10 @@ For Contact information read the AUTHORS file.
 #include <string.h>
 #include <stdlib.h>
 
-struct YSM_PROMPTSTATUS g_promptstatus;
+ysm_prompt_status_t g_promptstatus;
 
 int16_t   YSM_AFKCount = 0;
 time_t    YSM_AFK_Time = 0;
-u_int16_t YSM_TabCount = 1;
-
-extern slave_t    *g_state.last_sent, *g_state.last_read;
-extern slave_t    *g_state.last_sent, *g_state.last_read;
-extern slave_t    *g_state.last_sent, *g_state.last_read;
-extern slave_t    *g_state.last_sent, *g_state.last_read;
-extern int8_t      YSM_LastMessage[MAX_DATA_LEN + 1];
-extern int8_t      YSM_LastURL[MAX_DATA_LEN + 1];
-extern char        YSM_cfgdir[MAX_PATH];
 
 void YSM_Command_HELP(int argc, char **argv);
 void YSM_Command_FILESTATUS(int argc, char **argv);
@@ -481,8 +472,8 @@ static void YSM_PreIncoming(
         /* store last message */
         if (contact != NULL)
         {
-            strncpy(YSM_LastMessage, *m_data, sizeof(YSM_LastMessage) - 1);
-            YSM_LastMessage[sizeof(YSM_LastMessage)-1] = '\0';
+            strncpy(g_state.last_message, *m_data, sizeof(g_state.last_message) - 1);
+            g_state.last_message[sizeof(g_state.last_message)-1] = '\0';
         }
     }
 }
@@ -499,8 +490,8 @@ void YSM_ExecuteLine( char    *line,
         char    *extra3,
         char    *extra4 )
 {
-char    *exec_args[MAX_EXEC_ARGS], *aux = NULL, *auxb = line;
-int    arg_index = 0, x = 0, y = 0;
+    char *exec_args[MAX_EXEC_ARGS], *aux = NULL, *auxb = line;
+    int   arg_index = 0, x = 0, y = 0;
 
     for (arg_index = 0; arg_index < MAX_EXEC_ARGS; arg_index++ )
         exec_args[arg_index] = NULL;
@@ -807,10 +798,10 @@ void YSM_DisplayMsg(
 
         /* store the url as the last received url */
         if (aux != NULL) {
-            strncpy( YSM_LastURL, aux,
-                sizeof(YSM_LastURL) - 1 );
+            strncpy( g_state.last_url, aux,
+                sizeof(g_state.last_url) - 1 );
 
-            YSM_LastURL[sizeof(YSM_LastURL)-1] = '\0';
+            g_state.last_url[sizeof(g_state.last_url)-1] = '\0';
         }
 
         PRINTF( VERBOSE_BASE ,"\r%s - from: %s - UIN: %d\n"

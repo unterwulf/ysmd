@@ -18,7 +18,7 @@ bindir=		@bindir@
 
 DESTDIR=
 
-PROG=		ysm
+PROG=		ysmd
 PROG_FLAGS=	$(CFLAGS) $(CPPFLAGS)
 SRCS=		main.c network.c setup.c toolbox.c charset.c lists.c slaves.c commands.c prompt.c wrappers.c crypt.c direct.c misc.c timers.c
 OBJS=		$(SRCS:.c=.o)

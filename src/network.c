@@ -38,14 +38,12 @@ For Contact information read the AUTHORS file.
 #include "setup.h"
 #include "direct.h"
 
-struct    YSM_SERVERINFORMATION    g_sinfo;
-
-extern    char YSM_Reconnecting;
+ysm_server_info_t g_sinfo;
 
 int32_t init_network(void)
 {
     /* zero all sinfo fields */
-    memset(&g_sinfo, 0, sizeof(struct YSM_SERVERINFORMATION));
+    memset(&g_sinfo, 0, sizeof(ysm_server_info_t));
 
     /* Initial seqnum */
     g_sinfo.seqnum = 1;
@@ -1903,7 +1901,6 @@ int32_t    i = 0, c = 0, ret = 2;
 
             if (victim) {
                 g_state.last_read = victim;
-                g_state.last_read = victim;
             }
 
             datap = message;
@@ -2387,8 +2384,8 @@ void YSM_Init_LoginA(uin_t uin, u_int8_t *password)
 
         PRINTF(VERBOSE_MOATA, "Login A Sent to the Server\n");
 
-        ysm_free(paquete, __FILE__, __LINE__);
-        YSM_Reconnecting = FALSE;
+        YSM_FREE(paquete);
+        g_state.reconnecting = FALSE;
     }
     else
     {
@@ -3486,16 +3483,15 @@ YSM_BuddyVisible( slave_t *buddy, int flag )
 }
 
 
-static void
-YSM_BuddyAddSlave( char *nick,
+static void YSM_BuddyAddSlave( char *nick,
         char    *uin,
         char    *budID,
         char    *grpID,
         char    *type,
         int    fl)
 {
-uin_t        uini;
-slave_t    *new = NULL;
+    uin_t    uini;
+    slave_t *new = NULL;
 
     uini = atoi(uin);
     if(uini <= 0) return;
@@ -3512,12 +3508,12 @@ slave_t    *new = NULL;
                 Chars_2_Wordb(type),
                 fl);
 
-    if (new != NULL) {
-
+    if (new != NULL)
+    {
         PRINTF(VERBOSE_SDOWNLOAD,"\n[2]-- done.");
         PRINTF(VERBOSE_SDOWNLOAD,"\n[3]-- Saving slave to disk.");
 
-        YSM_AddSlaveToDisk( new );
+        YSM_AddSlaveToDisk(new);
 
         PRINTF(VERBOSE_SDOWNLOAD,"\n[4]-- done.");
     }
@@ -4065,8 +4061,7 @@ void YSM_BuddyUploadList(slave_t *refugee)
 }
 
 
-int
-YSM_BuddyReadSlave( char *buf, int tsize )
+int YSM_BuddyReadSlave(char *buf, int tsize)
 {
     int size=0,ulen=0,nlen=0;
     char *uin=0,*nick=0,Nlen[2],xtralen[2],xtratlvtype[2];
@@ -4079,7 +4074,7 @@ YSM_BuddyReadSlave( char *buf, int tsize )
         return 0x666;
     size++;
 
-    uin = ysm_calloc(1, ulen+1, __FILE__, __LINE__);
+    uin = YSM_CALLOC(1, ulen+1);
     memcpy(uin,&buf[tsize+size],ulen);
     size += ulen;
 
@@ -4103,7 +4098,7 @@ YSM_BuddyReadSlave( char *buf, int tsize )
 
     size += 2;
 
-    if( Chars_2_Wordb(xtralen) != 0 )
+    if (Chars_2_Wordb(xtralen) != 0)
     {
         memcpy(&xtratlvtype,buf+size+tsize,2);
 
@@ -4115,12 +4110,9 @@ YSM_BuddyReadSlave( char *buf, int tsize )
                     memcpy(&Nlen,buf+size+tsize,2);
                     size += 2;
                     nlen = Chars_2_Wordb(Nlen);
-                    nick = ysm_calloc(1, nlen+1, __FILE__,
-                                __LINE__);
-
+                    nick = YSM_CALLOC(1, nlen+1);
                     memcpy(nick, &buf[tsize+size],nlen);
                     size += Chars_2_Wordb(xtralen) - 4;
-
                     break;
 
             case 0x66:    /* Awaiting auth from this slave */
@@ -4134,20 +4126,23 @@ YSM_BuddyReadSlave( char *buf, int tsize )
         }
     }
 
-    if (nlen != 0) {
-        if ( (nlen = YSM_ParseSlave(nick)) == 0) {
-            ysm_free(nick, __FILE__, __LINE__);
-            nick = NULL;
+    if (nlen != 0)
+    {
+        YSM_CharsetConvertString(&nick, CHARSET_INCOMING, MFLAGTYPE_UTF8, TRUE);
+        if ((nlen = YSM_ParseSlave(nick)) == 0)
+        {
+            YSM_FREE(nick);
         }
     }
 
-    if (!nlen) {
+    if (!nlen)
+    {
         /* God Damn! No nick for this slave! What shall we use?! */
         /* Fine god dammit! Lets use its UIN # as his nickname! */
 
         nlen = strlen(uin);
-        nick = ysm_calloc(1, nlen+1, __FILE__, __LINE__);
-        memcpy(nick,uin,nlen);
+        nick = YSM_CALLOC(1, nlen+1);
+        memcpy(nick, uin, nlen);
     }
 
 
@@ -4155,12 +4150,10 @@ YSM_BuddyReadSlave( char *buf, int tsize )
     PRINTF(VERBOSE_SDOWNLOAD,"\nADDING %s with %s\n",nick,uin);
 
     /* Last param , 1 == ONLINE slave (Stored on the srv) */
-    YSM_BuddyAddSlave( nick,uin,budID,grpID,budtype,1 );
+    YSM_BuddyAddSlave(nick, uin, budID, grpID, budtype, 1);
 
-    ysm_free(uin, __FILE__, __LINE__);
-    uin = NULL;
-    ysm_free(nick, __FILE__, __LINE__);
-    nick = NULL;
+    YSM_FREE(uin);
+    YSM_FREE(nick);
 
     return size;
 }
@@ -4305,11 +4298,11 @@ YSM_BuddyIncomingChange( FLAP_Head *head, SNAC_Head thesnac, char *buf )
     }
 }
 
-void
-YSM_BuddyIncomingList( FLAP_Head    *head,
-        SNAC_Head        thesnac,
-        char            *buf,
-        int            buf_len )
+void YSM_BuddyIncomingList(
+    FLAP_Head *head,
+    SNAC_Head  thesnac,
+    char      *buf,
+    int        buf_len)
 {
 int8_t    groupid[2], grouptype[2], d_len[2], g_id[2], chgcount[2];
 int32_t    tsize = 0, len = 0, len2 = 0, GrpSlaves = 0, y = 0;
@@ -4333,7 +4326,6 @@ TLV    thetlv;
     if(!buf[tsize] && !buf[tsize+1] && !buf[tsize+2] &&
             !buf[tsize+3] && !buf[tsize+4] && !buf[tsize+5])
     {
-
         tsize += 6;
 
 /* there is this first TLV(1) which we DONT want, so we will just */
@@ -4342,45 +4334,43 @@ TLV    thetlv;
 
 /* we still store its length in case theres a new TLV in it we dont know */
 /* but we still have to skip its content */
+
         memcpy(&thetlv,buf+tsize,sizeof(TLV));
         len2 = Chars_2_Wordb(thetlv.len);
         tsize += sizeof(TLV);
-
-
-
     }
 
     g_sinfo.flags |= FL_DOWNLOADEDSLAVES;
     maxdlen = buf_len - SNAC_HEAD_SIZE;
 
-    while(0 != len2) {
+    while (0 != len2)
+    {
+        memset(&thetlv,'\0',sizeof(TLV));
+        memcpy(&thetlv,buf+tsize,sizeof(TLV));
+        len = Chars_2_Wordb(thetlv.len);
 
-    memset(&thetlv,'\0',sizeof(TLV));
-    memcpy(&thetlv,buf+tsize,sizeof(TLV));
-    len = Chars_2_Wordb(thetlv.len);
+        /* The Groups listing did show up, skip it! dammit! */
+        if(Chars_2_Wordb(thetlv.type) == 0xc8) {
 
-    /* The Groups listing did show up, skip it! dammit! */
-    if(Chars_2_Wordb(thetlv.type) == 0xc8) {
+            /*    Make a global allocated area where to store
+                the existing GroupIDS */
 
-        /*    Make a global allocated area where to store
-            the existing GroupIDS */
+                tsize += sizeof(TLV);
 
-            tsize += sizeof(TLV);
+                g_sinfo.blgroupsid = YSM_CALLOC(1, len);
+                g_sinfo.blgroupsidentries = len/2;
 
-            g_sinfo.blgroupsid = ysm_calloc(1, len, __FILE__, __LINE__);
-            g_sinfo.blgroupsidentries = len/2;
+                for(y=0;y<len;y+=2)
+                    memcpy(g_sinfo.blgroupsid+y,&buf[tsize+y],2);
 
-            for(y=0;y<len;y+=2)
-                memcpy(g_sinfo.blgroupsid+y,&buf[tsize+y],2);
+                tsize += len;
 
-            tsize += len;
+        }
+        else
+            tsize += (len + sizeof(TLV));
 
-    }
-    else tsize += (len  + sizeof(TLV));
-
-    /* this should set len2 to 0..if theres no more data */
-    len2 -= (sizeof(TLV) + len);
-
+        /* this should set len2 to 0..if theres no more data */
+        len2 -= (sizeof(TLV) + len);
     }
 
     /* DAMN! Parse the items and get to the GROUPS! */
@@ -4429,8 +4419,8 @@ TLV    thetlv;
             switch(Chars_2_Wordb(thetlv.type))
             {
                 /* Users ID */
-            /* Use the amm of IDS for knowing the amm */
-            /* of slaves in the group */
+                /* Use the amm of IDS for knowing the amm */
+                /* of slaves in the group */
                 case 0xc8:
                 {
 
@@ -4496,7 +4486,7 @@ TLV    thetlv;
                 /* Make ReadSlave point to the beginning
                     of the block            */
 
-                YSM_BuddyReadSlave( buf,
+                YSM_BuddyReadSlave(buf,
                     (tsize-2-Chars_2_Wordb(d_len)-2));
 
             }    /* Check if its our Privacy Settings */
@@ -4541,12 +4531,6 @@ TLV    thetlv;
 #ifndef COMPACT_DISPLAY
     PRINTF(VERBOSE_BASE,
         "\nd[O_o]b %d %s\n",g_amount,MSG_DOWNLOADED_SLAVES);
-#endif
-
-#ifndef YSM_WITH_THREADS
-    PRINTF(VERBOSE_BASE,
-        MSG_BUDDY_BLOCKWARN "\n"
-        MSG_BUDDY_BLOCKWARN2 "\n");
 #endif
 
     g_promptstatus.flags |= FL_RAW;

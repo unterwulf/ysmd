@@ -36,27 +36,20 @@ ysm_config_t g_cfg;
 ysm_state_t  g_state;
 dl_list_t    g_slave_list = { NULL, 0 };
 dl_list_t    g_command_list = { NULL, 0 };
-dl_list_t    g_filemap_list = { NULL, 0 };
-
-struct    YSM_MODEL    YSM_USER;
-
-extern char  YSM_cfgfile[MAX_PATH];
-extern char  YSM_cfgdir[MAX_PATH];
-
+ysm_model_t  YSM_USER;
 pthread_t    t_netid, t_cycleid, t_dcid;
-
 
 int main(int argc, char **argv)
 {
     setlocale(LC_ALL, "");
 
     g_state.reason_to_suicide = FALSE;
-    g_state.last_sent = NULL;
+    g_state.reconnecting = FALSE;
     g_state.last_read = NULL;
+    g_state.last_sent = NULL;
 
     YSM_CheckSecurity();
     reset_timer(UPTIME);
-    reset_timer(COMMAND_FILE_CHECK_TIMEOUT);
 
     /* Check for arguments - alternate config file */
     if (argc > 2) {
@@ -67,19 +60,19 @@ int main(int argc, char **argv)
             {
                 char *aux = NULL;
 
-                strncpy(YSM_cfgfile, argv[2], sizeof(YSM_cfgfile) - 1);
-                YSM_cfgfile[sizeof(YSM_cfgfile) - 1] = '\0';
+                strncpy(g_state.config_file, argv[2], sizeof(g_state.config_file) - 1);
+                g_state.config_file[sizeof(g_state.config_file) - 1] = '\0';
 
-                strncpy(YSM_cfgdir, argv[2], sizeof(YSM_cfgdir) - 1);
-                YSM_cfgdir[sizeof(YSM_cfgdir) - 1] = '\0';
-                aux = strrchr(YSM_cfgdir, '/');
+                strncpy(g_state.config_dir, argv[2], sizeof(g_state.config_dir) - 1);
+                g_state.config_dir[sizeof(g_state.config_dir) - 1] = '\0';
+                aux = strrchr(g_state.config_dir, '/');
 
                 if (NULL != aux)
                     *(aux+1) = '\0';
                 else
                 {
-                    strncpy(YSM_cfgdir, "./", sizeof(YSM_cfgdir) - 1);
-                    YSM_cfgdir[sizeof(YSM_cfgdir) - 1] = '\0';
+                    strncpy(g_state.config_dir, "./", sizeof(g_state.config_dir) - 1);
+                    g_state.config_dir[sizeof(g_state.config_dir) - 1] = '\0';
                 }
             }
         }

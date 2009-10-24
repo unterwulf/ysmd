@@ -62,8 +62,8 @@ For Contact information read the AUTHORS file.
 
 /* AFK definitions */
 #define YSM_AFKFILENAME        "afk-log"
-#define YSM_AFK_MESSAGE        "I'm AFK (away from keyboard) right now. \
-Your message has been saved. I'll be back shortly! :)"
+#define YSM_AFK_MESSAGE        "I'm AFK (away from keyboard) right now. "\
+                               "Your message has been saved. I'll be back shortly! :)"
 /* Seconds to wait before re-sending an afk message (skip flooding) */
 #define MINIMUM_AFK_WAIT       30
 
@@ -194,7 +194,7 @@ struct YSM_MAIN_INFO
     char  city[MAX_NICK_LEN+1];
     char  state[MAX_NICK_LEN+1];
     char  gender;
-    short age;
+    u_int8_t age;
 };
 
 struct YSM_NETWORK_CONNECTION
@@ -257,34 +257,35 @@ struct YSM_SPECIAL_STATUS
     int32_t grpID;
 };
 
-struct YSM_PROXY_INFO
-{
-    int8_t        username[MAX_PATH];
-    int8_t        password[MAX_PATH];
-    int8_t        proxy_host[MAX_PATH];
-    u_int16_t    proxy_port;
-#define YSM_PROXY_HTTPS        0x01
-#define YSM_PROXY_AUTH        0x02
+#define YSM_PROXY_HTTPS      0x01
+#define YSM_PROXY_AUTH       0x02
 #define YSM_PROXY_RESOLVE    0x04
-    u_int8_t    proxy_flags;
-};
 
-struct YSM_PROMPTSTATUS
+typedef struct
+{
+    int8_t      username[MAX_PATH];
+    int8_t      password[MAX_PATH];
+    int8_t      proxy_host[MAX_PATH];
+    u_int16_t   proxy_port;
+    u_int8_t    proxy_flags;
+} ysm_proxy_info_t;
+
+typedef struct
 {
 #define FL_OVERWRITTEN  0x01
-#define FL_RAW       0x02
+#define FL_RAW          0x02
 #define FL_BUSYDISPLAY  0x04
 #define FL_COMFORTABLEM 0x08
 #define FL_AFKM         0x10
 #define FL_CHATM        0x20
 #define FL_AUTOAWAY     0x40
     u_int8_t    flags;
-};
+} ysm_prompt_status_t;
 
 #define FL_LOGGEDIN          0x01
 #define FL_DOWNLOADEDSLAVES  0x02
 
-struct YSM_SERVERINFORMATION
+typedef struct
 {
     u_int16_t    seqnum;
     u_int32_t    onlineslaves;
@@ -301,7 +302,7 @@ struct YSM_SERVERINFORMATION
     u_int32_t    blysmgroupid;
     u_int16_t    blprivacygroupid;
     u_int8_t     flags;
-};
+} ysm_server_info_t;
 
 struct ENCRYPTION_INFO
 {
@@ -311,7 +312,7 @@ struct ENCRYPTION_INFO
     keyInstance  key_in;
 };
 
-struct YSM_MODEL
+typedef struct
 {
     uin_t                Uin;
     u_int16_t            status;
@@ -322,10 +323,10 @@ struct YSM_MODEL
 
     struct YSM_MAIN_INFO          info;
     struct YSM_TIMING_INFO        timing;
-    struct YSM_PROXY_INFO         proxy;
+    ysm_proxy_info_t              proxy;
     struct YSM_DIRECT_CONNECTION  d_con;
     struct YSM_NETWORK_CONNECTION network;
-};
+} ysm_model_t;
 
 /* list types declaration */
 
@@ -367,24 +368,17 @@ typedef struct
 } slave_t;
 
 typedef struct {
-    COMMON_LIST
-
-    FILE            *fd;
-} filemap_t;
-
-typedef struct {
-    short      logall;
-    short      newlogsfirst;
-    short      verbose;
-    short      version_check;
-    short      afkmaxshown;
-    short      afkminimumwait;
-    short      awaytime;
-    short      spoof;
-    short      antisocial;
-    short      updatenicks;
-    short      dcdisable;
-    short      dclan;
+    u_int8_t   logall;
+    u_int8_t   newlogsfirst;
+    u_int8_t   verbose;
+    u_int8_t   afkmaxshown;
+    u_int8_t   afkminimumwait;
+    u_int8_t   awaytime;
+    u_int8_t   spoof;
+    u_int8_t   antisocial;
+    u_int8_t   updatenicks;
+    u_int8_t   dcdisable;
+    u_int8_t   dclan;
     u_int16_t  dcport1;
     u_int16_t  dcport2;
     int32_t    forward;
@@ -397,24 +391,28 @@ typedef struct {
 } ysm_config_t;
 
 typedef struct {
-    int      reason_to_suicide;
+    u_int8_t reason_to_suicide;
+    u_int8_t reconnecting;
     slave_t *last_read;
     slave_t *last_sent;
+    int8_t   last_message[MAX_DATA_LEN + 1];
+    int8_t   last_url[MAX_DATA_LEN + 1];
+    int8_t   config_file[MAX_PATH];
+    int8_t   slaves_file[MAX_PATH];
+    int8_t   config_dir[MAX_PATH];
 } ysm_state_t;
 
 /* exports */
-extern struct YSM_MODEL             YSM_USER;
-extern struct YSM_SERVERINFORMATION g_sinfo;
-extern struct YSM_PROMPTSTATUS      g_promptstatus;
-extern ysm_config_t                 g_cfg;
-extern ysm_state_t                  g_state;
-
+extern ysm_model_t           YSM_USER;
+extern ysm_server_info_t     g_sinfo;
+extern ysm_prompt_status_t   g_promptstatus;
+extern ysm_config_t          g_cfg;
+extern ysm_state_t           g_state;
 #ifdef YSM_TRACE_MEMLEAK
 extern int unfreed_blocks;
 #endif
 
 extern dl_list_t g_slave_list;
 extern dl_list_t g_command_list;
-extern dl_list_t g_filemap_list;
 
 #endif /* _YSM_H_ */

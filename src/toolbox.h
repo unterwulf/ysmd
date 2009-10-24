@@ -44,7 +44,7 @@ void YSM_Event( int8_t    event_t,
     int8_t        *m_data,
     u_int8_t    m_flags );
 
-void ysm_error(int32_t level, int8_t verbose, int8_t *file, int32_t line);
+void ysm_error(int32_t level, int8_t verbose, uint8_t *file, int32_t line);
 
 int32_t YSM_LookupStatus( int8_t *name );
 void YSM_WriteFingerPrint( int client, char *buf );

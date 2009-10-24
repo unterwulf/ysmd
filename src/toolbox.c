@@ -28,9 +28,6 @@ For Contact information read the AUTHORS file.
 #include "setup.h"
 #include "timers.h"
 
-extern int8_t YSM_cfgdir[MAX_PATH];
-extern short  YSM_AFKCount;
-
 static struct timeval tv;
 static fd_set read_fds, dc_fds, net_fds;
 static int max_read_fd, max_dc_fd, max_net_fd;
@@ -60,7 +57,7 @@ void YSM_Event(
                 m_data );
 }
 
-void ysm_error(int32_t level, int8_t verbose, int8_t *file, int32_t line)
+void ysm_error(int32_t level, int8_t verbose, uint8_t *file, int32_t line)
 {
     switch (level)
     {
@@ -324,48 +321,48 @@ int32_t YSM_DumpLogFile(int8_t *fname, int8_t *data)
 
     if (g_cfg.newlogsfirst)
         return YSM_AppendTopFile(fname, data);
-
-    return YSM_AppendBotFile(fname, data);
+    else
+        return YSM_AppendBotFile(fname, data);
 }
 
 /* YSM_OpenFile: opens fname from ysm's directory.
  * returns a File descriptor.
  */
 
-FILE * YSM_OpenFile( char *fname, char *attr )
+FILE * YSM_OpenFile(char *fname, char *attr)
 {
-FILE    *fd = NULL;
-int8_t    *path = NULL;
-int32_t    size = 0;
+    FILE    *fd = NULL;
+    int8_t  *path = NULL;
+    size_t   size = 0;
 
     /* 1 byte for / and another for the ending 0! */
-    size = strlen(fname) + strlen(YSM_cfgdir) + 2;
-    path = ysm_calloc(1, size, __FILE__, __LINE__ );
+    size = strlen(fname) + strlen(g_state.config_dir) + 2;
+    path = YSM_CALLOC(1, size);
 
-    snprintf(path, size, "%s/%s", YSM_cfgdir,fname);
-    path[size - 1] = 0x00;
+    snprintf(path, size, "%s/%s", g_state.config_dir, fname);
+    path[size-1] = 0x00;
 
-    fd = ysm_fopen( path, attr );
+    fd = fopen(path, attr);
 
-    ysm_free( path, __FILE__, __LINE__ );
-    path = NULL;
+    YSM_FREE(path);
 
     return fd;
 }
 
 int32_t YSM_AppendBotFile(int8_t *filename, int8_t *data)
 {
-FILE    *filefd = NULL;
+    FILE *fd = NULL;
 
     if (filename == NULL || data == NULL)
         return -1;
 
-    filefd = YSM_OpenFile( filename, "a" );
-    if (filefd == NULL) return -1;
+    fd = YSM_OpenFile(filename, "a");
+    if (fd == NULL)
+        return -1;
 
-    fprintf(filefd, "%s", data);
+    fprintf(fd, "%s", data);
+    fclose(fd);
 
-    ysm_fclose(filefd);
     return 0;
 }
 
@@ -395,13 +392,13 @@ int8_t    buf[MAX_PATH];
             fprintf(tmpfd, "%s", buf);
         }
 
-        ysm_fclose(filefd);
+        fclose(filefd);
     }
 
     /* open the filename for writing now */
     filefd = YSM_OpenFile( filename, "w" );
     if (filefd == NULL) {
-        if (tmpfd != NULL) ysm_fclose(tmpfd);
+        if (tmpfd != NULL) fclose(tmpfd);
         return -1;
     }
 
@@ -417,12 +414,11 @@ int8_t    buf[MAX_PATH];
             fprintf(filefd, "%s", buf);
         }
 
-        ysm_fclose(tmpfd);
+        fclose(tmpfd);
     }
 
-    ysm_fclose(filefd);
+    fclose(filefd);
     return 0;
-
 }
 
 /*
@@ -430,28 +426,31 @@ int8_t    buf[MAX_PATH];
   Returns: str, if str != NULL
            NULL, if str == NULL
 */
-int8_t * YSM_trim( int8_t *str )
+int8_t * YSM_trim(int8_t *str)
 {
-int8_t *str2 = NULL;
-int8_t *str3 = NULL;
+    int8_t *str_begin = NULL;
+    int8_t *str_end = NULL;
+    int8_t *str_tmp = str;
 
-    if (YSM_IsInvalidPtr(str))
+    if (str == NULL)
         return NULL;
 
-    str2 = str;
+    for (str_begin = str; isspace(*str_begin); str_begin++)
+        ;
 
-    while (isspace(*str2)) ++str2;
+    for (str_end = str_begin + strlen(str_begin);
+         str_end != str_begin && isspace(*str_end); str_end--)
+        ;
 
-    str3 = str2 + strlen(str2);
-    while (str3!=str2) if (!isspace(*(--str3))) break;
-
-    if (*str2=='\0')
-        *str='\0';
-    else {
-        int8_t *str4 = str;
-        ++str3;
-        while (str2!=str3) *str4++ = *str2++;
-        *str4 = '\0';
+    if (*str_begin == '\0')
+        *str = '\0';
+    else
+    {
+        str_tmp = str;
+        ++str_end;
+        while (str_begin != str_end)
+            *str_tmp++ = *str_begin++;
+        *str_tmp = '\0';
     }
 
     return str;
@@ -470,7 +469,7 @@ void YSM_Print_Uptime(void)
     minutes -= 60*hours;
     hours -= 24*days;
 
-    PRINTF( VERBOSE_BASE,
+    PRINTF(VERBOSE_BASE,
         "Uptime: %d days %d hours %d minutes %d seconds.\n",
         days,
         hours,
@@ -478,14 +477,12 @@ void YSM_Print_Uptime(void)
         seconds);
 }
 
-void YSM_CheckSecurity (void)
+void YSM_CheckSecurity(void)
 {
     if (!getuid())
     {
         PRINTF(VERBOSE_BASE,
-            "HOLD IT! I'm sorry, but i WONT let you run YSM\n");
-
-        PRINTF(VERBOSE_BASE,
+            "HOLD IT! I'm sorry, but i WONT let you run YSM\n"
             "with uid 0. Don't run ysm as root!. ..fag.\n");
 
         /* Not using YSM_Exit() here since YSM didn't start */
@@ -581,7 +578,6 @@ void Word_2_Charsb (u_int8_t * buf, const int num)
 
 void EncryptPassword (char *Password, char *output)
 {
-
     unsigned int x;
     static const u_int8_t tablilla[] =
     {
@@ -744,11 +740,11 @@ int FD_Select(int8_t fd)
  * at the very moment, then return -1
  */
 
-long YSM_GetMicroTime( long input )
+long YSM_GetMicroTime(long input)
 {
     struct timeval rtimeout;
 
-    if (!gettimeofday (&rtimeout, NULL))
+    if (!gettimeofday(&rtimeout, NULL))
     {
         if (!input || rtimeout.tv_usec < input)
             return rtimeout.tv_usec;
@@ -756,22 +752,22 @@ long YSM_GetMicroTime( long input )
     return -1;
 }
 
-void YSM_Thread_Sleep( unsigned long seconds, unsigned long ms )
+void YSM_Thread_Sleep(unsigned long seconds, unsigned long ms)
 {
-#ifdef YSM_WITH_THREADS
     struct timeval  now;
     struct timespec expected;
     pthread_mutex_t    condition_mutex;
     pthread_cond_t    condition_cond;
 
     /* Unix function */
-    gettimeofday (&now, NULL);
+    gettimeofday(&now, NULL);
 
     expected.tv_sec = now.tv_sec + seconds;
     expected.tv_nsec = (now.tv_usec * 1000) + (ms * 1000000);
 
     /*** don't let nsec become seconds ***/
-    if (expected.tv_nsec >= 1000000000) {
+    if (expected.tv_nsec >= 1000000000)
+    {
         expected.tv_sec += 1;
         expected.tv_nsec -= 1000000000;
     }
@@ -786,9 +782,6 @@ void YSM_Thread_Sleep( unsigned long seconds, unsigned long ms )
 
     pthread_mutex_unlock( &condition_mutex );
     pthread_mutex_destroy( &condition_mutex );
-#else
-    sleep(seconds);
-#endif /* YSM_WITH_THREADS */
 }
 
 char * YSM_gettime(time_t Time, char *Buffer, size_t Length)

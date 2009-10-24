@@ -34,14 +34,11 @@ For Contact information read the AUTHORS file.
 #include "charset.h"
 #include <stdarg.h>
 
-int8_t YSM_cfgfile[MAX_PATH];
-int8_t YSM_cfgdir[MAX_PATH];
 static int8_t YSM_DefaultAFKMessage[MAX_DATA_LEN+1];
 int8_t YSM_DefaultCHATMessage[MAX_DATA_LEN+1];
 
 extern short  YSM_AFKCount;
 extern time_t YSM_AFK_Time;
-extern struct YSM_MODEL YSM_USER;
 
 void init_default_config(ysm_config_t *cfg)
 {
@@ -66,6 +63,11 @@ void init_default_config(ysm_config_t *cfg)
     memset(&cfg->AFKMessage,   0, sizeof(cfg->AFKMessage));
     memset(&cfg->CHATMessage,  0, sizeof(cfg->CHATMessage));
     memset(&cfg->BrowserPath,  0, sizeof(cfg->BrowserPath));
+
+#if defined (YSM_USE_CHARCONV)
+    memset(g_cfg.charset_trans, 0, MAX_CHARSET+4);
+    memset(g_cfg.charset_local, 0, MAX_CHARSET+4);
+#endif
 }
 
 int initialize(void)
@@ -85,7 +87,7 @@ int initialize(void)
     init_default_config(&g_cfg);
 
     /* Setup the config and dir path only if -c was not used before */
-    if (YSM_cfgfile[0] == '\0' || YSM_cfgdir[0] == '\0')
+    if (g_state.config_file[0] == '\0' || g_state.config_dir[0] == '\0')
     {
         PRINTF(VERBOSE_MOATA, "Setting up Config. file Path.");
         YSM_SetupHomeDirectory();
@@ -99,7 +101,7 @@ int initialize(void)
     init_charset();
 #endif
 
-    PRINTF(VERBOSE_MOATA, "Retrieving dlave data from config.");
+    PRINTF(VERBOSE_MOATA, "Retrieving slave data.");
     init_slaves();
 
     return 0;
@@ -109,10 +111,16 @@ void init_config(void)
 {
     FILE *fd = NULL;
 
-    if ((fd = ysm_fopen(YSM_cfgfile, "r")) != NULL)
+    if ((fd = fopen(g_state.config_file, "r")) != NULL)
     {
-        YSM_ReadConfig(fd, 0);
-        ysm_fclose(fd);
+        strncpy(YSM_USER.network.auth_host,
+                YSM_DEFAULTSRV,
+                sizeof(YSM_USER.network.auth_host)-1);
+        YSM_USER.network.auth_host[sizeof(YSM_USER.network.auth_host)-1] = '\0';
+        YSM_USER.network.auth_port = YSM_DEFAULTPORT;
+
+        read_config(fd, 0);
+        fclose(fd);
     }
     else
     {
@@ -123,291 +131,206 @@ void init_config(void)
 
 void YSM_SetupHomeDirectory(void)
 {
-    int8_t    *homep = NULL, *homep2 = NULL;
-    int32_t    homepsize = 0, homep2size = 0;
+    int8_t *home;
 
-    homepsize = MAX_PATH;
-    homep = ysm_calloc(1, homepsize, __FILE__, __LINE__);
+    home = getenv("HOME");
 
-    /* no need to finish it by hand, called Calloc() */
-    strncpy(homep, getenv("HOME"), homepsize - 1);
+    if (home == NULL)
+    {
+        PRINTF(VERBOSE_BASE,
+            "Couldn't determine the home directory.");
+        exit(1);
+    }
 
-    /* homep + slash + zero */
-    homep2size = strlen(homep) + 2;
-    homep2 = ysm_calloc(1, homep2size, __FILE__, __LINE__);
+    snprintf(g_state.config_dir, sizeof(g_state.config_dir),
+        "%s/%s", home, YSM_CFGDIRECTORY);
 
-    /* no need to finish it by hand, called Calloc() */
-    strncpy( homep2, homep, homep2size - 1);
-    strncat( homep2, "/", homep2size - strlen(homep2) - 1);
+    snprintf(g_state.config_file, sizeof(g_state.config_file),
+        "%s/%s", g_state.config_dir, YSM_CFGFILENAME);
 
-    strncpy( YSM_cfgfile, homep2, sizeof(YSM_cfgfile) - 1);
-    YSM_cfgfile[sizeof(YSM_cfgfile)-1] = '\0';
-
-    strncat( YSM_cfgfile,
-        YSM_CFGDIRECTORY,
-        sizeof(YSM_cfgfile) - strlen(YSM_cfgfile) - 1 );
-
-    strncpy( YSM_cfgdir, YSM_cfgfile, sizeof(YSM_cfgdir) - 1 );
-    YSM_cfgdir[sizeof(YSM_cfgdir)-1] = '\0';
-
-    strncat( YSM_cfgfile,
-        "/",
-        sizeof(YSM_cfgfile) - strlen(YSM_cfgfile) - 1);
-
-    strncat( YSM_cfgfile,
-        YSM_CFGFILENAME,
-        sizeof(YSM_cfgfile) - strlen(YSM_cfgfile) - 1);
-
-    YSM_FREE(homep);
-    YSM_FREE(homep2);
+    snprintf(g_state.slaves_file, sizeof(g_state.slaves_file),
+        "%s/%s", g_state.config_dir, YSM_SLAVESFILENAME);
 }
 
 void init_slaves(void)
 {
     FILE *fd;
 
-    if ((fd = ysm_fopen(YSM_cfgfile, "r")) != NULL)
+    if ((fd = fopen(g_state.slaves_file, "a")) != NULL)
     {
         YSM_ReadSlaves(fd);
-        ysm_fclose(fd);
+        fclose(fd);
     }
     else
     {
-        PRINTF( VERBOSE_BASE,
-            "Contact list couldn't be read!. "
-            "File not found.\n" );
-            YSM_ERROR(ERROR_CRITICAL, 0);
+        PRINTF(VERBOSE_BASE,
+            "Contact list couldn't be read! File not found.\n" );
+        YSM_ERROR(ERROR_CRITICAL, 0);
     }
 }
 
-void YSM_ReadConfig(FILE *fd, char reload)
+void read_config(FILE *fd, char reload)
 {
-    int8_t YSM_CFGEND = FALSE, buf[MAX_PATH], *auxb = NULL, *aux = NULL;
+    int8_t buf[MAX_PATH];
+    int8_t *name;
+    int8_t *value;
+    int8_t *tmp;
+    int8_t i;
+    static struct {
+        int8_t  *name;
+        void    *dst;
+        enum    {
+            PAR_STATUS, PAR_INT8, PAR_INT16, PAR_INT32,
+            PAR_STR, PAR_BOOL8, PAR_BOOL16, PAR_END
+        } type;
+        int8_t  param;
+    } directives[] = {
+        { "status",         &YSM_USER.status,            PAR_STATUS, 0 },
+        { "uin",            &YSM_USER.Uin,               PAR_INT32,  0 },
+        { "server",         &YSM_USER.network.auth_host, PAR_STR,    sizeof(YSM_USER.network.auth_host)-1 },
+        { "serverport",     &YSM_USER.network.auth_port, PAR_STR,    sizeof(YSM_USER.network.auth_port)-1 },
+        { "password",       &YSM_USER.password,          PAR_STR,    sizeof(YSM_USER.password) },
+        { "awaytime",       &g_cfg.awaytime,             PAR_INT8,   0 },
+        { "afkmaxshown",    &g_cfg.afkmaxshown,          PAR_INT8,   0 },
+        { "afkminimumwait", &g_cfg.afkminimumwait,       PAR_INT8,   0 },
+        { "afkmessage",     &YSM_DefaultAFKMessage,      PAR_STR,    sizeof(YSM_DefaultAFKMessage)-1 },
+        { "chatmessage",    &YSM_DefaultCHATMessage,     PAR_STR,    sizeof(YSM_DefaultCHATMessage)-1 },
+        { "proxy",          &YSM_USER.proxy.proxy_host,  PAR_STR,    sizeof(YSM_USER.proxy.proxy_host)-1 },
+        { "proxyport",      &YSM_USER.proxy.proxy_port,  PAR_INT16,  0 },
+        { "proxyhttps",     &YSM_USER.proxy.proxy_flags, PAR_BOOL8,  YSM_PROXY_HTTPS },
+        { "proxyresolve",   &YSM_USER.proxy.proxy_flags, PAR_BOOL8,  YSM_PROXY_RESOLVE },
+        { "proxyauth",      &YSM_USER.proxy.proxy_flags, PAR_BOOL8,  YSM_PROXY_AUTH },
+        { "proxyusername",  &YSM_USER.proxy.username,    PAR_STR,    sizeof(YSM_USER.proxy.username)-1 },
+        { "proxypassword",  &YSM_USER.proxy.password,    PAR_STR,    sizeof(YSM_USER.proxy.password)-1 },
+        { "logall",         &g_cfg.logall,               PAR_BOOL8,  1 },
+        { "newlogfirst",    &g_cfg.newlogsfirst,         PAR_BOOL8,  1 },
+        { "antisocial",     &g_cfg.antisocial,           PAR_BOOL8,  1 },
+        { "updatenicks",    &g_cfg.updatenicks,          PAR_BOOL8,  1 },
+        { "dcdisable",      &g_cfg.dcdisable,            PAR_BOOL8,  1 },
+        { "dclan",          &g_cfg.dclan,                PAR_BOOL8,  1 },
+        { "dcport1",        &g_cfg.dcport1,              PAR_INT16,  0 },
+        { "dcport2",        &g_cfg.dcport2,              PAR_INT16,  0 },
+        { "webaware",       &YSM_USER.status_flags,      PAR_BOOL16, STATUS_FLWEBAWARE },
+        { "mybirthday",     &YSM_USER.status_flags,      PAR_BOOL16, STATUS_FLBIRTHDAY },
+        { "browser",        &g_cfg.BrowserPath,          PAR_STR,    sizeof(g_cfg.BrowserPath)-1 },
+        { "verbose",        &g_cfg.verbose,              PAR_INT8,   0 },
+#ifdef YSM_USE_CHARCONV
+        { "charsettrans",   &g_cfg.charset_trans,        PAR_STR,    sizeof(g_cfg.charset_trans)-1 },
+        { "charsetlocal",   &g_cfg.charset_local,        PAR_STR,    sizeof(g_cfg.charset_local)-1 },
+#endif
+        { NULL,             NULL,                        PAR_END,    0 }
+    };
 
-    strncpy( YSM_DefaultAFKMessage,
+    strncpy(YSM_DefaultAFKMessage,
         YSM_AFK_MESSAGE,
         sizeof(YSM_DefaultAFKMessage) - 1);
 
-    strncpy( YSM_DefaultCHATMessage,
+    strncpy(YSM_DefaultCHATMessage,
         YSM_CHAT_MESSAGE,
         sizeof(YSM_DefaultCHATMessage) - 1);
 
     YSM_USER.status_flags |= STATUS_FLDC_CONT;
 
-#if defined (YSM_USE_CHARCONV)
-    memset(g_cfg.charset_trans,0,MAX_CHARSET+4);
-    memset(g_cfg.charset_local,0,MAX_CHARSET+4);
-#endif
-
-    while(!YSM_CFGEND && !feof(fd)) {
-
+    while (!feof(fd))
+    {
         memset(buf, '\0', sizeof(buf));
         fgets(buf, sizeof(buf) - 1, fd);
 
-        if ((buf[0] != '#') && (buf[0] != 0)) {
+        /* crop comments till # to the end of line */
+        for (tmp = buf; *tmp != '\0'; tmp++)
+        {
+            if (*tmp == '#')
+            {
+                *tmp = '\0';
+                break;
+            }
+        }
 
-            aux = strtok(buf,">");
-            if ((auxb = strchr(aux,'\n'))) *auxb = '\0';
+        /* crop spaces at the end of line */
+        for (tmp = buf + strlen(buf) - 1; tmp >= buf && isspace(*tmp); tmp++)
+            *tmp = '\0';
 
+        /* crop spaces at the begin of line */
+        for (name = buf; isspace(*name); name++)
+            ;
 
-            if (!strcasecmp(aux,"SERVER")) {
-                if ((aux=strtok(NULL," \n\t"))!= NULL) {
-                strncpy( YSM_USER.network.auth_host,
-                    aux,
-                    sizeof(YSM_USER.network.auth_host) - 1);
+        for (value = name; *value != '\0'; value++)
+            if (*value == ' ')
+            {
+                *value = '\0';
+                for (value++; isspace(*value); value++)
+                    ;
+                break;
+            }
+            else
+                *value = tolower(*value);
+
+        /* if line is not empty */
+        if (name[0] != '\0')
+        {
+            for (i = 0; directives[i].name != NULL; i++)
+            {
+                if (strcmp(name, directives[i].name) == 0)
+                {
+                    switch (directives[i].type)
+                    {
+                        case PAR_STR:
+                            strncpy(directives[i].dst, value, (size_t) directives[i].param);
+                            break;
+
+                        case PAR_INT8:
+                            *((int8_t *) directives[i].dst) = atoi(value);
+                            break;
+
+                        case PAR_INT16:
+                            *((int16_t *) directives[i].dst) = atoi(value);
+                            break;
+
+                        case PAR_INT32:
+                            *((int32_t *) directives[i].dst) = atoi(value);
+                            break;
+
+                        case PAR_BOOL8:
+                            if (strcasecmp(value, "yes") == 0)
+                                *((int8_t *) directives[i].dst) |= directives[i].param;
+                            else if (strcasecmp(value, "no") == 0)
+                                *((int8_t *) directives[i].dst) &= ~directives[i].param;
+                            else
+                            {
+                                PRINTF(VERBOSE_BASE,
+                                    "Directive %s has been ignored due to wrong value %s. "
+                                    "Should be yes or no.\n", name, value);
+                            }
+                            break;
+
+                        case PAR_BOOL16:
+                            if (strcasecmp(value, "yes") == 0)
+                                *((int16_t *) directives[i].dst) |= directives[i].param;
+                            else if (strcasecmp(value, "no") == 0)
+                                *((int16_t *) directives[i].dst) &= ~directives[i].param;
+                            else
+                            {
+                                PRINTF(VERBOSE_BASE,
+                                    "Directive %s has been ignored due to wrong value %s. "
+                                    "Should be yes or no.\n", name, value);
+                            }
+                            break;
+
+                        case PAR_STATUS:
+                            YSM_CFGStatus(value);
+                            break;
+
+                        default:
+                            YSM_ERROR(ERROR_CRITICAL, 0);
+                    }
+                    break;
                 }
             }
+            if (directives[i].name == NULL)
+                PRINTF(VERBOSE_BASE,
+                    "Unknown config directive %s has been ingored.\n", name);
 
-            else if(!strcasecmp(aux,"SERVERPORT"))
-                               YSM_USER.network.auth_port =
-                        atoi(strtok(NULL," \n\t"));
-
-
-                      else if(!strcasecmp(aux,"PASSWORD")) {
-
-                if (!reload) {
-                if((aux = strtok(NULL," \n\t")) != NULL)
-                                strncpy( YSM_USER.password,
-                        aux,
-                        sizeof(YSM_USER.password) - 1);
-                }
-            }
-
-                    else if(!strcasecmp(aux,"STATUS")) {
-                if (!reload)
-                    YSM_CFGStatus(strtok (NULL," \n\t"));
-            }
-
-                    else if(!strcasecmp(aux,"UIN"))
-                               YSM_USER.Uin = atoi(strtok(NULL," \n\t"));
-
-            else if(!strcasecmp(aux,"ANTISOCIAL"))
-                g_cfg.antisocial =
-                        atoi(strtok(NULL," \n\t"));
-
-            else if(!strcasecmp(aux,"UPDATENICKS"))
-                g_cfg.updatenicks =
-                        atoi(strtok(NULL," \n\t"));
-
-            else if (!strcasecmp(aux,"DC_DISABLE")) {
-                if ((aux=strtok(NULL," \n\t"))!= NULL)
-                    g_cfg.dcdisable = atoi(aux);
-            }
-
-            else if (!strcasecmp(aux,"DC_LAN")) {
-                if ((aux=strtok(NULL," \n\t"))!= NULL)
-                    g_cfg.dclan = atoi(aux);
-            }
-
-            else if (!strcasecmp(aux,"DC_PORT1")) {
-                if ((aux=strtok(NULL," \n\t"))!= NULL)
-                    g_cfg.dcport1 = atoi(aux);
-            }
-
-            else if (!strcasecmp(aux,"DC_PORT2")) {
-                if ((aux=strtok(NULL," \n\t"))!= NULL)
-                    g_cfg.dcport2 = atoi(aux);
-            }
-
-            else if(!strcasecmp(aux,"VERBOSE")) {
-                if ((aux=strtok(NULL," \n\t"))!= NULL)
-                    g_cfg.verbose = atoi(aux);
-            }
-
-            else if(!strcasecmp(aux,"LOGALL")) {
-                if ((aux=strtok(NULL," \n\t"))!= NULL)
-                    g_cfg.logall = atoi(aux);
-            }
-
-            else if(!strcasecmp(aux,"NEWLOGSFIRST")) {
-                if ((aux=strtok(NULL," \n\t"))!= NULL)
-                    g_cfg.newlogsfirst = atoi(aux);
-            }
-
-            else if (!strcasecmp(aux, "AWAYTIME")) {
-                if ((aux=strtok(NULL," \n\t"))!= NULL)
-                    g_cfg.awaytime = atoi(aux);
-            }
-
-            else if(!strcasecmp(aux,"AFKMESSAGE")) {
-                if ((aux=strtok(NULL,"\n\t"))!= NULL)
-                    strncpy( YSM_DefaultAFKMessage, aux,
-                    sizeof(YSM_DefaultAFKMessage)-1);
-            }
-
-            else if(!strcasecmp(aux,"AFKMAXSHOWN")) {
-                if ((aux=strtok(NULL," \n\t"))!= NULL)
-                    g_cfg.afkmaxshown = atoi(aux);
-            }
-
-            else if(!strcasecmp(aux,"AFKMINIMUMWAIT")) {
-                if ((aux=strtok(NULL," \n\t"))!= NULL)
-                    g_cfg.afkminimumwait = atoi(aux);
-            }
-
-            else if(!strcasecmp(aux,"CHATMESSAGE")) {
-                if ((aux=strtok(NULL,"\n\t"))!= NULL)
-                    strncpy(YSM_DefaultCHATMessage, aux,
-                    sizeof(YSM_DefaultCHATMessage)-1);
-            }
-
-            else if(!strcasecmp(aux,"PROXY")) {
-                if ((aux=strtok(NULL," \n\t"))!= NULL)
-                                   strncpy( YSM_USER.proxy.proxy_host, aux,
-                    sizeof(YSM_USER.proxy.proxy_host) - 1);
-                           }
-
-            else if(!strcasecmp(aux,"PROXY_PORT")) {
-                if ((aux=strtok(NULL, " \n\t")) != NULL)
-                    YSM_USER.proxy.proxy_port = atoi(aux);
-            }
-
-            else if(!strcasecmp(aux,"PROXY_HTTPS")) {
-                if (atoi(strtok(NULL," \n\t")) > 0)
-                    YSM_USER.proxy.proxy_flags |=
-                            YSM_PROXY_HTTPS;
-                else
-                    YSM_USER.proxy.proxy_flags &=
-                            ~YSM_PROXY_HTTPS;
-            }
-
-            else if(!strcasecmp(aux,"PROXY_AUTH")) {
-                if (atoi(strtok(NULL," \n\t")) > 0)
-                    YSM_USER.proxy.proxy_flags |=
-                            YSM_PROXY_AUTH;
-                else
-                    YSM_USER.proxy.proxy_flags &=
-                            ~YSM_PROXY_AUTH;
-
-            }
-
-            else if(!strcasecmp(aux,"PROXY_USERNAME")) {
-                if ((aux=strtok(NULL," \n\t"))!= NULL)
-                                strncpy( YSM_USER.proxy.username, aux,
-                    sizeof(YSM_USER.proxy.username) - 1);
-                       }
-
-            else if(!strcasecmp(aux,"PROXY_PASSWORD")) {
-                if ((aux=strtok(NULL," \n\t"))!= NULL)
-                                   strncpy( YSM_USER.proxy.password, aux,
-                    sizeof(YSM_USER.proxy.password) - 1);
-                           }
-
-            else if(!strcasecmp(aux,"PROXY_RESOLVE")) {
-                if (atoi(strtok(NULL," \n\t")) > 0)
-                    YSM_USER.proxy.proxy_flags |=
-                            YSM_PROXY_RESOLVE;
-                else
-                    YSM_USER.proxy.proxy_flags &=
-                            ~YSM_PROXY_RESOLVE;
-            }
-
-            else if(!strcasecmp(aux,"WEBAWARE")) {
-                if (atoi(strtok(NULL," \n\t")) > 0)
-                    YSM_USER.status_flags |=
-                            STATUS_FLWEBAWARE;
-                else
-                    YSM_USER.status_flags &=
-                            ~STATUS_FLWEBAWARE;
-            }
-
-            else if(!strcasecmp(aux,"MYBIRTHDAY")) {
-                if (atoi(strtok(NULL," \n\t")) > 0)
-                    YSM_USER.status_flags |=
-                            STATUS_FLBIRTHDAY;
-                else
-                    YSM_USER.status_flags &=
-                            ~STATUS_FLBIRTHDAY;
-            }
-
-            else if(!strcasecmp(aux,"VERBOSE")) {
-                if ((aux=strtok(NULL, " \n\t")) != NULL)
-                    g_cfg.verbose = atoi(aux);
-            }
-
-            else if(!strcasecmp(aux,"VERSION_CHECK")) {
-                if ((aux=strtok(NULL, " \n\t")) != NULL)
-                    g_cfg.version_check = atoi(aux);
-            }
-
-#ifdef YSM_USE_CHARCONV
-            else if(!strcasecmp(aux,"CHARSET_TRANS")) {
-                if ((aux=strtok(NULL," \n\t"))!= NULL)
-                    strncpy( g_cfg.charset_trans, aux,
-                    sizeof(g_cfg.charset_trans) - 1);
-
-            } else if(!strcasecmp(aux,"CHARSET_LOCAL")) {
-                if ((aux=strtok(NULL," \n\t"))!= NULL)
-                    strncpy( g_cfg.charset_local, aux,
-                    sizeof(g_cfg.charset_local) - 1);
-            }
-#endif
-
-            else if (!strcasecmp(aux,"BROWSER")) {
-                if ((aux=strtok(NULL,"\n\t"))!= NULL)
-                    strncpy( g_cfg.BrowserPath, aux,
-                        sizeof(g_cfg.BrowserPath) - 1);
-            }
+        }
 /*
             else if (!strcasecmp(aux,"EXEC_INCOMING")) {
                 if ((aux=strtok(NULL," \n\t")) != NULL)
@@ -439,45 +362,30 @@ void YSM_ReadConfig(FILE *fd, char reload)
                     sizeof(g_events.execlogoff) - 1);
             }
 */
-
-            else if(!strcasecmp(aux,SLAVES_TAG))
-                YSM_CFGEND=TRUE;
-
-            else if( *aux )
-            {
-                PRINTF( VERBOSE_BASE,
-                    "UNKNOWN cfg directive '%s' , "
-                    "ignoring...\n" ,
-                    aux );
-            }
-        }
     }
 
-    /*    Before leaving check there's at least the    */
-    /*    minimum required fields */
+    /* Before leaving check there's at least the    */
+    /* minimum required fields */
 
     if (!YSM_USER.Uin)
     {
         PRINTF(VERBOSE_BASE,
-            "\nMissing UIN in config. Can't continue.\n");
+            "Missing UIN in config. Can't continue.\n");
         exit(0);
     }
     else if (YSM_USER.network.auth_host[0] == '\0')
     {
         PRINTF(VERBOSE_BASE,
-            "\nMissing ICQ Server in config. Can't continue.\n");
+            "Missing ICQ Server in config. Can't continue.\n");
         exit(0);
     }
     else if (!YSM_USER.network.auth_port)
     {
         PRINTF(VERBOSE_BASE,
-            "\nMissing ICQ Server port in config. Can't continue.\n");
+            "Missing ICQ Server port in config. Can't continue.\n");
         exit(0);
     }
 }
-
-#define YSMOPENCONFIG(rwx)    (fd = ysm_fopen(YSM_cfgfile,rwx))
-#define YSMCLOSECONFIG()    ysm_fclose(fd)
 
 void YSM_ReadSlaves(FILE *fd)
 {
@@ -487,22 +395,13 @@ void YSM_ReadSlaves(FILE *fd)
     int8_t *next = NULL;
     int field = 0;
 
-    if (YSM_IsInvalidPtr(fd))
+    if (fd == NULL)
         return;
-
-    /* find start of SLAVES section */
-    while (memset(YSM_tmpbuf, '\0', sizeof(YSM_tmpbuf))
-    && fgets(YSM_tmpbuf, sizeof(YSM_tmpbuf)-1, fd)!= NULL) {
-
-        if (!strcasecmp( YSM_trim(YSM_tmpbuf), SLAVES_TAG )) {
-            break;
-        }
-    }
 
     /* parse slaves */
     while (memset(YSM_tmpbuf, '\0', sizeof(YSM_tmpbuf))
-    && fgets(YSM_tmpbuf, sizeof(YSM_tmpbuf)-1, fd) != NULL) {
-
+    && fgets(YSM_tmpbuf, sizeof(YSM_tmpbuf)-1, fd) != NULL)
+    {
         YSM_trim(YSM_tmpbuf);
         if (YSM_tmpbuf[0]=='#' ) continue; /* ignore comments */
 
@@ -513,11 +412,12 @@ void YSM_ReadSlaves(FILE *fd)
         auxnick = auxuin = auxkey = auxflags = auxcol = NULL;
         field = 0;
 
-        while (aux != NULL) {
+        while (aux != NULL)
+        {
             YSM_trim(aux);
 
-            switch (field++) {
-
+            switch (field++)
+            {
                 case 0 : /* Nick */
                     if (*aux != '\0') auxnick = aux;
                     break;
@@ -544,86 +444,70 @@ void YSM_ReadSlaves(FILE *fd)
         }
 
         if (auxnick == NULL    /* No name */
-        || auxuin == NULL    /* No UIN */
-        || strlen(auxuin) < 5)    /* Invalid UIN */
+        || auxuin == NULL      /* No UIN */
+        || strlen(auxuin) < 5) /* Invalid UIN */
             continue;
 
-                YSM_AddSlaveToList( auxnick,
-                                atoi(auxuin),
-                                auxflags,
-                                auxkey,
-                                0,
-                                0,
-                                0,
-                                0 );
+        YSM_AddSlaveToList(auxnick, atoi(auxuin), auxflags, auxkey, 0, 0, 0, 0);
+    }
 
-        }
-
-        PRINTF( VERBOSE_MOATA,
-                "%s%d]\n",
-                MSG_READ_SLAVES,
-                g_slave_list.length );
+    PRINTF(VERBOSE_MOATA, "%s%d]\n", MSG_READ_SLAVES, g_slave_list.length);
 }
 
 slave_t * YSM_QuerySlaves(
-	unsigned short TYPE,
-	unsigned char    *Extra,
-	uin_t        Uin,
-	unsigned int    reqid )
+	unsigned short  type,
+	unsigned char  *extra,
+	uin_t           uin,
+	unsigned int    reqid)
 {
-    u_int32_t  x;
-    slave_t *node = (slave_t *) g_slave_list.start;
+    slave_t *node = NULL;
 
-    for (x = 0; x < g_slave_list.length; x++)
+    for (node = (slave_t *) g_slave_list.start;
+         node != NULL;
+         node = (slave_t *) node->suc)
     {
-        if (!node) break;
+        switch (type)
+        {
+            case SLAVE_NAME:
+                if (!strcasecmp(node->info.NickName, extra)) return node;
+                break;
 
-        if (TYPE == SLAVE_NAME) {
-            if(!strcasecmp(node->info.NickName, Extra))
-                return node;
-        } else if ( TYPE == SLAVE_UIN ) {
-            if (node->uin == Uin)
-                return node;
-        } else if ( TYPE == SLAVE_REQID ) {
-            if (node->ReqID == reqid)
-                return node;
-        } else {
-            YSM_ERROR(ERROR_CODE, 1);
+            case SLAVE_UIN:
+                if (node->uin == uin) return node;
+                break;
+
+            case SLAVE_REQID:
+                if (node->ReqID == reqid) return node;
+                break;
+
+            default:
+                YSM_ERROR(ERROR_CODE, 1);
         }
-
-        node = (slave_t *) node->suc;
     }
 
     return NULL;
 }
 
-void YSM_AddSlave(char *Name, uin_t Uin)
+void YSM_AddSlave(char *name, uin_t uin)
 {
     slave_t *result = NULL;
 
-    result = YSM_AddSlaveToList( Name,
-                Uin,
-                NULL,
-                NULL,
-                0,
-                0,
-                0,
-                0);
+    result = YSM_AddSlaveToList(name, uin, NULL, NULL, 0, 0, 0, 0);
 
-    if (result == NULL) {
+    if (result == NULL)
+    {
         PRINTF(VERBOSE_BASE,
-            "NO! Illegal Slave Cloning detected..perv!.");
-        PRINTF(VERBOSE_BASE,
-            "\nSLAVE ALREADY exists in your list!.\n");
+            "NO! Illegal Slave Cloning detected..perv!\n"
+            "SLAVE ALREADY exists in your list!.\n");
         return;
     }
 
-    PRINTF( VERBOSE_BASE,
+    PRINTF(VERBOSE_BASE,
         "Adding a SLAVE with #%d. Call him %s from now on.\n",
         result->uin,
         result->info.NickName );
 
-    YSM_AddSlaveToDisk( result );
+    YSM_AddSlaveToDisk(result);
 }
 
 void YSM_AddSlaveToDisk(slave_t *victim)
@@ -632,7 +516,8 @@ void YSM_AddSlaveToDisk(slave_t *victim)
     int8_t    YSMBuff[MAX_PATH];
     u_int32_t x = 0;
 
-    fd = ysm_fopen(YSM_cfgfile, "r");
+    fd = fopen(g_state.slaves_file, "r");
+
     if (fd == NULL) {
         /* ERR_FOPEN */
         return;
@@ -642,63 +527,55 @@ void YSM_AddSlaveToDisk(slave_t *victim)
     if (YSM_tmp == NULL) /* ERR_FILE */
         return;
 
-    while(!feof(fd)) {
+    fprintf(YSM_tmp,"%s", YSMBuff);
+
+    /* Fill Name and UIN */
+    fprintf(YSM_tmp, "%s:%d:", victim->info.NickName, (int)victim->uin);
+
+    /* Fill Key */
+    if (!YSM_KeyEmpty(victim->crypto.strkey))
+    {
+        for(x = 0; x < strlen(victim->crypto.strkey); x++)
+            fprintf(YSM_tmp, "%c", victim->crypto.strkey[x]);
+    }
+
+    fprintf(YSM_tmp, ":" );
+
+    /* Fill Flags */
+    if (victim->flags & FL_ALERT)
+        fprintf(YSM_tmp, "a");
+
+    if (victim->flags & FL_LOG)
+        fprintf(YSM_tmp, "l");
+
+    fprintf(YSM_tmp, "\n");
+
+    while (!feof(fd))
+    {
         memset(YSMBuff,'\0',MAX_PATH);
-            fgets(YSMBuff,sizeof(YSMBuff)-1,fd);
+        fgets(YSMBuff,sizeof(YSMBuff)-1,fd);
+        fprintf(YSM_tmp, "%s", YSMBuff);
+    }
 
-        if (strstr(YSMBuff,SLAVES_TAG)) {
-
-            fprintf(YSM_tmp,"%s", YSMBuff);
-
-            /* Fill Name and UIN */
-            fprintf(YSM_tmp,
-                "%s:%d:",
-                victim->info.NickName,
-                (int)victim->uin);
-
-            /* Fill Key */
-            if (!YSM_KeyEmpty( victim->crypto.strkey )) {
-                for( x=0; x < strlen(victim->crypto.strkey ); x++ )
-                    fprintf( YSM_tmp,
-                        "%c",
-                        victim->crypto.strkey[x]);
-            }
-
-            fprintf( YSM_tmp, ":" );
-
-            /* Fill Flags */
-            if (victim->flags & FL_ALERT)
-                fprintf( YSM_tmp, "a" );
-
-            if (victim->flags & FL_LOG)
-                fprintf( YSM_tmp, "l" );
-
-            fprintf(YSM_tmp,"\n");
-
-         } else {
-                    fprintf(YSM_tmp,"%s",YSMBuff);
-        }
-        }
-
-        ysm_fclose(fd);
+    fclose(fd);
 
     rewind(YSM_tmp);
 
-        fd = ysm_fopen(YSM_cfgfile,"w");
+    fd = fopen(g_state.slaves_file, "w");
     if (fd == NULL) {
         /* ERR_FILE */
         return;
     }
 
-        while(!feof(YSM_tmp))
+    while (!feof(YSM_tmp))
     {
-                memset(YSMBuff,'\0',MAX_PATH);
-                fgets(YSMBuff,sizeof(YSMBuff),YSM_tmp);
-                fprintf(fd,"%s",YSMBuff);
-        }
+        memset(YSMBuff, '\0', MAX_PATH);
+        fgets(YSMBuff, sizeof(YSMBuff), YSM_tmp);
+        fprintf(fd, "%s", YSMBuff);
+    }
 
-         ysm_fclose(fd);
-         ysm_fclose(YSM_tmp);
+    fclose(fd);
+    fclose(YSM_tmp);
 }
 
 
@@ -711,7 +588,7 @@ void YSM_DelSlave( slave_t *victim, int fl)
     int8_t YSMBuff[MAX_PATH], *auxnick = NULL, *theuin = NULL, *therest = NULL;
     int8_t slave_tDELETED = FALSE, fl_slavedeleted = FALSE;
 
-    fd = ysm_fopen(YSM_cfgfile,"r");
+    fd = fopen(g_state.slaves_file,"r");
     if (fd == NULL) {
         /* ERR_FILE */
         return;
@@ -802,25 +679,26 @@ void YSM_DelSlave( slave_t *victim, int fl)
 
                 }
 
-                ysm_fclose(fd);
+                fclose(fd);
 
-                fd = ysm_fopen(YSM_cfgfile,"w");
+                fd = fopen(g_state.slaves_file,"w");
         if (fd == NULL) {
             /* ERR_FILE */
             return;
         }
 
         rewind(YSM_tmp);
-                memset(YSMBuff,'\0',MAX_PATH);
+        memset(YSMBuff, '\0', MAX_PATH);
 
-                while(!feof(YSM_tmp)) {
-                        memset(YSMBuff,'\0',MAX_PATH);
-                        fgets(YSMBuff,sizeof(YSMBuff)-1,YSM_tmp);
-                        fprintf(fd,"%s",YSMBuff);
-                }
+        while (!feof(YSM_tmp))
+        {
+            memset(YSMBuff, '\0', MAX_PATH);
+            fgets(YSMBuff, sizeof(YSMBuff)-1, YSM_tmp);
+            fprintf(fd, "%s", YSMBuff);
+        }
 
-                ysm_fclose(fd);
-                ysm_fclose(YSM_tmp);
+        fclose(fd);
+        fclose(YSM_tmp);
 }
 
 
@@ -848,9 +726,11 @@ void YSM_CFGStatus(char *validate)
 
     for (x = 0; table[x].str != NULL; x++)
     {
-        if (!strcasecmp(validate, table[x].str))
-        YSM_USER.status = table[x].val;
-        return;
+        if (!strcmp(validate, table[x].str))
+        {
+            YSM_USER.status = table[x].val;
+            return;
+        }
     }
 
     /* default value */
@@ -887,7 +767,7 @@ void YSM_AFKMode(u_int8_t turnflag)
     }
 
 #ifndef COMPACT_DISPLAY
-    PRINTF(VERBOSE_BASE,"%s\n",MSG_AFK_MODE_ON);
+    PRINTF(VERBOSE_BASE, "%s\n", MSG_AFK_MODE_ON);
 #endif
 
     time(&YSM_AFK_Time);
@@ -918,21 +798,21 @@ void YSM_AFKMode(u_int8_t turnflag)
 
 void YSM_ReadLog(char *FileName, int logtype)
 {
-FILE    *logfile = NULL;
-int8_t     *rfilename = NULL;
-int32_t    mnum = 1, tnum = 1, snum = 0, size = 0;
-int8_t    q, *rtime = NULL, *aux = NULL, *auxb = NULL;
-/* 64 bytes extra for YSM_LOG_SEPARATORs, date, etc */
-int8_t    buff[ MAX_DATA_LEN+MAX_NICK_LEN+MAX_UIN_LEN+64 ];
+    FILE    *logfile = NULL;
+    int8_t     *rfilename = NULL;
+    int32_t    mnum = 1, tnum = 1, snum = 0, size = 0;
+    int8_t    q, *rtime = NULL, *aux = NULL, *auxb = NULL;
+    /* 64 bytes extra for YSM_LOG_SEPARATORs, date, etc */
+    int8_t    buff[ MAX_DATA_LEN+MAX_NICK_LEN+MAX_UIN_LEN+64 ];
 
     if (FileName == NULL) return;
 
-    size = strlen(FileName)+strlen(YSM_cfgdir)+2;
+    size = strlen(FileName)+strlen(g_state.config_dir)+2;
     rfilename = ysm_calloc(1, size, __FILE__, __LINE__);
-    snprintf(rfilename,size,"%s/%s", YSM_cfgdir, FileName);
+    snprintf(rfilename,size,"%s/%s", g_state.config_dir, FileName);
     rfilename[size - 1] = 0x00;
 
-    if ((logfile = ysm_fopen(rfilename,"r")) == NULL) {
+    if ((logfile = fopen(rfilename,"r")) == NULL) {
         PRINTF(VERBOSE_BASE,
             "\nNo Messages Found :: filename not found.\n");
 
@@ -967,10 +847,10 @@ int8_t    buff[ MAX_DATA_LEN+MAX_NICK_LEN+MAX_UIN_LEN+64 ];
                 case 'C':
                     g_promptstatus.flags &= ~FL_BUSYDISPLAY;
                     PRINTF(VERBOSE_BASE, "\nClearing..\n");
-                    ysm_fclose(logfile);
-                    logfile = ysm_fopen(rfilename, "w");
+                    fclose(logfile);
+                    logfile = fopen(rfilename, "w");
                     if (logfile != NULL) {
-                        ysm_fclose(logfile);
+                        fclose(logfile);
                     }
 
                     ysm_free(rfilename, __FILE__, __LINE__);
@@ -993,7 +873,7 @@ int8_t    buff[ MAX_DATA_LEN+MAX_NICK_LEN+MAX_UIN_LEN+64 ];
                 default :
                     g_promptstatus.flags &= ~FL_BUSYDISPLAY;
                     PRINTF(VERBOSE_BASE,"\n");
-                    ysm_fclose(logfile);
+                    fclose(logfile);
 
                     ysm_free(rfilename, __FILE__, __LINE__);
 
@@ -1009,7 +889,7 @@ int8_t    buff[ MAX_DATA_LEN+MAX_NICK_LEN+MAX_UIN_LEN+64 ];
             g_promptstatus.flags &= ~FL_BUSYDISPLAY;
             PRINTF(VERBOSE_BASE,"\nreadlog :: parsing error.\n");
             ysm_free(rfilename, __FILE__, __LINE__);
-            ysm_fclose(logfile);
+            fclose(logfile);
             return;
         }
 
@@ -1018,15 +898,13 @@ int8_t    buff[ MAX_DATA_LEN+MAX_NICK_LEN+MAX_UIN_LEN+64 ];
         if (snum > 0) snum--;
 
         memset( buff, '\0', sizeof(buff) );
-
     }
 
     g_promptstatus.flags &= ~FL_BUSYDISPLAY;
     PRINTF(VERBOSE_BASE, "\nEnd of Messages\n");
 
-    ysm_fclose( logfile );
-    ysm_free(rfilename, __FILE__, __LINE__);
-    rfilename = NULL;
+    fclose(logfile);
+    YSM_FREE(rfilename);
 }
 
 /* YSM_DisplayLogEntry - returns 0 if a parsing error occurs.
@@ -1034,8 +912,8 @@ int8_t    buff[ MAX_DATA_LEN+MAX_NICK_LEN+MAX_UIN_LEN+64 ];
 
 int YSM_DisplayLogEntry(int8_t *buf, int32_t messageNum)
 {
-char*    part[3+1];    /* 1 more than 3 to distinguish 3 from >3 fields */
-ssize_t    fields;
+    char*    part[3+1];    /* 1 more than 3 to distinguish 3 from >3 fields */
+    ssize_t  fields;
 
     fields = YSM_tokenize( buf,
             YSM_LOG_SEPARATOR,

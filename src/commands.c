@@ -39,21 +39,16 @@ For Contact information read the AUTHORS file.
 #define YSM_COMMAND_GROUP_CLIENT       0x03
 #define YSM_COMMAND_GROUP_EXTRA        0x04
 
-extern int8_t   YSM_cfgfile[MAX_PATH];
 extern int8_t   YSM_DefaultCHATMessage[MAX_DATA_LEN + 1];
-extern FILE    *YSM_CFGFD;
 
 /* This Comfortable pointer fixes a race condition. */
 slave_t *YSMSlaves_Comfortable;
-
-int8_t YSM_LastMessage[MAX_DATA_LEN + 1];
-int8_t YSM_LastURL[MAX_DATA_LEN + 1];
 
 
 static void YSM_Command_QUIT(int argc, char **argv)
 {
     PRINTF(VERBOSE_BASE, "Closing session, Please wait.\n");
-    YSM_Exit(0, 1);
+    ysm_exit(0, 1);
 }
 
 void YSM_Command_HELP(int argc, char **argv)
@@ -183,29 +178,10 @@ static void YSM_Command_INFO(int argc, char **argv)
     PRINTF(VERBOSE_BASE,
         "%-20.20s" " : %s\n"
         "%-20.20s" " : %s\n"
-        "%-20.20s" " : %s\n"
-        "%-20.20s" " : %s\n",
         "Release Version",
         YSM_INFORMATION2,
         "Release Name",
-        YSM_INFORMATION,
-        "Threads support",
-#ifdef YSM_WITH_THREADS
-        "YES",
-#else
-        "NO",
-#endif
-        "Input library",
-#ifndef YSM_WITH_THREADS
-        "ysmline"
-#else
-#ifdef HAVE_LIBREADLINE
-        "readline"
-#else
-        "getline"
-#endif
-#endif
-        );
+        YSM_INFORMATION);
 
 
     PRINTF(VERBOSE_BASE,
@@ -249,20 +225,12 @@ static void YSM_Command_INFO(int argc, char **argv)
     "Firstname", YSM_USER.info.FirstName,
     "Lastname", YSM_USER.info.LastName,
     "Email", YSM_USER.info.email);
-
 }
 
-static void YSM_Command_LOADCONFIG( int argc, char **argv )
+static void YSM_Command_LOADCONFIG(int argc, char **argv)
 {
-    FILE *fd;
-
-    fd = fopen( YSM_cfgfile, "r" );
-    if (fd == NULL) return;
-
-    PRINTF( VERBOSE_BASE, "Reloading cfg settings..\n" );
-    YSM_ReadConfig( fd, 1 );
-
-    fclose(fd);
+    PRINTF(VERBOSE_BASE, "Reloading config settings...\n" );
+    init_config();
 }
 
 static void YSM_Command_SLAVES(int argc, char **argv)
@@ -523,7 +491,6 @@ static void YSM_Command_MSG_main( int argc, char **argv, char plainflag )
 
         if (YSM_Query != NULL) {
         g_state.last_sent = YSMSlaves_Comfortable;
-        g_state.last_sent = YSMSlaves_Comfortable;
 
         YSM_SendMessage(YSMSlaves_Comfortable->uin,
                 argv[2],
@@ -660,10 +627,10 @@ void YSM_Command_CHAT(int argc, char **argv)
     g_promptstatus.flags |= FL_CHATM;
 }
 
-static void YSM_Command_STATUS( int argc, char **argv )
+static void YSM_Command_STATUS(int argc, char **argv)
 {
-    int    x;
-    char    UserStatus[MAX_STATUS_LEN];
+    int  x;
+    char UserStatus[MAX_STATUS_LEN];
 
     if (!argc)
     {
@@ -685,27 +652,24 @@ static void YSM_Command_STATUS( int argc, char **argv )
     YSM_ChangeStatus(x);
 }
 
-static void YSM_Command_LASTSENT( int argc, char **argv )
+static void YSM_Command_LASTSENT(int argc, char **argv)
 {
-    int    x = 0;
-    char  *aux;
+    int   x = 0;
+    char *aux;
 
-    if (g_state.last_sent)
     if (g_state.last_sent)
     {
         /* Turn argv[x] into a long chain */
         for (x = 1; x < argc; x++)
         {
-            aux = strchr(argv[x],'\0');
+            aux = strchr(argv[x], '\0');
             if (aux != NULL) *aux = 0x20;
         }
 
-        YSM_SendMessage( g_state.last_sent->uin,
-        YSM_SendMessage( g_state.last_sent->uin,
+        YSM_SendMessage(
+            g_state.last_sent->uin,
             argv[1],
             (char)(g_state.last_sent->flags & FL_LOG),
-            (char)(g_state.last_sent->flags & FL_LOG),
-            g_state.last_sent,
             g_state.last_sent,
             1);
     }
@@ -716,31 +680,26 @@ static void YSM_Command_LASTSENT( int argc, char **argv )
     }
 }
 
-static void YSM_Command_REPLY( int argc, char **argv )
+static void YSM_Command_REPLY(int argc, char **argv)
 {
-    int    x = 0;
-    char  *aux = NULL;
+    int   x = 0;
+    char *aux = NULL;
 
-    if (g_state.last_read)
     if (g_state.last_read)
     {
         /* Turn argv[x] into a long chain */
-        for (x = 1; x < argc; x++) {
-            aux = strchr(argv[x],'\0');
+        for (x = 1; x < argc; x++)
+        {
+            aux = strchr(argv[x], '\0');
             if (aux != NULL) *aux = 0x20;
         }
 
         g_state.last_sent = g_state.last_read;
-        g_state.last_sent = g_state.last_read;
-        g_state.last_sent = g_state.last_read;
-        g_state.last_sent = g_state.last_read;
 
-        YSM_SendMessage( g_state.last_read->uin,
-        YSM_SendMessage( g_state.last_read->uin,
+        YSM_SendMessage(
+            g_state.last_read->uin,
             argv[1],
             (char)(g_state.last_read->flags & FL_LOG),
-            (char)(g_state.last_read->flags & FL_LOG),
-            g_state.last_read,
             g_state.last_read,
             1);
     }
@@ -749,7 +708,6 @@ static void YSM_Command_REPLY( int argc, char **argv )
         PRINTF(VERBOSE_BASE,
             "Unable to find the last Slave who messaged you.\n");
     }
-
 }
 
 static void YSM_Command_WHOIS(int argc, char **argv)
@@ -1316,19 +1274,17 @@ static void YSM_Command_LAST( int argc, char **argv )
     PRINTF(VERBOSE_BASE, "Fetching Last Received Message:\n");
 
     if (!g_state.last_read) {
-    if (!g_state.last_read) {
         PRINTF(VERBOSE_BASE, "Not Found =)\n");
         return;
     }
 
     PRINTF(VERBOSE_BASE,
         "From: %s", g_state.last_read->info.NickName);
-        "From: %s", g_state.last_read->info.NickName);
 
     PRINTF(VERBOSE_BASE,
         "\n----------------------------------------\n");
 
-    PRINTF(VERBOSE_BASE, "%s", YSM_LastMessage);
+    PRINTF(VERBOSE_BASE, "%s", g_state.last_message);
 
     PRINTF(VERBOSE_BASE,
         "\n----------------------------------------\n");
@@ -1540,7 +1496,7 @@ char    *browser_args[3];
 
     /* are we launching a saved url? */
     if (!strcasecmp(argv[1], "!")) {
-        argv[1] = YSM_LastURL;
+        argv[1] = g_state.last_url;
     }
 
     PRINTF( VERBOSE_MOATA,

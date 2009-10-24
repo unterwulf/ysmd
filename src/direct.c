@@ -1,8 +1,4 @@
-/*    $Id: YSM_Direct.c,v 1.79 2005/09/04 01:36:48 rad2k Exp $    */
 /*
--======================== ysmICQ client ============================-
-        Having fun with a boring Protocol
--========================= YSM_Direct.c ============================-
 
 YSM (YouSickMe) ICQ Client. An Original Multi-Platform ICQ client.
 Copyright (C) 2002 rad2k Argentina.
@@ -37,15 +33,11 @@ For Contact information read the AUTHORS file.
 #include "charset.h"
 #include "crypt.h"
 
-#ifdef YSM_WITH_THREADS
-
-extern char YSM_cfgdir[MAX_PATH];
-
-static void YSM_DC_InitB( slave_t *remote_slave, int32_t sock );
-static void YSM_DC_InitA( slave_t *remote_slave, int32_t sock );
+static void YSM_DC_InitA(slave_t *remote_slave, int32_t sock);
+static void YSM_DC_InitB(slave_t *remote_slave, int32_t sock);
 
 static const u_int8_t id_str_chat[] = {
-        0xbf,0xf7,0x20,0xb2,0x37,0x8e,0xd4,0x11,0xbd,0x28,0x00,0x04,
+    0xbf,0xf7,0x20,0xb2,0x37,0x8e,0xd4,0x11,0xbd,0x28,0x00,0x04,
     0xac,0x96,0xd9,0x05 };
 
 static const u_int8_t id_str_file[] = {
@@ -60,47 +52,42 @@ static const u_int8_t id_str_contacts[] = {
     0x2a,0x0e,0x7d,0x46,0x76,0x76,0xd4,0x11,0xbc,0xe6,0x00,0x04,
     0xac,0x96,0x1e,0xa6 };
 
-static int32_t YSM_DC_IncomingFile( slave_t    *victim,
-        int32_t    len,
-        int8_t    *data,
-        int8_t    m_type,
-        int8_t    m_flags,
-        int16_t    m_status );
+static int32_t YSM_DC_IncomingFile(
+    slave_t    *victim,
+    int32_t     len,
+    int8_t     *data,
+    int8_t      m_type,
+    int8_t      m_flags,
+    int16_t     m_status);
 
-static int32_t YSM_DC_FileC( slave_t    *victim, u_int16_t rport );
-
-int32_t YSM_DC_FileB( slave_t    *victim,
-        char        *filename,
-        char        *reason );
-
+static int32_t YSM_DC_FileC(slave_t *victim, u_int16_t rport);
 
 /* *port must point to an int16_t. If initialized to something
  * that isn't 0, that value is used for binding.
  * the binded port is returned in *port.
  */
 
-static int32_t
-YSM_DC_BindPort( int32_t sock, u_int16_t *port )
+static int32_t YSM_DC_BindPort(int32_t sock, u_int16_t *port)
 {
-struct    sockaddr_in addr;
-int32_t    tmp;
+    struct sockaddr_in addr;
+    socklen_t len;
 
     if (port == NULL || sock <= 0) return -1;
 
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = INADDR_ANY;    /* all */
     addr.sin_port = *port;            /* random? */
+    len = sizeof(addr);
 
-    tmp = sizeof(addr);
-
-    if (bind( sock, (struct sockaddr *)&addr, tmp) < 0) {
+    if (bind(sock, (struct sockaddr *)&addr, len) < 0)
+    {
         PRINTF(VERBOSE_DCON, "YSM_DC_BindPort: Bind failed.\n");
         return -1;
     }
 
-    getsockname( sock, (struct sockaddr *)&addr, (int *)&tmp );
+    getsockname(sock, (struct sockaddr *)&addr, &len);
     *port = addr.sin_port;
-    listen( sock, 3 );
+    listen(sock, 3);
 
     return 0;
 }
@@ -413,14 +400,13 @@ int    pos = 0;
     YSM_WRITE( sock, &buf[0], pos );
 }
 
-static int32_t YSM_DC_ReceiveInitA( slave_t *victim, int8_t *buf, int32_t r_len )
+static int32_t YSM_DC_ReceiveInitA(slave_t *victim, int8_t *buf, int32_t r_len)
 {
-int32_t ret = TRUE;
+    int32_t ret = TRUE;
 
     /* This packet is parsed inside Wait4Client() */
     return ret;
 }
-
 
 /* PEER_INITACK */
 
@@ -511,8 +497,6 @@ static int32_t YSM_DC_ReceiveInitC( slave_t *victim, int8_t *buf, int32_t r_len 
     return 1;
 }
 
-
-
 /* Open a direct Connection to a Slave */
 /* Incoming slave_t structure pointer */
 
@@ -597,10 +581,10 @@ u_int32_t    rIP;
     g_promptstatus.flags |= FL_RAW;
 }
 
-/* Close a direct connection with a slave.    */
-/* close socket , reset flags, etc.        */
+/* Close a direct connection with a slave. */
+/* close socket, reset flags, etc.         */
 
-void YSM_CloseDC( slave_t *victim )
+void YSM_CloseDC(slave_t *victim)
 {
     if (victim == NULL)
         return;
@@ -608,20 +592,20 @@ void YSM_CloseDC( slave_t *victim )
     YSM_CloseTransfer(victim);
 
     /* close the victim's socket */
-    close( victim->d_con.rSocket );
+    close(victim->d_con.rSocket);
 
     /* reset victim's flags */
     victim->d_con.flags = 0;
 
 #ifndef COMPACT_DISPLAY
-    PRINTF( VERBOSE_BASE,
-        "\nDC session to %s closed.\n", victim->info.NickName );
+    PRINTF(VERBOSE_BASE,
+        "DC session to %s closed.\n", victim->info.NickName);
 #endif
     g_promptstatus.flags |= FL_RAW;
     g_promptstatus.flags |= FL_OVERWRITTEN;
 }
 
-void YSM_CloseTransfer( slave_t *victim )
+void YSM_CloseTransfer(slave_t *victim)
 {
     if (victim == NULL)
         return;
@@ -632,7 +616,7 @@ void YSM_CloseTransfer( slave_t *victim )
         close( victim->d_con.finfo.rSocket );
 
     if (victim->d_con.finfo.fd != 0) {
-        ysm_fclose( victim->d_con.finfo.fd );
+        fclose( victim->d_con.finfo.fd );
         victim->d_con.finfo.fd = 0;
     }
 
@@ -2327,7 +2311,7 @@ struct stat    filestat;
     if (desc == NULL) desc = "File sent with ysmICQ";
 
     /* Open the file and save its FD */
-    victim->d_con.finfo.fd = ysm_fopen(fname, "rb");
+    victim->d_con.finfo.fd = fopen(fname, "rb");
     if (victim->d_con.finfo.fd == NULL) {
         PRINTF( VERBOSE_BASE, "Unable to open the file for reading.\n");
         return -1;
@@ -2847,7 +2831,7 @@ struct stat    filestat;
         return 0;
     }
 
-    size = strlen(YSM_cfgdir) + 1;
+    size = strlen(g_state.config_dir) + 1;
     size += strlen(YSM_INCOMINGDIRECTORY) + 1;
     size += strlen(victim->d_con.finfo.name) + 1;
     path = ysm_calloc(1, size, __FILE__, __LINE__ );
@@ -2856,7 +2840,7 @@ struct stat    filestat;
     snprintf( path,
         size,
         "%s/%s",
-        YSM_cfgdir,
+        g_state.config_dir,
         YSM_INCOMINGDIRECTORY );
 
     path[size - 1] = 0x00;
@@ -2888,13 +2872,13 @@ struct stat    filestat;
     snprintf( path,
         size,
         "%s/%s/%s",
-        YSM_cfgdir,
+        g_state.config_dir,
         YSM_INCOMINGDIRECTORY,
         victim->d_con.finfo.name );
 
     path[size - 1] = 0x00;
 
-    victim->d_con.finfo.fd = ysm_fopen( path, "ab" );
+    victim->d_con.finfo.fd = fopen( path, "ab" );
     if (victim->d_con.finfo.fd == NULL) {
         PRINTF( VERBOSE_BASE, "Unable to open %s for write.\n", path);
         ysm_free( path, __FILE__, __LINE__ );
@@ -2984,5 +2968,3 @@ keyInstance    *key = NULL;
 
     return 1;
 }
-
-#endif /* ifdef YSM_WITH_THREADS */

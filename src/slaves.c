@@ -443,18 +443,12 @@ void YSM_DeleteSlaveFromList(char *Nick, uin_t Uin)
 {
     /* Pretty important. (for the a and r commands specially) */
     if (g_state.last_sent != NULL) {
-    if (g_state.last_sent != NULL) {
         if(!strcasecmp(g_state.last_sent->info.NickName, Nick))
-        if(!strcasecmp(g_state.last_sent->info.NickName, Nick))
-                g_state.last_sent = NULL;
                 g_state.last_sent = NULL;
     }
 
     if (g_state.last_read != NULL) {
-    if (g_state.last_read != NULL) {
         if(!strcasecmp(g_state.last_read->info.NickName, Nick))
-        if(!strcasecmp(g_state.last_read->info.NickName, Nick))
-                    g_state.last_sent = NULL;
                     g_state.last_sent = NULL;
     }
 

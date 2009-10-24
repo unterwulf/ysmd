@@ -29,8 +29,6 @@ For Contact information read the AUTHORS file.
 #include "slaves.h"
 #include "main.h"
 
-char YSM_Reconnecting = FALSE;
-
 #ifdef YSM_TRACE_MEMLEAK
 /* Debugging purposes */
 int unfreed_blocks = 0;
@@ -45,7 +43,7 @@ void YSM_Reconnect(void)
     int32_t     y = 0;
 
     g_sinfo.flags &= ~FL_LOGGEDIN;
-    YSM_Reconnecting = TRUE;
+    g_state.reconnecting = TRUE;
 
     /* put them all offline */
     g_sinfo.onlineslaves = 0;
@@ -92,8 +90,8 @@ int32_t    r = 0, x = 0, rlen = 0;
 
     rlen = read_len;
 
-    while(read_len > r && ((YSM_Reconnecting && priority)
-    || !YSM_Reconnecting)) {
+    while(read_len > r && ((g_state.reconnecting && priority)
+    || !g_state.reconnecting)) {
 
         x = SOCK_READ(sock, (char *)buf+r, rlen);
 
@@ -109,7 +107,7 @@ int32_t    r = 0, x = 0, rlen = 0;
 
     /* Only negotiation functions take precedence */
     /* since we have multiple threads, we stop them this way */
-    if (!priority && YSM_Reconnecting) {
+    if (!priority && g_state.reconnecting) {
         /* make the thread sleep a little dont consume 100% ! */
         YSM_Thread_Sleep(0, 100);
         return -1;
@@ -189,7 +187,7 @@ void * ysm_malloc(size_t size, char *file, int line)
         PRINTF(VERBOSE_BASE,
             "Inform the author! File: %s Line: %d\n", file, line);
 
-        YSM_Exit(-1, 1);
+        ysm_exit(-1, 1);
     }
 
 #ifdef YSM_TRACE_MEMLEAK
@@ -219,7 +217,7 @@ void ysm_free(void *what, char *file, int line)
         PRINTF(VERBOSE_BASE,
             "Inform the author! File: %s Line: %d\n", file, line);
 
-        YSM_Exit(-1, 1);
+        ysm_exit(-1, 1);
     }
 
 #ifdef YSM_TRACE_MEMLEAK
@@ -230,29 +228,17 @@ void ysm_free(void *what, char *file, int line)
     what = NULL;
 }
 
-int YSM_IsInvalidPtr(void *ptr)
-{
-    if (ptr == NULL)
-        return TRUE;
-
-    return FALSE;
-}
-
 /* This is the function that should be called instead of directly */
 /* using the exit() syscall. It does some garbage collection and  */
 /* allows the addition of pre-leaving procedures.                 */
 
-void YSM_Exit(int32_t status, int8_t ask)
+void ysm_exit(int32_t status, int8_t ask)
 {
-    if (g_sinfo.blgroupsid != NULL) {
-        ysm_free(g_sinfo.blgroupsid, __FILE__, __LINE__);
-        g_sinfo.blgroupsid = NULL;
-    }
+    if (g_sinfo.blgroupsid != NULL)
+        YSM_FREE(g_sinfo.blgroupsid);
 
-    if (g_sinfo.blusersid != NULL) {
-        ysm_free(g_sinfo.blusersid, __FILE__, __LINE__);
-        g_sinfo.blusersid = NULL;
-    }
+    if (g_sinfo.blusersid != NULL)
+        YSM_FREE(g_sinfo.blusersid);
 
     /* Logging off event */
     YSM_Event(EVENT_LOGOFF,
@@ -268,7 +254,6 @@ void YSM_Exit(int32_t status, int8_t ask)
     /* Free all those nodes! */
     freelist(&g_command_list);
     freelist(&g_slave_list);
-    freelist(&g_filemap_list);
 
     /* the following iteration through child processes could be
      * done in a tidy manner by waiting for the SIGCHLD signal
@@ -278,50 +263,4 @@ void YSM_Exit(int32_t status, int8_t ask)
 
     /* now exit without zombies */
     exit(status);
-}
-
-FILE * ysm_fopen(const char *path, const char *mode)
-{
-    FILE      *fd = NULL;
-    u_int32_t  i = 0;
-    filemap_t *node;
-
-    /* call the real fopen */
-    fd = fopen(path, mode);
-    if (fd == NULL)
-        return fd;
-
-    /* do we already have an entry for this fd? weird..could happen */
-    for (node = (filemap_t *) g_filemap_list.start;
-         node != NULL;
-         node = (filemap_t *) node->suc)
-    {
-        if (node->fd == fd)
-            /* yep, does exist. */
-            return fd;
-    }
-
-    /* no entry exists, create one */
-    node = (filemap_t *) YSM_CALLOC(1, sizeof(filemap_t));
-    node->fd = fd;
-
-    list_unshift(&g_filemap_list, (dl_list_node_t *) node);
-
-    return fd;
-}
-
-int ysm_fclose(FILE *stream)
-{
-    filemap_t *node;
-
-    /* do we have an entry for this fd? */
-    for (node = (filemap_t *) g_filemap_list.start;
-         node != NULL;
-         node = (filemap_t *) node->suc)
-    {
-        if (node->fd == stream)
-            list_delete(&g_filemap_list, (dl_list_node_t *) node);
-    }
-
-    return fclose(stream);
 }

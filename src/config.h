@@ -13,6 +13,7 @@
 
 #define YSM_CFGDIRECTORY       ".ysmd"
 #define YSM_CFGFILENAME        "ysmd.conf"
+#define YSM_SLAVESFILENAME     "ysmd.slaves"
 #define YSM_INCOMINGDIRECTORY  "incoming"
 #define YSM_DEFAULTSRV         "login.icq.com"
 #define YSM_DEFAULTPORT        5190

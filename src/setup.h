@@ -30,8 +30,8 @@ For Contact information read the AUTHORS file.
 
 int initialize(void);
 void init_default_config(ysm_config_t *cfg);
-void init_config();
-void init_slaves();
+void init_config(void);
+void init_slaves(void);
 
 void YSM_ReadConfig(FILE *fd, char reload);
 static void YSM_ReadSlaves(FILE *fd);
