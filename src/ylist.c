@@ -80,6 +80,5 @@ void deleteListNode(list_t *list, list_node_t *node)
         list->start = node->suc;
     }
 
-    YSM_FREE(node);
     list->length--;
 }

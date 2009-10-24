@@ -122,6 +122,10 @@ bs_pos_t bsSeek(bsd_t bsd, uint32_t offset, bs_seek_t whence)
             break;
 
         case BS_SEEK_CUR:
+            if (bs->ptr + offset <= bs->len)
+                bs->ptr += offset;
+            else
+                ; // TODO: bs should be extended
             break;
 
         case BS_SEEK_END:
@@ -196,7 +200,7 @@ bs_pos_t bsAppend(bsd_t bsd, const uint8_t *buf, uint32_t len)
 {
     bs_t *bs;
 
-    if (!(bs = getBs(bsd)))
+    if (!(bs = getBs(bsd)) || !buf)
         return -1;
 
     if (!reallocBsDataIfNeeded(bs, len))
@@ -211,7 +215,7 @@ bs_pos_t bsAppend(bsd_t bsd, const uint8_t *buf, uint32_t len)
 uint32_t bsAppendFromSocket(bsd_t bsd, int fd, size_t count)
 {
     bs_t *bs;
-    size_t read;
+    size_t bytesRead;
 
     if (!(bs = getBs(bsd)))
         return -1;
@@ -219,12 +223,12 @@ uint32_t bsAppendFromSocket(bsd_t bsd, int fd, size_t count)
     if (!reallocBsDataIfNeeded(bs, count))
         return -1;
 
-    read = SOCK_READ(fd, (void *)(bs->data + bs->end), count);
+    bytesRead = SOCK_READ(fd, (void *)(bs->data + bs->end), count);
 
-    if (read > 0)
-        bs->end += read;
+    if (bytesRead > 0)
+        bs->end += bytesRead;
 
-    return read; /* size of data was read */
+    return bytesRead; /* size of data was read */
 }
 
 uint32_t bsRead(bsd_t bsd, uint8_t *buf, uint32_t len)
@@ -246,6 +250,7 @@ uint32_t bsRead(bsd_t bsd, uint8_t *buf, uint32_t len)
 bs_pos_t bsUpdate(bsd_t bsd, bs_pos_t pos, const uint8_t *buf, uint32_t len)
 {
     bs_t *bs;
+        DEBUG_PRINT("");
 
     if (!(bs = getBs(bsd)) || buf == NULL)
         return -1;

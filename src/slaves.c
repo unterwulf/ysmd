@@ -7,117 +7,82 @@
 #include "ystring.h"
 #include "output.h"
 #include "icqv7.h"
-#include "handle.h"
 
-typedef struct
-{
-    COMMON_LIST
-
-    uin_t                  uin;
-    sl_fprint_t            fprint;
-    sl_caps_t              caps;
-    req_id_t               reqId;
-    sl_status_t            status;
-    sl_status_t            status_flags;
-    uint8_t               *statusStr;
-    sl_flags_t             flags;
-    buddy_special_status_t budType;
-    buddy_timing_t         timing;
-    direct_connection_t    d_con;
-    buddy_main_info_t      info;
-    encryption_info_t      crypto;
-} slave_t;
-
-static list_t     g_slave_list = { NULL, 0 };
-static hnd_pool_t g_slave_hnd_pool = NULL;
+static pthread_mutex_t  g_slave_list_mutex = PTHREAD_MUTEX_INITIALIZER;
+static list_t           g_slave_list = { NULL, 0 };
 
 int initSlaveList()
 {
-    g_slave_hnd_pool = initHandlePool(SLAVE_HND_POOL_INIT_SIZE);
-
-    return g_slave_hnd_pool == NULL ? -1 : 0;
 }
 
 void freeSlaveList()
 {
     freeList(&g_slave_list);
-    freeHandlePool(g_slave_hnd_pool);
 }
 
-static slave_t *normalizeSlaveHandle(slave_hnd_t *hnd)
+void lockSlaveList()
 {
-    slave_t *victim = NULL;
-
-    if (hnd == NULL)
-        return NULL;
-
-    if (hnd->hnd == SLAVE_HND_NOT_A_SLAVE)
-    {
-        return NULL;
-    }
-    else if (hnd->hnd == SLAVE_HND_FIND)
-    {
-        querySlaveByUin(hnd->uin, hnd);
-    }
-    else if (hnd->hnd >= 0)
-    {
-        victim = (slave_t *)dereferenceHandle(g_slave_hnd_pool, hnd->hnd);
-        if (victim && victim->uin == hnd->uin)
-        {
-            return victim;
-        }
-        else
-        {
-            querySlaveByUin(hnd->uin, hnd);
-        }
-    }
-    else
-        return NULL;
-    
-    victim = (slave_t *)dereferenceHandle(g_slave_hnd_pool, hnd->hnd);
-
-    return victim;
+    pthread_mutex_lock(&g_slave_list_mutex);
 }
 
-int getNextSlave(slave_hdl_t *hdl)
+void unlockSlaveList()
 {
-    slave_t *suc = NULL;
+    pthread_mutex_unlock(&g_slave_list_mutex);
+}
 
-    if (hdl == NULL)
-        return -1;
+int updateSlave(slave_update_t type, char *nick, uin_t uin)
+{
+    slave_t *slave = NULL;
 
-    if (hdl->hdl == SLAVE_HND_START)
-        suc = (slave_t *)g_slave_list.start;
-    else
+    lockSlaveList();
+
+    if (type == UPDATE_NICK)
     {
-        slave = (slave_t *)dereferenceHandle(g_slave_hdl_pool, hdl->hdl);
-
-        if (slave == NULL)
-            return -1;
-
-        suc = (slave_t *)slave->suc;
+        /* Can't rename to an existing name */
+        slave = getSlaveByNick(nick);
+        if (slave) return -1;
     }
 
-    if (suc == NULL)
-    {
-        hdl->hdl = SLAVE_HND_END;
-        hdl->uin = 0;
+    slave = getSlaveByUin(uin);
+    if (!slave) return -1;
 
-        return -2;
+    /* We remove the slave from the config file but not from memory */
+    deleteSlaveFromDisk(slave->uin);
+
+    /* We update the information on memory */
+    switch (type)
+    {
+        case UPDATE_NICK:
+            strncpy(
+                slave->info.nickName,
+                nick,
+                sizeof(slave->info.nickName) - 1);
+
+            slave->info.nickName[sizeof(slave->info.nickName)-1] = '\0';
+            break;
+
+        default:
+            break;
     }
 
-    hdl->hdl = suc->hdl;
-    hdl->uin = suc->uin;
+    /* We re-add the slave in the config file with the new data */
+    addSlaveToDisk(slave);
+    unlockSlaveList();
 
     return 0;
 }
 
-int querySlaveByUin(uin_t uin, slave_hnd_t *hnd)
+slave_t *getNextSlave(const slave_t *slave)
+{
+    if (slave == NULL)
+        return (slave_t *)g_slave_list.start;
+    else
+        return (slave_t *)slave->suc;
+}
+
+slave_t *getSlaveByUin(uin_t uin)
 {
     slave_t *node = NULL;
-
-    if (hnd == NULL)
-        return -1;
 
     for (node = (slave_t *) g_slave_list.start;
          node != NULL;
@@ -125,41 +90,28 @@ int querySlaveByUin(uin_t uin, slave_hnd_t *hnd)
     {
         if (node->uin == uin)
         {
-            hnd->hnd = node->hnd;
-            hnd->uin = node->uin;
-
-            return 0;
+            return node;
         }
     }
 
-    hnd->hnd = SLAVE_HND_NOT_A_SLAVE;
-
-    return -1;
+    return NULL;
 }
 
-int querySlaveByNick(uint8_t *nick, slave_hnd_t *hnd)
+slave_t *getSlaveByNick(const char *nick)
 {
     slave_t *node = NULL;
-
-    if (hnd == NULL)
-        return -1;
 
     for (node = (slave_t *) g_slave_list.start;
          node != NULL;
          node = (slave_t *) node->suc)
     {
-        if (strcmp(node->info, nick) == 0)
+        if (strcmp(node->info.nickName, nick) == 0)
         {
-            hnd->hnd = node->hnd;
-            hnd->uin = node->uin;
-
-            return 0;
+            return node;
         }
     }
 
-    hnd->hnd = SLAVE_HND_NOT_A_SLAVE;
-
-    return -1;
+    return NULL;
 }
 
 static slave_t *insertSlaveNode(slave_t *new)    /* inserts ordered */
@@ -201,32 +153,30 @@ static slave_t *insertSlaveNode(slave_t *new)    /* inserts ordered */
     return new;
 }
 
-int addSlaveToList(
-    uint8_t     *nick,
+slave_t *addSlaveToList(
+    char        *nick,
     uin_t        uin,
     sl_flags_t   flags,
     uint8_t     *c_key,
     uint32_t     budId,
     uint32_t     grpId,
-    uint16_t     budType,
-    slave_hnd_t *newHnd)
+    uint16_t     budType)
 {
     slave_t   *new = NULL, *res = NULL;
     uint32_t   x = 0, keylen = 0;
     int32_t    retval = 0;
     uint8_t    StringUIN[MAX_UIN_LEN+1], goodKey[64];
-    hnd_t      hnd;
 
 //    DEBUG_PRINT("%s (#%ld)", nick, uin);
 
     if (uin < 10000) /* why? */
     {
         DEBUG_PRINT("%s has invalid UIN %ld -- skip it", nick, uin);
-        return -1;
+        return NULL;
     }
 
     /* First Seek if theres another Slave with the same UIN (Duh!) */
-    if ((res = querySlave(SLAVE_UIN, NULL, uin, 0)) != NULL)
+    if ((res = getSlaveByUin(uin)) != NULL)
     {
         /* User already exists. Since this function is also
          * called for downloaded slaves, a slave might be stored
@@ -235,7 +185,7 @@ int addSlaveToList(
          * else return NULL, it already exists
          */
         if (!(flags & FL_DOWNLOADED))
-            return -1;
+            return NULL;
 
         /* Set it as downloaded! */
         res->flags |= FL_DOWNLOADED;
@@ -271,12 +221,12 @@ int addSlaveToList(
             strncpy(res->info.nickName, nick, sizeof(res->info.nickName)-1);
         }
 
-        return -1;
+        return NULL;
     }
 
     /* Now with the same nick (Conflict!) */
     /* XXX: alejo: shouldn't we warn the user ? */
-    if (querySlave(SLAVE_NICK, nick, 0, 0) != NULL)
+    if (getSlaveByNick(nick) != NULL)
     {
         memset(StringUIN, 0, MAX_UIN_LEN+1);
         snprintf(StringUIN, MAX_UIN_LEN+1, "%d", (int)uin);
@@ -381,134 +331,19 @@ int addSlaveToList(
             break;
     }
 
-    insertSlaveNode(new);
-    hnd = linkHandle(g_slave_hnd_pool, new);
-
-    if (hnd != 0)
-    {
-        deleteSlaveFromList(new->uin);
-        return -1;
-    }
-
-    new->hnd = hnd;
-
-    if (newHnd != 0)
-    {
-        newHnd->hnd = hnd;
-        newHnd->uin = new->uin;
-    }
-
-    return 0;
+    return insertSlaveNode(new);
 }
 
-void deleteSlaveFromList(slave_hnd_t *hnd)
+void deleteSlaveFromList(slave_t *victim)
 {
-    slave_t *victim;
-
-    victim = normalizeSlaveHandle(hnd);
-
     if (victim)
     {
-        unlinkHandle(g_slave_hdl_pool, victim->hnd);
         /* Free the slave from the linked list of slaves */
         deleteListNode(&g_slave_list, (list_node_t *)victim);
     }
 }
 
-uint32_t getSlavesListLen()
+long getSlavesListLen()
 {
     return g_slave_list.length;
 }
-
-int updateSlave(slave_update_t type, uint8_t *nick, uin_t uin)
-{
-    slave_t *slave = NULL;
-
-    if (type == UPDATE_NICK)
-    {
-        /* Can't rename to an existing name */
-        slave = querySlave(SLAVE_NICK, nick, 0, 0);
-        if (slave) return -1;
-    }
-
-    slave = querySlave(SLAVE_UIN, NULL, uin, 0);
-    if (!slave) return -1;
-
-    /* We remove the slave from the config file but not from memory */
-    deleteSlaveFromDisk(slave->uin);
-
-    /* We update the information on memory */
-    switch (type)
-    {
-        case UPDATE_NICK:
-            strncpy(
-                slave->info.nickName,
-                nick,
-                sizeof(slave->info.nickName) - 1);
-
-            slave->info.nickName[sizeof(slave->info.nickName)-1] = '\0';
-            break;
-
-        default:
-            break;
-    }
-
-    /* We re-add the slave in the config file with the new data */
-    addSlaveToDisk(slave);
-
-    return 0;
-}
-
-int getSlaveStatus(slave_hnd_t *hnd, sl_status_t *status)
-{
-    slave_t *victim = NULL;
-
-    if (victim = normalizeSlaveHandle(hnd))
-    {
-        *status = victim->status;
-        return 0;
-    }
-
-    return -1;
-}
-
-int getSlaveCapabilities(slave_hnd_t *hnd, sl_caps_t *caps);
-{
-    slave_t *victim = NULL;
-
-    if (victim = normalizeSlaveHandle(hnd))
-    {
-        *caps = victim->caps;
-        return 0;
-    }
-
-    return -1;
-}
-
-int getSlaveFingerprint(slave_hnd_t *hnd, sl_fprint_t *fprint);
-{
-    slave_t *victim = NULL;
-
-    if (victim = normalizeSlaveHandle(hnd))
-    {
-        *fprint = victim->fprint;
-        return 0;
-    }
-
-    return -1;
-}
-
-int getSlaveFlags(slave_hnd_t *hnd, sl_flags_t *status);
-{
-    slave_t *victim = NULL;
-
-    if (victim = normalizeSlaveHandle(hnd))
-    {
-        *flags = victim->flags;
-        return 0;
-    }
-
-    return -1;
-}
-
-int getSlaveSpecialStatus(slave_hnd_t *hnd, buddy_special_status_t *bss);

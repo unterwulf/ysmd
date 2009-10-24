@@ -2,6 +2,7 @@
 #define _BS_OSCAR_H_
 
 #include "ysm.h"
+#include "ystring.h"
 
 #define SIZEOF_BYTE      1
 #define SIZEOF_WORD      2
@@ -46,6 +47,12 @@ typedef struct
     int8_t dlen[2];
 } flap_head_bit_t;
 
+typedef struct {
+    flap_head_t flap;
+    snac_head_t snac;
+    bsd_t       bsd;
+} oscar_msg_t;
+
 typedef struct
 {
     int8_t type[2];
@@ -54,9 +61,16 @@ typedef struct
 
 typedef struct
 {
-    int16_t type;
-    int16_t len;
+    uint16_t type;
+    uint16_t len;
 } tlv_t;
+
+#define bsReadString08(x, y) \
+    bsReadString((x), ST_STRING08, 0, (y));
+#define bsReadString16(x, y) \
+    bsReadString((x), ST_STRING16, 0, (y));
+#define bsReadToString(b, s, l) \
+    bsReadString((b), ST_NORMAL, (l), (s));
 
 #define bsAppendPrintfString08(x, y, args...) \
     bsAppendPrintfType((x), ST_STRING08, (y), ##args);
@@ -74,12 +88,14 @@ bs_pos_t bsAppendDword(bsd_t bsd, uint32_t dword);
 bs_pos_t bsAppendDwordLE(bsd_t bsd, uint32_t word);
 bs_pos_t bsAppendFlapHead(bsd_t bsd, uint8_t channel, uint16_t seq, uint16_t len);
 bs_pos_t bsAppendTlv(bsd_t bsd, uint16_t type, uint16_t len, const int8_t *value);
+
 void bsUpdateWord(bsd_t bsd, bs_pos_t pos, uint16_t word);
 void bsUpdateWordLE(bsd_t bsd, bs_pos_t pos, uint16_t word);
 void bsUpdateFlapHeadLen(bsd_t bsd, bs_pos_t flapPos);
 void bsUpdateTlvLen(bsd_t bsd, bs_pos_t tlvPos);
 void bsUpdateWordLen(bsd_t bsd, bs_pos_t wordPos);
 void bsUpdateWordLELen(bsd_t bsd, bs_pos_t wordPos);
+
 uint32_t bsReadByte(bsd_t bsd, uint8_t *byte);
 uint32_t bsReadWord(bsd_t bsd, uint16_t *word);
 uint32_t bsReadWordLE(bsd_t bsd, uint16_t *word);
@@ -88,6 +104,7 @@ uint32_t bsReadDwordLE(bsd_t bsd, uint32_t *dword);
 uint32_t bsReadFlapHead(bsd_t bsd, flap_head_t *flap);
 int32_t  bsReadSnacHead(bsd_t bsd, snac_head_t *snac);
 int32_t  bsReadTlv(bsd_t bsd, tlv_t *tlv);
+int32_t  bsReadString(bsd_t bsd, str_type_t type, long inLen, string_t *str);
 
 bs_pos_t bsAppendPrintfType(bsd_t bsd, str_type_t type, const int8_t *fmt, ...);
 bs_pos_t bsAppendVprintfType(bsd_t bsd, str_type_t type, const int8_t *fmt, va_list ap);

@@ -8,11 +8,13 @@
 #ifndef _CONFIG_H_
 #define _CONFIG_H_
 
+#define DEBUG
+
 #define YSM_INFORMATION        "ysmd"
 #define YSM_INFORMATION2       "0.0.1"
 
 #define YSM_CFGDIRECTORY       ".ysmd"
-#define YSM_CFGFILENAME        "ysmd.conf"
+#define YSM_CFGFILENAME        ".ysmdrc"
 #define YSM_SLAVESFILENAME     "ysmd.slaves"
 #define YSM_INCOMINGDIRECTORY  "incoming"
 #define YSM_DEFAULTSRV         "login.icq.com"

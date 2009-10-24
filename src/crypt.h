@@ -2,6 +2,7 @@
 #define _CRYPT_H_
 
 #include "rijndael/rijndael-api-fst.h"
+#include "slaves.h"
 
 int YSM_EncryptData(char *plain_data, int len, keyInstance *cipherKey);
 int YSM_DecryptData(char *enc_data, keyInstance *cipherKey);
@@ -32,4 +33,4 @@ struct YSMCryptH
     uint8_t d_len[2];
 };
 
-#endif
+#endif /* _CRYPT_H_ */

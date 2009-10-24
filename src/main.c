@@ -7,11 +7,13 @@
 #include "output.h"
 #include "network.h"
 #include "ystring.h"
+#include "slaves.h"
+#include "control.h"
 #include <locale.h>
 
 ysm_config_t g_cfg;
 ysm_state_t  g_state;
-ysm_model_t  YSM_USER;
+ysm_model_t  g_model;
 pthread_t    t_netid, t_cycleid, t_dcid;
 sem_t        semOutput;
 
@@ -21,7 +23,7 @@ sem_t        semOutput;
 
 static void doCycleChecks(void)
 {
-    if (g_sinfo.flags & FL_LOGGEDIN)
+    if (g_state.connected)
     {
         /* check if it is time to send keep alive */
         if (getTimer(KEEP_ALIVE_TIMEOUT) > 58)
@@ -29,53 +31,29 @@ static void doCycleChecks(void)
             resetTimer(KEEP_ALIVE_TIMEOUT);
             sendKeepAlive();
         }
-
-        /* check if we have to switch to away status */
-        if (g_cfg.awaytime > 0               /* is it enabled? */
-        && (getTimer(IDLE_TIMEOUT)/60        /* minutes */
-            >= g_cfg.awaytime))              /* are over */
-        {
-            /* then check if we are in -online status-
-             * OR Free 4 Chat, which would be the same */
-            if (YSM_USER.status == STATUS_ONLINE
-            || YSM_USER.status == STATUS_FREE_CHAT)
-            {
-                /* finally. change status */
-                YSM_ChangeStatus(STATUS_AWAY);
-                g_state.promptFlags |= FL_RAW;
-                g_state.promptFlags |= FL_AUTOAWAY;
-            }
-        }
     }
 }
 
 static void promptThread(void)
 {
-    int fd;
+    initCtl();
 
     while (!g_state.reasonToSuicide)
     {
-        fd = open(YSM_FIFO, O_RDONLY);
-        if (fd == -1)
-        {
-            printf("Error stdin");
-            return;
-        }
-
-        YSM_ConsoleRead(fd);
-        close(fd);
-        threadSleep(0, 10);
+        ctlHandler();
     }
+
+    closeCtl();
 }
 
 static void networkThread(void)
 {
-    if (networkSignIn() < 0)
-        YSM_ERROR(ERROR_NETWORK, 0);
-
     while (!g_state.reasonToSuicide)
     {
-        serverResponseHandler();
+        if (g_state.connected)
+            serverResponseHandler();
+        else
+            threadSleep(0, 100);
     }
 }
 
@@ -91,16 +69,18 @@ static void cycleThread(void)
 
 static void dcThread(void)
 {
-    slave_hnd_t  slave;
-    uint8_t      nick[MAX_NICK_LEN];
+    const slave_t *slave;
+    uin_t          uin;
 
     initDC();
 
     while (!g_state.reasonToSuicide)
     {
-        slave.uin = YSM_DC_Wait4Client();
+        uin = YSM_DC_Wait4Client();
+        lockSlaveList();
+        slave = getSlaveByUin(uin);
 
-        if (querySlaveByUin(slave.uin, &slave) != 0)
+        if (!slave)
         {
             printfOutput(VERBOSE_DCON,
                 "Incoming DC request failed. "
@@ -108,10 +88,11 @@ static void dcThread(void)
         }
         else
         {
-            getSlaveNick(&slave, &nick, sizeof(nick));
             printfOutput(VERBOSE_DCON, "IN DC_REQ %ld %s\n",
-                slave.uin, nick);
+                    slave->uin, slave->info.nickName);
         }
+
+        unlockSlaveList();
     }
 }
 
@@ -133,13 +114,13 @@ int main(int argc, char **argv)
     setlocale(LC_ALL, "");
 
     g_state.reasonToSuicide = FALSE;
-    g_state.reconnecting = FALSE;
-    g_state.lastRead = 0;
-    g_state.lastSent = 0;
+    g_state.connected = FALSE;
 
     sem_init(&semOutput, 0, 1);
     checkSecurity();
     resetTimer(UPTIME);
+    resetTimer(KEEP_ALIVE_TIMEOUT);
+    resetTimer(IDLE_TIMEOUT);
 
     /* Check for arguments - alternate config file */
     if (argc > 2)
@@ -172,13 +153,9 @@ int main(int argc, char **argv)
     if (initialize() < 0)
         return -1;
 
-    printfOutput(VERBOSE_BASE, "INFO STARTING %ld\n", YSM_USER.uin);
+    printfOutput(VERBOSE_BASE, "INFO STARTING %ld\n", g_model.uin);
 
-    YSM_PasswdCheck();
-
-    resetTimer(KEEP_ALIVE_TIMEOUT);
-    resetTimer(IDLE_TIMEOUT);
-
+#if 0
     /* daemonize */
     chdir("/");
     unlink(YSM_FIFO);
@@ -188,18 +165,27 @@ int main(int argc, char **argv)
         exit(0);
 
     setsid();
+#endif
 
 //    for (sig = 1; sig < 32; sig++)
 //        signal(sig, fsignal);
 
-    pthread_create(&t_netid, NULL, (void *) &networkThread, NULL);
-    pthread_create(&t_cycleid, NULL, (void *) &cycleThread, NULL);
+    if (pthread_create(&t_netid, NULL, (void *) &networkThread, NULL) != 0)
+        return -1;
+
+    if (pthread_create(&t_cycleid, NULL, (void *) &cycleThread, NULL) != 0)
+	    return -1;
 
     if (!g_cfg.dcdisable)
-        pthread_create(&t_dcid, NULL, (void *) &dcThread, NULL);
+        if (pthread_create(&t_dcid, NULL, (void *) &dcThread, NULL) != 0)
+            return -1;
 
     /* Take the main thread for the prompt */
     promptThread();
+
+    /* exit here */
+    threadSleep(0, 200);
+    ysm_exit(0);
 
     return 0;
 }

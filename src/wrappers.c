@@ -20,8 +20,8 @@ int YSM_READ(int32_t sock, void *buf, int read_len, char priority)
 
     rlen = read_len;
 
-    while (read_len > r && ((g_state.reconnecting && priority)
-    || !g_state.reconnecting))
+    while (read_len > r && ((!g_state.connected && priority)
+    || g_state.connected))
     {
         x = SOCK_READ(sock, (char *)buf+r, rlen);
 
@@ -39,7 +39,7 @@ int YSM_READ(int32_t sock, void *buf, int read_len, char priority)
 
     /* Only negotiation functions take precedence */
     /* since we have multiple threads, we stop them this way */
-    if (!priority && g_state.reconnecting)
+    if (!priority && !g_state.connected)
     {
         /* make the thread sleep a little dont consume 100% ! */
         threadSleep(0, 100);
@@ -49,16 +49,16 @@ int YSM_READ(int32_t sock, void *buf, int read_len, char priority)
     return r;
 }
 
-int bsAppendReadLoop(bsd_t bsd, int32_t sock, size_t count, uint8_t priority)
+int bsAppendReadLoop(bsd_t bsd, int sock, size_t count, uint8_t priority)
 {
     int32_t r = 0, x = 0, rlen = 0;
 
-    rlen = read_len;
+    rlen = count;
 
-    while (read_len > r && ((g_state.reconnecting && priority)
-    || !g_state.reconnecting))
+    while (count > r && ((!g_state.connected && priority)
+    || g_state.connected))
     {
-        x = bsAppendRead(bsd, sock, rlen);
+        x = bsAppendFromSocket(bsd, sock, rlen);
 
         if (x >= 0)
         {
@@ -74,7 +74,7 @@ int bsAppendReadLoop(bsd_t bsd, int32_t sock, size_t count, uint8_t priority)
 
     /* Only negotiation functions take precedence */
     /* since we have multiple threads, we stop them this way */
-    if (!priority && g_state.reconnecting)
+    if (!priority && !g_state.connected)
     {
         /* make the thread sleep a little dont consume 100% ! */
         threadSleep(0, 100);
@@ -84,7 +84,7 @@ int bsAppendReadLoop(bsd_t bsd, int32_t sock, size_t count, uint8_t priority)
     return r;
 }
 
-int writeBs(int32_t sock, bsd_t bsd)
+int writeBs(int sock, bsd_t bsd)
 {
     int32_t     r = 0;
     int32_t     y = 0;
@@ -98,6 +98,7 @@ int writeBs(int32_t sock, bsd_t bsd)
     data = (const void *)bsGetBuf(bsd);
     dataLen = bsGetLen(bsd);
 
+
     bsRewind(bsd);
     str = initString();
     printfString(str, "OUT PACKET\n");
@@ -110,9 +111,6 @@ int writeBs(int32_t sock, bsd_t bsd)
         y = SOCK_WRITE(sock, data, dataLen);
         if (y) r += y;
     } while (y >= 0 && r != dataLen);
-
-    if (y < 0)
-        networkReconnect();
 
     return r;
 }
@@ -132,14 +130,10 @@ int YSM_WRITE(int32_t sock, void *data, int32_t data_len)
     return r;
 }
 
-int32_t YSM_WRITE_DC(uin_t uin, int32_t sock, void *data, int32_t data_len)
+int YSM_WRITE_DC(slave_t *victim, int32_t sock, void *data, int32_t data_len)
 {
-    direct_connection_t dc;
-
-    getSlaveDirectConnection(uin, &dc);
-    
     /* checks on DC, open a DC if it doesn't exist! */
-    if (dc.flags & DC_CONNECTED)
+    if (victim->d_con.flags & DC_CONNECTED)
         return SOCK_WRITE(sock, data, data_len);
     else
     {
@@ -180,14 +174,14 @@ size_t YSM_READ_LN(int32_t sock, int8_t *obuf, size_t maxsize)
 
 void *ysm_malloc(size_t size, char *file, int line)
 {
-    char *memory;
+    void *memory;
 
     memory = malloc(size);
 
     if ((size <= 0) || (memory == NULL))
     {
         printfOutput(VERBOSE_BASE,
-            "\rYSM_Malloc: Error in block. Probably size error.\n");
+            "ysm_malloc: Error in block. Probably size error.\n");
 
         printfOutput(VERBOSE_BASE,
             "Inform the author! File: %s Line: %d\n", file, line);
@@ -204,20 +198,14 @@ void *ysm_malloc(size_t size, char *file, int line)
 
 void *ysm_calloc(size_t nmemb, size_t size, char *file, int line)
 {
-    char *memory;
-
-    memory = ysm_malloc(nmemb * size, file, line);
-    memset(memory, 0, nmemb * size);
-
+    void *memory = ysm_malloc(nmemb * size, file, line);
+    memset(memory, '\0', nmemb * size);
     return memory;
 }
 
 void *ysm_realloc(void *mem, size_t size, char *file, int line)
 {
-    void *newMem;
-
-    newMem = realloc(mem, size);
-
+    void *newMem = realloc(mem, size);
     return newMem;
 }
 
@@ -226,7 +214,7 @@ void ysm_free(void *what, char *file, int line)
     if (what == NULL)
     {
         printfOutput(VERBOSE_BASE,
-            "\rysm_free: NULL Block . Probably double free?.\n");
+            "ysm_free: NULL Block . Probably double free?.\n");
 
         printfOutput(VERBOSE_BASE,
             "Inform the author! File: %s Line: %d\n", file, line);
@@ -239,7 +227,6 @@ void ysm_free(void *what, char *file, int line)
 #endif
 
     free(what);
-    what = NULL;
 }
 
 /* This is the function that should be called instead of directly */
@@ -254,7 +241,7 @@ void ysm_exit(int32_t status, int8_t ask)
     freeBs(g_sinfo.blusersid);
 
     /* close the network socket */
-    close(YSM_USER.network.rSocket);
+    close(g_model.network.socket);
 
     /* free slaves list allocated memory */
     freeSlaveList();

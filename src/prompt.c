@@ -23,24 +23,17 @@ extern void cmdCHAT(uint16_t argc, int8_t **argv);
  * if verbous, print any messages.
  */
 
-void sendMessage(uin_t uin, int8_t *data, bool_t verbose)
+void sendMessage(const slave_t *victim, char *data, bool_t verbose)
 {
-    int32_t       dataLen = 0;
-    sl_flags_t    flags = 0;
-    keyInstance  *crypt_key = NULL;
-    slave_hnd_t   victim;
-    sl_caps_t     caps = 0;
-    sl_status_t   status = STATUS_UNKNOWN;
-    int8_t       *dataPtr = data;
-    int8_t       *newDataPtr = NULL;
-    uint8_t       nick[MAX_NICK_LEN];
+    int32_t      dataLen = 0;
+    sl_flags_t   flags = 0;
+    keyInstance *crypt_key = NULL;
+    char        *dataPtr = data;
+    char        *newDataPtr = NULL;
 
-    querySlaveByUin(uin, &victim);
-    getSlaveCapabilities(&victim, &caps);
-    getSlaveStatus(&victim, &status);
-    getSlaveNick(&victim, &nick, sizeof(nick));
+    DEBUG_PRINT("");
 
-    if (caps & CAPFL_UTF8)
+    if (victim->caps & CAPFL_UTF8)
         flags |= MFLAGTYPE_UTF8;
 
     /* Charset Convertion Time! */
@@ -65,8 +58,7 @@ void sendMessage(uin_t uin, int8_t *data, bool_t verbose)
     flags |= MFLAGTYPE_NORM;
 
     sendMessage2Client(victim,
-            victim.uin,
-            (caps & CAPFL_SRVRELAY) ? 0x02 : 0x01,
+            (victim->caps & CAPFL_SRVRELAY) ? 0x02 : 0x01,
             YSM_MESSAGE_NORMAL,
             dataPtr,
             dataLen,
@@ -78,7 +70,7 @@ void sendMessage(uin_t uin, int8_t *data, bool_t verbose)
     {
         printfOutput(VERBOSE_BASE,
                 "OUT MSG %ld %s %s %s\n",
-                victim.uin, nick, strStatus(status),
+                victim->uin, victim->info.nickName, strStatus(victim->status),
                 (crypt_key != NULL ? "CRYPT" : ""));
     }
 
@@ -87,81 +79,6 @@ void sendMessage(uin_t uin, int8_t *data, bool_t verbose)
     {
         YSM_FREE(dataPtr);
     }
-}
-
-void YSM_PasswdCheck(void)
-{
-    int8_t *p = NULL;
-
-    if (YSM_USER.password[0] == '\0')
-    {
-        printfOutput(VERBOSE_BASE, "%s\n", MSG_FOUND_SECPASS);
-
-        do {
-            p = YSM_getpass("Password: ");
-        } while(p[0] == '\0');
-
-        snprintf(YSM_USER.password,
-            sizeof(YSM_USER.password),
-            "%s",
-            p );
-
-        YSM_USER.password[sizeof(YSM_USER.password) - 1] = 0x00;
-    }
-}
-
-void YSM_ConsoleRead(int fd)
-{
-    int8_t *tmp = NULL;
-    int8_t *retline = NULL;
-    int8_t *pos = NULL;
-    size_t  size = BUFSIZ;
-    ssize_t readsize;
-
-    /* update the idle keyboard timestamp */
-    resetTimer(IDLE_TIMEOUT);
-
-    retline = YSM_MALLOC(size);
-    if (retline == NULL)
-        return;
-    pos = retline;
-
-    while ((readsize = read(fd, pos, size - (pos - retline))) > 0)
-    {
-        if ((size_t)readsize == size)
-        {
-            tmp = YSM_MALLOC(size*2);
-            if (tmp == NULL)
-            {
-                YSM_FREE(retline);
-                return;
-            }
-            memcpy(tmp, retline, size);
-            YSM_FREE(retline);
-            retline = tmp;
-            pos = retline + size;
-            size *= 2;
-        }
-        else if (readsize == -1)
-        {
-            return;
-        }
-        else
-        {
-            pos[readsize - 1] = '\0'; // trim ending CR
-            break;
-        }
-    }
-
-    /* did we get a command or not? */
-    if (retline == NULL)
-        return;
-
-    /* parse and process the command */
-    YSM_DoCommand(retline);
-
-    /* dont you dare to leak on me! */
-    YSM_FREE(retline);
 }
 
 void YSM_ParseCommand(int8_t *_input, int32_t *argc, int8_t *argv[])
@@ -243,6 +160,8 @@ void YSM_DoCommand(char *cmd)
     int8_t      *argv[MAX_CMD_ARGS];
     int32_t      argc = 0;
 
+    DEBUG_PRINT("cmd: %s", cmd);
+
     if (!strlen(cmd)) return;
 
     memset(argv, 0, sizeof(argv));
@@ -257,8 +176,8 @@ void YSM_DoCommand(char *cmd)
 
 void YSM_DoChatCommand(int8_t *cmd)
 {
-    slave_hnd_t victim = {-1, 0}; 
-    uint8_t     flags = 0;
+    slave_t *victim = NULL;
+    uint8_t  flags = 0;
 
     if (cmd == NULL || cmd[0] == '\0') return;
 
@@ -271,244 +190,16 @@ void YSM_DoChatCommand(int8_t *cmd)
 
     /* loop through the slaves list and send the message only to
      * those who have the FL_CHAT marked */
-    while (getNextSlave(&victim) >= 0)
+    while (victim = getNextSlave(victim))
     {
-        getSlaveFlags(&victim, &flags);
-        if (flags & FL_CHAT)
+        if (victim->flags & FL_CHAT)
         {
-            sendMessage(victim.uin, cmd, FALSE);
+            sendMessage(victim, cmd, FALSE);
         }
     }
 }
 
-static void YSM_PreIncoming(
-    slave_hnd_t  *contact,
-    msg_type_t    msgType,
-    int32_t      *msgLen,
-    uint8_t     **msgData,
-    uint8_t       msgFlags,
-    keyInstance **key)
-{
-    int8_t *data_conv = NULL, do_conv = 0;
-
-    /* procedures applied to normal messages only */
-    if (msgType == YSM_MESSAGE_NORMAL)
-    {
-        /* decrypt the incoming message if neccesary.
-         * the function will return < 0 if decryption failed.
-         * though it might be because we don't have a key with
-         * this contact (or we don't have her on our list).
-         */
-
-        if (YSM_DecryptMessage(contact, msgData, msgLen, key) >= 0)
-        {
-            /* if decryption went ok, do convertion */
-            do_conv = 1;
-        }
-
-        if (do_conv)
-        {
-            /* Charset convertion time */
-            YSM_Charset( CHARSET_INCOMING,
-                *msgData,
-                msgLen,
-                &data_conv,
-                msgFlags );
-
-            if (data_conv != NULL)
-            {
-                /* msgData is freed in the callers function */
-                *msgData = data_conv;
-            }
-        }
-
-        /* filter unwanted characters */
-        YSM_ParseMessageData(*msgData, *msgLen);
-
-        /* set again the data length after the convertion */
-        (*msgLen) = strlen(*msgData)+1;
-
-        /* store last message */
-        if (contact != NULL)
-        {
-            strncpy(g_state.lastMessage, *msgData, sizeof(g_state.lastMessage) - 1);
-            g_state.lastMessage[sizeof(g_state.lastMessage)-1] = '\0';
-        }
-    }
-}
-
-static void YSM_PostIncoming(
-    uin_t       uin,
-    msg_type_t  msgType,
-    uint8_t    *msgData,
-    uint16_t    msgLen)
-{
-    if (msgType == YSM_MESSAGE_NORMAL)
-    {
-        /* do we have to send messages? either CHAT or FORWARD? */
-
-        if (g_cfg.forward)
-            forwardMessage(uin, msgData);
-
-        if (g_state.promptFlags & FL_CHATM)
-        {
-            if (!(getSlaveFlags(uin) & FL_CHAT))
-            {
-                /* only send the reply to those who don't
-                 * belong to my chat session! */
-
-                sendMessage(uin, g_cfg.CHATMessage, FALSE);
-            }
-        }
-    }
-}
-
-void displayMessage(msg_t *msg)
-{
-    char         *aux = NULL, *auxb = NULL;
-    keyInstance  *crypt_key = NULL;
-    int           x = 0;
-    uint8_t      *old_msgData = NULL;
-    int           free_msgData = 0;
-    uint8_t       nick[MAX_NICK_LEN];
-
-    if (sender == NULL)
-        return;
-    
-    getSlaveNick(sender, &nick, sizeof(nick));
-    DEBUG_PRINT("from %ld (%s)", sender->uin, nick);
-
-    old_msgData = msgData;
-    YSM_PreIncoming(sender, msgType, &msgLen, &msgData, msgFlags, &crypt_key);
-    free_msgData = (msgData != old_msgData);
-
-    /* are we in CHAT MODE ? we dont print messages which don't belong
-     * to our chat session!. */
-    if (g_state.promptFlags & FL_CHATM)
-    {
-        if (!(sender->flags & FL_CHAT))
-            goto displaymsg_exit;
-    }
-
-    switch (msgType)
-    {
-        case YSM_MESSAGE_NORMAL:
-            printfOutput(VERBOSE_BASE,
-                "IN MSG %ld %s %s\n%s\n",
-                sender->uin, nick,
-                (crypt_key != NULL ? "CRYPT" : ""),
-                msgData);
-            break;
-
-        case YSM_MESSAGE_PAGER:
-            strtok(msgData, "IP: ");
-            aux = strtok(NULL, "\n");
-            auxb = strtok(NULL, "");
-            printfOutput( VERBOSE_BASE, "\r%s - %s\n"
-                "< Message: %s >\n", MSG_INCOMING_PAGER, aux, auxb);
-            break;
-
-        case YSM_MESSAGE_URL:
-            auxb = strchr(msgData, 0xfe);
-            if(auxb != NULL) {
-                *auxb = '\0';
-                aux = strtok(auxb+1, "");
-                auxb = &msgData[0];
-
-            } else {
-                aux = &msgData[0];
-                auxb = "No description Provided";
-            }
-
-            /* store the url as the last received url */
-            if (aux != NULL) {
-                strncpy( g_state.lastUrl, aux,
-                    sizeof(g_state.lastUrl) - 1 );
-
-                g_state.lastUrl[sizeof(g_state.lastUrl)-1] = '\0';
-            }
-
-            printfOutput( VERBOSE_BASE ,"\r%s - from: %s - UIN: %d\n"
-                "< url: %s >\n< description: %s >\n"
-                "[TIP: you may now use the 'burl' command with a '!'\n"
-                "[as parameter to trigger your browser with the last\n"
-                "[received URL.\n",
-                MSG_INCOMING_URL,
-                nick, sender->uin, aux, auxb);
-
-            break;
-
-        case YSM_MESSAGE_CONTACTS:
-            for (x = 0; x < msgLen; x++) {
-                if ((unsigned char)msgData[x] == 0xfe)
-                        msgData[x] = 0x20;
-            }
-
-            printfOutput( VERBOSE_BASE,
-                "\n\rIncoming CONTACTS from: "
-                "%s [ICQ# %d].\n",
-                nick, sender->uin);
-
-            strtok(msgData, " ");    /* amount */
-            x = 0;
-
-            aux = strtok(NULL, " ");
-            while (aux != NULL && x < atoi(msgData))
-            {
-                printfOutput( VERBOSE_BASE,
-                    "\r" "UIN %-14.14s\t", aux );
-
-                aux = strtok(NULL, " ");
-                if (!aux) printfOutput( VERBOSE_BASE,
-                        "Nick Unknown\n");
-
-                else printfOutput( VERBOSE_BASE,
-                        "Nick %s\n", aux);
-
-                aux = strtok(NULL, " ");
-                x++;
-            }
-
-            break;
-
-        case YSM_MESSAGE_AUTH:
-            printfOutput( VERBOSE_BASE, "\r%s UIN #%d "
-                "(Slave: %s).\nThe following Message arrived with the"
-                " request: %s\n",
-                MSG_INCOMING_AUTHR,
-                sender->uin, nick, msgData);
-            break;
-
-        case YSM_MESSAGE_ADDED:
-            printfOutput( VERBOSE_BASE,
-                "\r%s ICQ #%d just added You to the list."
-                " (Slave: %s).\n", MSG_WARN_ADDED,
-                sender->uin, nick);
-            break;
-
-        case YSM_MESSAGE_AUTHOK:
-            printfOutput(VERBOSE_BASE, "IN AUTH_OK %ld\n", sender->uin);
-            break;
-
-        case YSM_MESSAGE_AUTHNOT:
-            printfOutput(VERBOSE_BASE, "IN AUTH_DENY %ld\n", sender->uin);
-            break;
-
-        default:
-            YSM_ERROR(ERROR_CODE, 1);
-            break;
-    }
-
-displaymsg_exit:
-    YSM_PostIncoming(uin, msgType, msgLen, msgData);
-
-    if (free_msgData)
-    {
-        YSM_FREE(msgData);
-    }
-}
-
-int32_t YSM_ParseMessageData(uint8_t *data, uint32_t length)
+static int32_t parseMessageData(uint8_t *data, uint32_t length)
 {
     uint32_t x = 0;
 
@@ -531,4 +222,204 @@ int32_t YSM_ParseMessageData(uint8_t *data, uint32_t length)
 
     /* by now we just keep the same length going */
     return length;
+}
+
+static void YSM_PreIncoming(msg_t *msg, keyInstance **key)
+{
+    int8_t *data_conv = NULL, do_conv = 0;
+
+    /* procedures applied to normal messages only */
+    if (msg->type == YSM_MESSAGE_NORMAL)
+    {
+        /* decrypt the incoming message if neccesary.
+         * the function will return < 0 if decryption failed.
+         * though it might be because we don't have a key with
+         * this contact (or we don't have her on our list).
+         */
+
+        int msgLen = strlen(getString(msg->data));
+
+#if 0
+        if (YSM_DecryptMessage(msg->sender, msg->data, msg->len, key) >= 0)
+        {
+            /* if decryption went ok, do convertion */
+            do_conv = 1;
+        }
+
+        if (do_conv)
+        {
+            /* Charset convertion time */
+            YSM_Charset( CHARSET_INCOMING,
+                *msg->data,
+                msgLen,
+                &data_conv,
+                msg->flags);
+
+            if (data_conv != NULL)
+            {
+                /* msgData is freed in the callers function */
+                *msg->data = data_conv;
+            }
+        }
+#endif
+
+        /* filter unwanted characters */
+        parseMessageData(getString(msg->data), msgLen);
+#if 0
+        /* set again the data length after the convertion */
+        (*msgLen) = strlen(*msgData)+1;
+#endif
+    }
+}
+
+static void YSM_PostIncoming(msg_t *msg)
+{
+    if (msg->type == YSM_MESSAGE_NORMAL)
+    {
+        /* do we have to send messages? either CHAT or FORWARD? */
+
+        if (g_state.promptFlags & FL_CHATM)
+        {
+            if (!(msg->sender->flags & FL_CHAT))
+            {
+                /* only send the reply to those who don't
+                 * belong to my chat session! */
+
+                sendMessage(msg->sender, g_cfg.CHATMessage, FALSE);
+            }
+        }
+    }
+}
+
+void displayMessage(msg_t *msg)
+{
+    char         *aux = NULL, *auxb = NULL;
+    keyInstance  *crypt_key = NULL;
+    int           x = 0;
+
+    if (msg == NULL || msg->sender == NULL)
+        return;
+    
+    DEBUG_PRINT("from %ld (%s)", msg->sender->uin, msg->sender->info.nickName);
+
+    YSM_PreIncoming(msg, &crypt_key);
+
+    /* are we in CHAT MODE ? we dont print messages which don't belong
+     * to our chat session!. */
+    if (g_state.promptFlags & FL_CHATM)
+    {
+        if (!(msg->sender->flags & FL_CHAT))
+            goto displaymsg_exit;
+    }
+
+    switch (msg->type)
+    {
+        case YSM_MESSAGE_NORMAL:
+            printfOutput(VERBOSE_BASE,
+                "IN MSG %ld %s %s\n%s\n",
+                msg->sender->uin, msg->sender->info.nickName,
+                (crypt_key != NULL ? "CRYPT" : ""),
+                getString(msg->data));
+            break;
+
+#if 0
+        case YSM_MESSAGE_PAGER:
+            strtok(msg->data, "IP: ");
+            aux = strtok(NULL, "\n");
+            auxb = strtok(NULL, "");
+            printfOutput( VERBOSE_BASE, "\r%s - %s\n"
+                "< Message: %s >\n", MSG_INCOMING_PAGER, aux, auxb);
+            break;
+
+        case YSM_MESSAGE_URL:
+            auxb = strchr(msg->data, 0xfe);
+            if(auxb != NULL) {
+                *auxb = '\0';
+                aux = strtok(auxb+1, "");
+                auxb = &msgData[0];
+
+            } else {
+                aux = &msgData[0];
+                auxb = "No description Provided";
+            }
+
+            printfOutput( VERBOSE_BASE ,"\r%s - from: %s - UIN: %d\n"
+                "< url: %s >\n< description: %s >\n"
+                "[TIP: you may now use the 'burl' command with a '!'\n"
+                "[as parameter to trigger your browser with the last\n"
+                "[received URL.\n",
+                MSG_INCOMING_URL,
+                msg->sender->info.nickName, msg->sender->uin, aux, auxb);
+
+            break;
+
+        case YSM_MESSAGE_CONTACTS:
+        {
+            int msgLen = strlen(getString(msg->data));
+
+            for (x = 0; x < msgLen; x++)
+            {
+                if ((unsigned char)msg->data[x] == 0xfe)
+                        msg->data[x] = 0x20;
+            }
+
+            printfOutput( VERBOSE_BASE,
+                "\n\rIncoming CONTACTS from: "
+                "%s [ICQ# %d].\n",
+                msg->sender->info.nickName, msg->sender->uin);
+
+            strtok(msg->data, " ");    /* amount */
+            x = 0;
+
+            aux = strtok(NULL, " ");
+            while (aux != NULL && x < atoi(msg->data))
+            {
+                printfOutput( VERBOSE_BASE,
+                    "\r" "UIN %-14.14s\t", aux );
+
+                aux = strtok(NULL, " ");
+                if (!aux) printfOutput( VERBOSE_BASE,
+                        "Nick Unknown\n");
+
+                else printfOutput( VERBOSE_BASE,
+                        "Nick %s\n", aux);
+
+                aux = strtok(NULL, " ");
+                x++;
+            }
+            break;
+        }
+#endif
+
+        case YSM_MESSAGE_AUTH:
+            printfOutput( VERBOSE_BASE, "\r%s UIN #%d "
+                "(Slave: %s).\nThe following Message arrived with the"
+                " request: %s\n",
+                MSG_INCOMING_AUTHR,
+                msg->sender->uin, msg->sender->info.nickName,
+                getString(msg->data));
+            break;
+
+        case YSM_MESSAGE_ADDED:
+            printfOutput( VERBOSE_BASE,
+                "\r%s ICQ #%d just added You to the list."
+                " (Slave: %s).\n", MSG_WARN_ADDED,
+                msg->sender->uin, msg->sender->info.nickName);
+            break;
+
+        case YSM_MESSAGE_AUTHOK:
+            printfOutput(VERBOSE_BASE, "IN AUTH_OK %ld\n", msg->sender->uin);
+            break;
+
+        case YSM_MESSAGE_AUTHNOT:
+            printfOutput(VERBOSE_BASE, "IN AUTH_DENY %ld\n", msg->sender->uin);
+            break;
+
+        default:
+            YSM_ERROR(ERROR_CODE, 1);
+            break;
+    }
+
+displaymsg_exit:
+    YSM_PostIncoming(msg);
 }

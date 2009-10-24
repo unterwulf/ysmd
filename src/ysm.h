@@ -1,9 +1,9 @@
 #ifndef _YSM_H_
 #define _YSM_H_
 
+#include <assert.h>
 #include "config.h"
 #include "compat.h"
-#include "misc.h"
 #include "bytestream.h"
 
 #ifdef DEBUG
@@ -59,6 +59,7 @@
 #define YSM_BUDDY_GROUPID      0x1337
 
 #define YSM_BUDDY_SLAVE        0x0000
+#define YSM_BUDDY_GROUP        0x0001
 #define YSM_BUDDY_SLAVE_VIS    0x0002
 #define YSM_BUDDY_SLAVE_INV    0x0003
 #define YSM_BUDDY_SLAVE_IGN    0x000e
@@ -76,69 +77,35 @@
 #define VERBOSE_SDOWNLOAD   23
 
 
-#define FINGERPRINT_YSM_CLIENT          0xabffffff
-#define FINGERPRINT_YSM_CLIENT_CRYPT    0xdeadbabe
-#define FINGERPRINT_TRILLIAN_CLIENT     0x3b75ac09
-#define FINGERPRINT_LIB2K_CLIENT        0x3aa773ee
-#define FINGERPRINT_MICQ2003A_CLIENT_1  0x3CF02D22
-#define FINGERPRINT_MICQ2003A_CLIENT_2  0x3E76502C
-#define FINGERPRINT_LICQ_CLIENT         0x7d000000
-#define FINGERPRINT_MICQ_CLIENT         0xffffff42
-#define FINGERPRINT_MIRANDA_CLIENT      0xffffffff
-#define FINGERPRINT_STRICQ_CLIENT       0xffffff8f
-
-/* the following clients are identified by capabilities */
-#define FINGERPRINT_SIMICQ_CLIENT       0x04040404
-#define FINGERPRINT_M2000_CLIENT        0x06060606
-#define FINGERPRINT_M20012_CLIENT       0x07070707
-#define FINGERPRINT_M2002_CLIENT        0x08080808
-#define FINGERPRINT_MICQLITE_CLIENT     0x09090909
-#define FINGERPRINT_ICQ2GO_CLIENT       0x0a0a0a0a
-#define FINGERPRINT_MISC_CLIENT         0x00
-
 #define SLAVES_TAG    "SLAVES"
 
-#define STATUS_ONLINE      0x0000
-#define STATUS_OFFLINE     0xffff
-#define STATUS_INVISIBLE   0x0100
-#define STATUS_NA          0x0005
-#define STATUS_NA2         0x0004
-#define STATUS_DND         0x0013
-#define STATUS_OCCUPIED    0x0011
-#define STATUS_FREE_CHAT   0x0020
-#define STATUS_AWAY        0x0001
-#define STATUS_UNKNOWN     0xdead
+typedef enum {
+    STATUS_ONLINE    = 0x0000,
+    STATUS_AWAY      = 0x0001,
+    STATUS_NA        = 0x0005,
+    STATUS_NA2       = 0x0004,
+    STATUS_DND       = 0x0013,
+    STATUS_OCCUPIED  = 0x0011,
+    STATUS_FREE_CHAT = 0x0020,
+    STATUS_INVISIBLE = 0x0100,
+    STATUS_OFFLINE   = 0xffff,
+    STATUS_UNKNOWN   = 0xdead
+} user_status_t;
 
-#define STATUS_FLWEBAWARE  0x0001
-#define STATUS_FLIPSHOW    0x0002
-#define STATUS_FLBIRTHDAY  0x0008
-#define STATUS_FLDC_AUTH   0x1000
-#define STATUS_FLDC_CONT   0x2000
+typedef enum {
+    STATUS_FLWEBAWARE = 0x0001,
+    STATUS_FLIPSHOW   = 0x0002,
+    STATUS_FLBIRTHDAY = 0x0008,
+    UF_WEBFRONT       = 0x0020,
+    UF_DCDISABLED     = 0x0100,
+    STATUS_FLDC_AUTH  = 0x1000,
+    STATUS_FLDC_CONT  = 0x2000
+} user_flags_t;
 
 #define INFO_MAIN          0x01
 #define INFO_HP            0x02
 #define INFO_WORK          0x03
 #define INFO_ABOUT         0x04
-
-/* Definition of Message Types for Displaying functions */
-typedef enum {
-    YSM_MESSAGE_UNDEF    = 0x00,
-    YSM_MESSAGE_NORMAL   = 0x01,
-    YSM_MESSAGE_FILE     = 0x03,
-    YSM_MESSAGE_URL      = 0x04,
-    YSM_MESSAGE_AUTH     = 0x06,
-    YSM_MESSAGE_AUTHNOT  = 0x07,
-    YSM_MESSAGE_AUTHOK   = 0x08,
-    YSM_MESSAGE_ADDED    = 0x0C,
-    YSM_MESSAGE_PAGER    = 0x0D,
-    YSM_MESSAGE_CONTACTS = 0x13,
-    YSM_MESSAGE_GREET    = 0x1A,
-    YSM_MESSAGE_GETAWAY  = 0xE8,
-    YSM_MESSAGE_GETOCC   = 0xE9,
-    YSM_MESSAGE_GETNA    = 0xEA,
-    YSM_MESSAGE_GETDND   = 0xEB,
-    YSM_MESSAGE_GETFFC   = 0xEC,
-} msg_type_t;
 
 /* Definition of ERROR standards */
 #define ERROR_CODE        0
@@ -155,7 +122,6 @@ typedef uint8_t  sl_flags_t;
 typedef uint8_t  sl_caps_t;
 typedef uint32_t sl_fprint_t;
 typedef uint32_t req_id_t;
-
 
 typedef struct
 {
@@ -178,9 +144,9 @@ typedef struct
 
 typedef struct
 {
-    int32_t  rSocket;
-    int8_t   authHost[MAX_PATH];
-    int8_t   cookieHost[MAX_PATH];
+    int      socket;
+    char     authHost[MAX_PATH];
+    char     cookieHost[MAX_PATH];
     uint16_t authPort;
     uint16_t cookiePort;
 } network_connection_t;
@@ -242,9 +208,9 @@ typedef struct
 
 typedef struct
 {
-    uint8_t   username[MAX_PATH];
-    uint8_t   password[MAX_PATH];
-    uint8_t   host[MAX_PATH];
+    char      username[MAX_PATH];
+    char      password[MAX_PATH];
+    char      host[MAX_PATH];
     uint16_t  port;
     uint8_t   flags;
 } proxy_info_t;
@@ -283,15 +249,16 @@ typedef struct
     uin_t                uin;
     uint16_t             status;
     uint16_t             status_flags;
-    int8_t               password[MAX_PWD_LEN];
+    char                 password[MAX_PWD_LEN];
     uint8_t              flags;
     time_t               delta;
 
-    buddy_main_info_t    info;
+    buddy_main_info_t    user;
     buddy_timing_t       timing;
     proxy_info_t         proxy;
-    direct_connection_t  d_con;
+    direct_connection_t  dc;
     network_connection_t network;
+    int                  ctl;
 } ysm_model_t;
 
 /* list types declaration */
@@ -305,33 +272,29 @@ typedef struct
 
 typedef struct {
     uint8_t   verbose;
-    uint8_t   awaytime;
     uint8_t   spoof;
-    uint8_t   antisocial;
     uint8_t   updateNicks;
     uint8_t   dcdisable;
     uint8_t   dclan;
     uint16_t  dcport1;
     uint16_t  dcport2;
-    uin_t     forward;
     char      charsetTrans[MAX_CHARSET + 4];
     char      charsetLocal[MAX_CHARSET + 4];
 
     int8_t    CHATMessage[MAX_DATA_LEN+1];
     enum {OT_FIFO, OT_STDIN, OT_STDOUT} outputType;
-    int8_t    outputPath[MAX_DATA_LEN+1];
+    char      outputPath[MAX_DATA_LEN+1];
+    enum {CT_UNIX, CT_TCP} ctlType;
+    char      ctlAddress[MAX_DATA_LEN+1];
+    uint16_t  ctlPort;
 } ysm_config_t;
 
 typedef struct {
-    uint8_t  reasonToSuicide;
-    uint8_t  reconnecting;
-    uin_t    lastRead;
-    uin_t    lastSent;
-    uint8_t  lastMessage[MAX_DATA_LEN + 1];
-    uint8_t  lastUrl[MAX_DATA_LEN + 1];
-    uint8_t  configFile[MAX_PATH];
-    uint8_t  slavesFile[MAX_PATH];
-    uint8_t  configDir[MAX_PATH];
+    int  reasonToSuicide;
+    int  connected;
+    char configFile[MAX_PATH];
+    char slavesFile[MAX_PATH];
+    char configDir[MAX_PATH];
 
 #define FL_OVERWRITTEN  0x01
 #define FL_RAW          0x02
@@ -344,7 +307,7 @@ typedef struct {
 } ysm_state_t;
 
 /* exports */
-extern ysm_model_t           YSM_USER;
+extern ysm_model_t           g_model;
 extern ysm_server_info_t     g_sinfo;
 extern ysm_config_t          g_cfg;
 extern ysm_state_t           g_state;

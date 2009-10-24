@@ -4,6 +4,7 @@
 #include "slaves.h"
 #include "output.h"
 #include "crypt.h"
+#include "fingerprint.h"
 
 int YSM_EncryptData(char *plain_data, int len, keyInstance *cipherKey)
 {

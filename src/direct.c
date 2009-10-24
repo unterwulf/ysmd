@@ -10,6 +10,7 @@
 #include "crypt.h"
 #include "slaves.h"
 #include "output.h"
+#include "fingerprint.h"
 
 static void YSM_DC_InitA(slave_t *remote_slave, int32_t sock);
 static void YSM_DC_InitB(slave_t *remote_slave, int32_t sock);
@@ -31,12 +32,12 @@ static const uint8_t id_str_contacts[] = {
     0xac,0x96,0x1e,0xa6 };
 
 static int32_t YSM_DC_IncomingFile(
-    slave_t    *victim,
-    int32_t     len,
-    int8_t     *data,
-    msg_type_t  m_type,
-    uint8_t    m_flags,
-    int16_t     m_status);
+	slave_t    *victim,
+	int32_t     len,
+	int8_t     *data,
+	msg_type_t  m_type,
+	uint8_t    m_flags,
+	int16_t     m_status);
 
 static int32_t YSM_DC_FileC(slave_t *victim, uint16_t rport);
 
@@ -59,8 +60,8 @@ static int32_t YSM_DC_BindPort(int32_t sock, uint16_t *port)
 
     if (bind(sock, (struct sockaddr *)&addr, len) < 0)
     {
-        printfOutput(VERBOSE_DCON, "YSM_DC_BindPort: Bind failed.\n");
-        return -1;
+	printfOutput(VERBOSE_DCON, "YSM_DC_BindPort: Bind failed.\n");
+	return -1;
     }
 
     getsockname(sock, (struct sockaddr *)&addr, &len);
@@ -72,18 +73,18 @@ static int32_t YSM_DC_BindPort(int32_t sock, uint16_t *port)
 
 int initDC(void)
 {
-    YSM_USER.d_con.seq_out = 0xffff;
+    g_model.dc.seq_out = 0xffff;
 
-    YSM_USER.d_con.rSocket = socket(AF_INET, SOCK_STREAM, 0);
-    if (YSM_USER.d_con.rSocket < 0) {
-        printfOutput( VERBOSE_DCON, "YSM_DC_Init: socket failed.\n" );
-        return -1;
+    g_model.dc.rSocket = socket(AF_INET, SOCK_STREAM, 0);
+    if (g_model.dc.rSocket < 0) {
+	printfOutput( VERBOSE_DCON, "YSM_DC_Init: socket failed.\n" );
+	return -1;
     }
 
     /* fill our DC information. rIP was filled during connect */
-    YSM_USER.d_con.rPort = htons(g_cfg.dcport1);
-    if (YSM_DC_BindPort( YSM_USER.d_con.rSocket,
-            &YSM_USER.d_con.rPort ) < 0) return -1;
+    g_model.dc.rPort = htons(g_cfg.dcport1);
+    if (YSM_DC_BindPort( g_model.dc.rSocket,
+		&g_model.dc.rPort ) < 0) return -1;
 
     return 0;
 }
@@ -100,9 +101,9 @@ uin_t YSM_DC_Wait4Client(void)
     slave_t    *YSM_Query = NULL;
 
     addrlen = sizeof(addr);
-    cli_sock = accept(YSM_USER.d_con.rSocket,
-                (struct sockaddr *)&addr,
-                (int *)&addrlen);
+    cli_sock = accept(g_model.dc.rSocket,
+            (struct sockaddr *)&addr,
+            (int *)&addrlen);
 
     if (cli_sock < 0)
         return NOT_A_SLAVE;
@@ -129,8 +130,8 @@ uin_t YSM_DC_Wait4Client(void)
     if (r_len <= 0) {
 
         printfOutput( VERBOSE_DCON,
-            "YSM_DC_Wait4Client: "
-            "Error reading first PEER_INIT packet.\n" );
+                "YSM_DC_Wait4Client: "
+                "Error reading first PEER_INIT packet.\n" );
 
         close(cli_sock);
         return NOT_A_SLAVE;
@@ -143,8 +144,8 @@ uin_t YSM_DC_Wait4Client(void)
     if (r_len != 0x30) {
 
         printfOutput( VERBOSE_DCON,
-            "YSM_DC_Wait4Client: "
-            "PEER_INIT packet length isn't correct.\n" );
+                "YSM_DC_Wait4Client: "
+                "PEER_INIT packet length isn't correct.\n" );
 
         close( cli_sock );
         return NOT_A_SLAVE;
@@ -157,8 +158,8 @@ uin_t YSM_DC_Wait4Client(void)
     pver = buf[1];
     if (pver < YSM_PROTOCOL_VERSION) {
         printfOutput( VERBOSE_DCON,
-            "YSM_DC_Wait4Client: "
-            "Incompatible p2p protocol version (oldie).\n" );
+                "YSM_DC_Wait4Client: "
+                "Incompatible p2p protocol version (oldie).\n" );
 
         close( cli_sock );
         return NOT_A_SLAVE;
@@ -171,10 +172,10 @@ uin_t YSM_DC_Wait4Client(void)
 
     /* check if the UIN exists and get a slave pointer */
     if (!r_uin
-    || (YSM_Query = querySlave(SLAVE_UIN, NULL, r_uin, 0)) == NULL ) {
+            || !(YSM_Query = getSlaveByUin(r_uin))) {
         printfOutput( VERBOSE_DCON,
-            "YSM_DC_Wait4Client: "
-            "Invalid/Not in list UIN specified.\n" );
+                "YSM_DC_Wait4Client: "
+                "Invalid/Not in list UIN specified.\n" );
         close( cli_sock );
         return NOT_A_SLAVE;
     }
@@ -188,12 +189,12 @@ uin_t YSM_DC_Wait4Client(void)
      * in both external and internal fields.
      */
     if ((YSM_Query->d_con.rIP_ext == r_ip1
-        && YSM_Query->d_con.rIP_int == addr.sin_addr.s_addr )
-        || (YSM_Query->d_con.rIP_ext == addr.sin_addr.s_addr )
-        /* below is just for the mess Trillian is doing */
-        || (YSM_Query->d_con.rIP_int == r_ip1
-        && YSM_Query->d_con.rIP_int == r_ip2
-        && YSM_Query->fprint == FINGERPRINT_TRILLIAN_CLIENT)) {
+                && YSM_Query->d_con.rIP_int == addr.sin_addr.s_addr )
+            || (YSM_Query->d_con.rIP_ext == addr.sin_addr.s_addr )
+            /* below is just for the mess Trillian is doing */
+            || (YSM_Query->d_con.rIP_int == r_ip1
+                && YSM_Query->d_con.rIP_int == r_ip2
+                && YSM_Query->fprint == FINGERPRINT_TRILLIAN_CLIENT)) {
 
         /* Fine, after all these tests we seem safe.
          * Mark the slave as expecting data.
@@ -210,14 +211,14 @@ uin_t YSM_DC_Wait4Client(void)
         } else {
             YSM_Query->d_con.rSocket = cli_sock;
             YSM_Query->d_con.flags |= DC_EXPECTDATA
-                    | DC_INCOMINGNEG | DC_EXPECTNEG;
+                | DC_INCOMINGNEG | DC_EXPECTNEG;
         }
 
     } else {
         /* Attack detected. AT0 call police, now NOW. */
         printfOutput( VERBOSE_DCON,
-            "YSM_DC_Wait4Client: "
-            "Possible spoofing attack detected.\n" );
+                "YSM_DC_Wait4Client: "
+                "Possible spoofing attack detected.\n" );
 
         close( cli_sock );
         return NOT_A_SLAVE;
@@ -263,20 +264,20 @@ void dcSelect(void)
 
 int YSM_DC_ReadPacket( int cli_sock, char *buf )
 {
-int r_len = 0, p_len = 0, x = 0;
+    int r_len = 0, p_len = 0, x = 0;
 
     if (buf == NULL || cli_sock <= 0)
-        return -1;
+	return -1;
 
     /* Read the command byte reply    */
     r_len = YSM_READ(cli_sock, buf, 2, 0);
     if (r_len <= 0) {
-        if (r_len < 0) {
-            printfOutput( VERBOSE_DCON,
-                "YSM_DC_ReadPacket: "
-                "Error reading size from DC Socket.\n" );
-        }
-        return -1;
+	if (r_len < 0) {
+	    printfOutput( VERBOSE_DCON,
+		    "YSM_DC_ReadPacket: "
+		    "Error reading size from DC Socket.\n" );
+	}
+	return -1;
     }
 
     p_len = Chars_2_Word(&buf[0]);
@@ -284,28 +285,28 @@ int r_len = 0, p_len = 0, x = 0;
 
     /* Exceeds MAX size */
     if (p_len >= MAX_PEER_DATA_SIZE) {
-        printfOutput( VERBOSE_DCON,
-            "YSM_DC_ReadPacket: Incoming size (%d) exceeds "
-            "buf size.\n", p_len);
-        close(cli_sock);
-        return -1;
+	printfOutput( VERBOSE_DCON,
+		"YSM_DC_ReadPacket: Incoming size (%d) exceeds "
+		"buf size.\n", p_len);
+	close(cli_sock);
+	return -1;
     }
 
     while (r_len < p_len) {
 
-        x = YSM_READ( cli_sock,
-            &buf[0+r_len],
-            p_len,
-            0);
+	x = YSM_READ( cli_sock,
+		&buf[0+r_len],
+		p_len,
+		0);
 
-        if (x < 0) {
-            printfOutput( VERBOSE_DCON,
-                "YSM_DC_ReadPacket: "
-                "Error reading from DC TCP Socket.\n");
-            return -1;
-        }
+	if (x < 0) {
+	    printfOutput( VERBOSE_DCON,
+		    "YSM_DC_ReadPacket: "
+		    "Error reading from DC TCP Socket.\n");
+	    return -1;
+	}
 
-        r_len += x;
+	r_len += x;
     }
 
     return r_len;
@@ -316,12 +317,12 @@ int r_len = 0, p_len = 0, x = 0;
 
 static void YSM_DC_InitA( slave_t *remote_slave, int32_t sock )
 {
-/* We are sure about this size, dun worry kid :P */
-char    buf[50];
-int    pos = 0;
+    /* We are sure about this size, dun worry kid :P */
+    char    buf[50];
+    int    pos = 0;
 
     if (remote_slave == NULL || sock <= 0)
-        return;
+	return;
 
     memset(&buf[0], 0, sizeof(buf));
 
@@ -346,15 +347,15 @@ int    pos = 0;
 
     /* buf[9 && 10 && 11 && 12] are local port. */
     pos += 2;
-    Word_2_Chars(buf+pos, YSM_USER.d_con.rPort);
+    Word_2_Chars(buf+pos, g_model.dc.rPort);
     pos += 2;
 
-    DW_2_Chars(buf+pos, YSM_USER.uin);
+    DW_2_Chars(buf+pos, g_model.uin);
     pos += 4;
 
-    DW_2_Chars(buf+pos, YSM_USER.d_con.rIP_ext);
+    DW_2_Chars(buf+pos, g_model.dc.rIP_ext);
     pos += 4;    /* Our external IP, stalker! */
-    DW_2_Chars(buf+pos, YSM_USER.d_con.rIP_int);
+    DW_2_Chars(buf+pos, g_model.dc.rIP_int);
     pos += 4;    /* Our internal IP, Even this! god! */
 
     buf[pos] = 0x04;    /* TCP Capable flag.0x04 is YES(liE?)*/
@@ -388,12 +389,12 @@ static int32_t YSM_DC_ReceiveInitA(slave_t *victim, int8_t *buf, int32_t r_len)
 
 static void YSM_DC_InitB( slave_t *remote_slave, int32_t sock )
 {
-/* We are sure about this size, dun worry kid :P */
-char    buf[6];
-int    pos = 0;
+    /* We are sure about this size, dun worry kid :P */
+    char    buf[6];
+    int    pos = 0;
 
     if (remote_slave == NULL || sock <= 0)
-        return;
+	return;
 
     memset(&buf[0], 0, sizeof(buf));
 
@@ -410,12 +411,12 @@ int    pos = 0;
 
 static void YSM_DC_InitC( slave_t *remote_slave, int32_t sock )
 {
-/* We are sure about this size, dun worry kid :P */
-char    buf[35];
-int    pos = 0;
+    /* We are sure about this size, dun worry kid :P */
+    char    buf[35];
+    int    pos = 0;
 
     if (remote_slave == NULL || sock <= 0)
-        return;
+	return;
 
     memset(&buf[0], 0, sizeof(buf));
 
@@ -445,7 +446,7 @@ static int32_t YSM_DC_ReceiveInitC( slave_t *victim, int8_t *buf, int32_t r_len 
 {
     /* standard checks */
     if (buf == NULL || victim == NULL || r_len < 30)
-        return 0;
+	return 0;
 
     if (buf[1] != 0x0a) return -1;
 
@@ -457,18 +458,18 @@ static int32_t YSM_DC_ReceiveInitC( slave_t *victim, int8_t *buf, int32_t r_len 
     /* in order to leave the user alone and avoid printing     */
     /* the closed dc session message.            */
     if (buf[5] != 0x01) {
-        /* nota, esto todavia no funcionar..uno de los frames
-         * sigue imprimiendo el closed socket, rompe bolas! heh */
-        printfOutput( VERBOSE_DCON,
-            "Detected Auto DC Negotiation request from %s.\n",
-            victim->info.nickName );
-            close( victim->d_con.rSocket );
-            return -2;
+	/* nota, esto todavia no funcionar..uno de los frames
+	 * sigue imprimiendo el closed socket, rompe bolas! heh */
+	printfOutput( VERBOSE_DCON,
+		"Detected Auto DC Negotiation request from %s.\n",
+		victim->info.nickName );
+	close( victim->d_con.rSocket );
+	return -2;
     }
 
     /* this byte is 0x01 for INCOMING connections.        */
     if (buf[29] == 0x00 && (victim->d_con.flags & DC_INCOMINGNEG))
-        return -1;
+	return -1;
 
     return 1;
 }
@@ -478,69 +479,69 @@ static int32_t YSM_DC_ReceiveInitC( slave_t *victim, int8_t *buf, int32_t r_len 
 
 void YSM_OpenDC( slave_t *victim )
 {
-struct in_addr    r_addr;
-uint32_t    rIP;
+    struct in_addr    r_addr;
+    uint32_t    rIP;
 
     if (victim == NULL)
-        return;
+	return;
 
     victim->d_con.rSocket = 0;
     victim->d_con.flags = 0;
 
     /* Cant use DC if we don't have the users IP or port! */
     if ((victim->d_con.rIP_int == 0 && victim->d_con.rIP_ext == 0)
-            ||  victim->d_con.rPort == 0) {
-        printfOutput( VERBOSE_BASE, MSG_DIRECT_ERR2 "\n");
-        return;
+	    ||  victim->d_con.rPort == 0) {
+	printfOutput( VERBOSE_BASE, MSG_DIRECT_ERR2 "\n");
+	return;
     }
 
     /* Can't communicate with old protocol Versions */
     if (victim->d_con.version < YSM_PROTOCOL_VERSION) {
-        printfOutput( VERBOSE_BASE,
-            "\nNo. The user uses an old protocol version.\n");
-        return;
+	printfOutput( VERBOSE_BASE,
+		"\nNo. The user uses an old protocol version.\n");
+	return;
     }
 
     /* Start with the external IP address if we are in non-LAN mode */
     if(victim->d_con.rIP_ext != 0 && !g_cfg.dclan)
-        rIP = victim->d_con.rIP_ext;
+	rIP = victim->d_con.rIP_ext;
     else
-        rIP = victim->d_con.rIP_int;
+	rIP = victim->d_con.rIP_int;
 
 
     do {
-        r_addr.s_addr = rIP;
+	r_addr.s_addr = rIP;
 
-        printfOutput( VERBOSE_DCON,
-            "\n" MSG_DIRECT_CONNECTING "%s:%d..\n",
-            inet_ntoa(r_addr),
-            victim->d_con.rPort);
+	printfOutput( VERBOSE_DCON,
+		"\n" MSG_DIRECT_CONNECTING "%s:%d..\n",
+		inet_ntoa(r_addr),
+		victim->d_con.rPort);
 
-        g_state.promptFlags |= FL_RAW;
+	g_state.promptFlags |= FL_RAW;
 
-        victim->d_con.rSocket = YSM_Connect(
-                    inet_ntoa(r_addr),
-                    victim->d_con.rPort,
-                    0x0 );
+	victim->d_con.rSocket = YSM_Connect(
+		inet_ntoa(r_addr),
+		victim->d_con.rPort,
+		0x0 );
 
-        if (!g_cfg.dclan) {
-            if (rIP == victim->d_con.rIP_int) break;
-        } else {
-            if (rIP == victim->d_con.rIP_ext) break;
-        }
+	if (!g_cfg.dclan) {
+	    if (rIP == victim->d_con.rIP_int) break;
+	} else {
+	    if (rIP == victim->d_con.rIP_ext) break;
+	}
 
-        if(victim->d_con.rSocket < 0) {
-            if (g_cfg.dclan)
-                rIP = victim->d_con.rIP_ext;
-            else
-                rIP = victim->d_con.rIP_int;
-        }
+	if(victim->d_con.rSocket < 0) {
+	    if (g_cfg.dclan)
+		rIP = victim->d_con.rIP_ext;
+	    else
+		rIP = victim->d_con.rIP_int;
+	}
 
     } while (victim->d_con.rSocket < 0);
 
     if (victim->d_con.rSocket < 0) {
-        printfOutput(VERBOSE_BASE, "\n" MSG_DIRECT_ERR3 "\n");
-        return;
+	printfOutput(VERBOSE_BASE, "\n" MSG_DIRECT_ERR3 "\n");
+	return;
     }
 
     printfOutput(VERBOSE_BASE, "\n" MSG_DIRECT_ESTABLISHED "\n");
@@ -560,12 +561,12 @@ uint32_t    rIP;
 /* Close a direct connection with a slave. */
 /* close socket, reset flags, etc.         */
 
-void YSM_CloseDC(uin_t uin)
+void YSM_CloseDC(slave_t *victim)
 {
-    if (uin == NOT_A_SLAVE)
+    if (!victim)
         return;
 
-    YSM_CloseTransfer(uin);
+    YSM_CloseTransfer(victim);
 
     /* close the victim's socket */
     close(victim->d_con.rSocket);
@@ -574,12 +575,12 @@ void YSM_CloseDC(uin_t uin)
     victim->d_con.flags = 0;
 
     printfOutput(VERBOSE_BASE,
-        "DC session to %s closed.\n", victim->info.nickName);
+            "DC session to %s closed.\n", victim->info.nickName);
 }
 
-void YSM_CloseTransfer(uin_t uin)
+void YSM_CloseTransfer(slave_t *victim)
 {
-    if (uin == NOT_A_SLAVE)
+    if (!victim)
         return;
 
     victim->d_con.finfo.statstime = victim->d_con.finfo.statsbytes = 0;
@@ -597,18 +598,23 @@ void YSM_CloseTransfer(uin_t uin)
     victim->d_con.flags &= ~DC_ACTIVITY;
 }
 
-int32_t YSM_DC_IncomingMessageGREET( slave_t *victim,
-    msg_type_t   m_type,
-    uint8_t   m_flags,
-    int8_t    *m_data,
-    int16_t    m_len,
-    int16_t    m_status )
+int32_t YSM_DC_IncomingMessageGREET(msg_t *msg)
 {
-int16_t    greet_type;
-int32_t    pos = 0, id_pos = 0, len = 0, ret = TRUE;
+    assert(1);
+
+#if 0
+    slave_t     *victim,
+	msg_type_t   m_type,
+	uint8_t     m_flags,
+	int8_t    *m_data,
+	int16_t    m_len,
+	int16_t    m_status )
+{
+    int16_t    greet_type;
+    int32_t    pos = 0, id_pos = 0, len = 0, ret = TRUE;
 
     if (victim == NULL || m_data == NULL || m_len <= 0)
-        return -1;
+	return -1;
 
     /* skip empty data field */
     m_data += m_len;
@@ -641,89 +647,94 @@ int32_t    pos = 0, id_pos = 0, len = 0, ret = TRUE;
      */
 
     switch (greet_type) {
-        case 0x2d:    /* chat/contacts */
+	case 0x2d:    /* chat/contacts */
 
-            /* CHAT ? */
-            if (!memcmp( m_data + id_pos,
-                    id_str_chat,
-                    sizeof(id_str_chat) )) {
+	    /* CHAT ? */
+	    if (!memcmp( m_data + id_pos,
+			id_str_chat,
+			sizeof(id_str_chat) )) {
 
-            /* CONTACTS ? */
-            } else if (!memcmp( m_data + id_pos,
-                    id_str_contacts,
-                    sizeof(id_str_contacts) )) {
+		/* CONTACTS ? */
+	    } else if (!memcmp( m_data + id_pos,
+			id_str_contacts,
+			sizeof(id_str_contacts) )) {
 
-                YSM_DisplayMsg( YSM_MESSAGE_CONTACTS,
-                    victim->uin,
-                    victim->status,
-                    len,
-                    m_data+pos,
-                    0x00);
+		YSM_DisplayMsg( YSM_MESSAGE_CONTACTS,
+			victim->uin,
+			victim->status,
+			len,
+			m_data+pos,
+			0x00);
 
-                /* ACK the Message */
-                ret = YSM_DC_MessageACK( victim, m_type );
-            }
+		/* ACK the Message */
+		ret = YSM_DC_MessageACK( victim, m_type );
+	    }
 
-            break;
+	    break;
 
-        case 0x29:    /* file request    */
-        case 0x32:    /* file response */
+	case 0x29:    /* file request    */
+	case 0x32:    /* file response */
 
-            /* FILE ? */
-            if (!memcmp( m_data + id_pos,
-                    id_str_file,
-                    sizeof(id_str_file) )) {
+	    /* FILE ? */
+	    if (!memcmp( m_data + id_pos,
+			id_str_file,
+			sizeof(id_str_file) )) {
 
-                ret = YSM_DC_IncomingFile( victim,
-                            len,
-                            m_data+pos,
-                            m_type,
-                            m_flags,
-                            m_status );
-            }
+		ret = YSM_DC_IncomingFile( victim,
+			len,
+			m_data+pos,
+			m_type,
+			m_flags,
+			m_status );
+	    }
 
 
-            break;
+	    break;
 
-        case 0x40:    /* url */
+	case 0x40:    /* url */
 
-            /* URL ? */
-            if (!memcmp( m_data + id_pos,
-                    id_str_url,
-                    sizeof(id_str_url) )) {
+	    /* URL ? */
+	    if (!memcmp( m_data + id_pos,
+			id_str_url,
+			sizeof(id_str_url) )) {
 
-                YSM_DisplayMsg( YSM_MESSAGE_URL,
-                    victim->uin,
-                    victim->status,
-                    len,
-                    m_data+pos,
-                    0x00);
+		YSM_DisplayMsg( YSM_MESSAGE_URL,
+			victim->uin,
+			victim->status,
+			len,
+			m_data+pos,
+			0x00);
 
-                /* ACK the Message */
-                ret = YSM_DC_MessageACK( victim, m_type );
-            }
+		/* ACK the Message */
+		ret = YSM_DC_MessageACK( victim, m_type );
+	    }
 
-        default:
-            break;
+	default:
+	    break;
     }
 
     /* YSM_DC_IncomingFile/MessageACK may change the ret value */
     return ret;
+#endif
 }
 
-int32_t YSM_DC_IncomingMessageFILE(
-    slave_hnd_t *victim,
-    msg_type_t   m_type,
-    uint8_t      m_flags,
-    int8_t      *m_data,
-    int16_t      m_len)
+int32_t YSM_DC_IncomingMessageFILE(msg_t *msg)
+{
+    assert(1);
+
+#if 0
+	slave_t     *victim,
+	msg_type_t   m_type,
+	uint8_t      m_flags,
+	int8_t      *m_data,
+	int16_t      m_len)
 {
     int32_t        pos = 0, ret = TRUE, fsize = 0;
     uint16_t    rport = 0, fnamelen = 0;
     int8_t        *pfname = NULL;
 
     if (victim == NULL || m_data == NULL || m_len <= 0)
-        return -1;
+	return -1;
 
     /* empty data field */
     m_data += m_len;
@@ -732,77 +743,80 @@ int32_t YSM_DC_IncomingMessageFILE(
 
     if (m_flags & MFLAGTYPE_ACK)
     {
-        /* Remote file port, empty on requests */
-        memcpy(&rport, m_data+pos, 2);
-        pos += 2;
+	/* Remote file port, empty on requests */
+	memcpy(&rport, m_data+pos, 2);
+	pos += 2;
 
-        /* Incoming File Transfer Ack, start transfering */
-        ret = YSM_DC_FileC(victim, rport);
+	/* Incoming File Transfer Ack, start transfering */
+	ret = YSM_DC_FileC(victim, rport);
 
-        if (ret) {
+	if (ret) {
 
-        printfOutput( VERBOSE_BASE,
-            "\nStarting %sFile Transfer.. "
-            "(the slave accepted the request).\n",
-            (m_flags & MFLAGTYPE_CRYPTACK) ? "ENCRYPTED " : "");
-        }
+	    printfOutput( VERBOSE_BASE,
+		    "\nStarting %sFile Transfer.. "
+		    "(the slave accepted the request).\n",
+		    (m_flags & MFLAGTYPE_CRYPTACK) ? "ENCRYPTED " : "");
+	}
 
-    /* sending a File request */
+	/* sending a File request */
 
     } else if (m_flags & MFLAGTYPE_NORM) {
 
-        pos += 2;    /* port empty */
-        pos += 2;    /* probably padding */
+	pos += 2;    /* port empty */
+	pos += 2;    /* probably padding */
 
-        fnamelen = Chars_2_Word(m_data+pos); /* Filename length */
-        pos += 2;
+	fnamelen = Chars_2_Word(m_data+pos); /* Filename length */
+	pos += 2;
 
-        if (fnamelen) {        /* Filename buffer */
-            pfname = ysm_calloc(1, fnamelen+1, __FILE__, __LINE__ );
-            if (pfname == NULL) return 0;
-            memcpy(pfname, m_data+pos, fnamelen);
-        }
+	if (fnamelen) {        /* Filename buffer */
+	    pfname = ysm_calloc(1, fnamelen+1, __FILE__, __LINE__ );
+	    if (pfname == NULL) return 0;
+	    memcpy(pfname, m_data+pos, fnamelen);
+	}
 
-        pos += fnamelen;
-        fsize = Chars_2_DW(m_data+pos);
+	pos += fnamelen;
+	fsize = Chars_2_DW(m_data+pos);
 
-        printfOutput( VERBOSE_BASE,
-            "\nIncoming file transfer request from: %s.\n",
-            victim->info.nickName );
+	printfOutput( VERBOSE_BASE,
+		"\nIncoming file transfer request from: %s.\n",
+		victim->info.nickName );
 
-        printfOutput( VERBOSE_BASE,
-            "(use the faccept/fdecline command "
-            "to accept/decline the request)\n"
-            "Filename: '%s' [%d kb].\n",
-            pfname, fsize/1024 );
+	printfOutput( VERBOSE_BASE,
+		"(use the faccept/fdecline command "
+		"to accept/decline the request)\n"
+		"Filename: '%s' [%d kb].\n",
+		pfname, fsize/1024 );
 
-        if (pfname != NULL) {
-            YSM_FREE(pfname);
-        }
+	if (pfname != NULL) {
+	    YSM_FREE(pfname);
+	}
 
     }
     else ret = 0;
 
     return ret;
+#endif
 }
 
 
-int32_t YSM_DC_IncomingMessage( slave_t *victim, int8_t *data, int32_t data_len )
+int32_t YSM_DC_IncomingMessage(slave_t *victim, int8_t *data, int32_t data_len)
 {
-int16_t    cmd = 0;
-int32_t    pos = 0, ret = TRUE;
-int8_t    m_flags = 0;
+    int16_t   cmd = 0;
+    int32_t   pos = 0, ret = TRUE;
+    int8_t    m_flags = 0;
 
     if (victim == NULL || data == NULL || data_len <= 0)
         return -1;
 
-    if (!(victim->d_con.flags & DC_CONNECTED)) {
+    if (!(victim->d_con.flags & DC_CONNECTED))
+    {
         printfOutput( VERBOSE_DCON,
-            "Incoming PEER_MSG before Negotiation, ignoring.\n" );
+                "Incoming PEER_MSG before Negotiation, ignoring.\n" );
         return -1;
     }
 
-    if (YSM_DecryptDCPacket(data, data_len) <= 0) {
+    if (YSM_DecryptDCPacket(data, data_len) <= 0)
+    {
         printfOutput( VERBOSE_DCON, "Decryption Failed.\n" );
         return -1;
     }
@@ -813,7 +827,8 @@ int8_t    m_flags = 0;
     cmd = Chars_2_Word(&data[pos]);
     pos += 2;    /* command */
 
-    switch (cmd) {
+    switch (cmd)
+    {
         case 0x07d0:
             m_flags |= MFLAGTYPE_END;
             break;
@@ -832,21 +847,22 @@ int8_t    m_flags = 0;
 
         default:
             printfOutput( VERBOSE_DCON, "YSM_DC_IncomingMessage: "
-                "unknown cmd(%d)\n",
-                cmd );
+                    "unknown cmd(%d)\n",
+                    cmd );
 
             return -1;
     }
 
-    ret = YSM_ReceiveMessageType2Common(victim,
-                    pos,
-                    data,
-                    0,
-                    0,
-                    NULL,
-                    m_flags,
-                    &victim->d_con.seq_in,
-                    0x1);
+
+    assert(1);
+
+#if 0
+    ret = YSM_ReceiveMessageType2Common(bsd, msg);
+    victim->d_con.seq_in = msg->id;
+
+    if (ret > 1)
+        YSM_DC_MessageACK(msg->sender, msg->type);
+#endif
 
     return ret;
 }
@@ -854,31 +870,31 @@ int8_t    m_flags = 0;
 
 int32_t YSM_DC_CommonResponse( slave_t *victim, int32_t sock )
 {
-uint8_t    buf[MAX_PEER_DATA_SIZE];
-int        r_len = 0, ret = 0;
+    uint8_t    buf[MAX_PEER_DATA_SIZE];
+    int        r_len = 0, ret = 0;
 
     if (victim == NULL || sock <= 0)
-        return -1;
+	return -1;
 
     r_len = YSM_DC_ReadPacket( sock, &buf[0] );
     if (r_len < 0) {
-        if (victim->d_con.flags & DC_RECEIVING) {
+	if (victim->d_con.flags & DC_RECEIVING) {
 
-            printfOutput( VERBOSE_BASE,
-                "File receiving aborted. "
-                "%s closed the connection.\n",
-                victim->info.nickName);
+	    printfOutput( VERBOSE_BASE,
+		    "File receiving aborted. "
+		    "%s closed the connection.\n",
+		    victim->info.nickName);
 
-        } else if (victim->d_con.flags & DC_TRANSFERING) {
+	} else if (victim->d_con.flags & DC_TRANSFERING) {
 
-            printfOutput( VERBOSE_BASE,
-                "File sending aborted. "
-                "%s closed the connection.\n",
-                victim->info.nickName );
-        }
+	    printfOutput( VERBOSE_BASE,
+		    "File sending aborted. "
+		    "%s closed the connection.\n",
+		    victim->info.nickName );
+	}
 
-        YSM_CloseDC( victim );
-        return 0;
+	YSM_CloseDC( victim );
+	return 0;
     }
 
     /* Since I made this a common function, i need DC_EXPECTNEG to be ON
@@ -888,32 +904,32 @@ int        r_len = 0, ret = 0;
      */
 
     if (victim->d_con.flags & DC_EXPECTNEG) {
-        /* Incoming p2p Negotiation Command List */
-        ret = YSM_DC_CommonResponseNeg( victim, sock, buf, r_len );
+	/* Incoming p2p Negotiation Command List */
+	ret = YSM_DC_CommonResponseNeg( victim, sock, buf, r_len );
 
     } else if (victim->d_con.flags & DC_TRANSFERING
-        || victim->d_con.flags & DC_RECEIVING) {
-        /* Incoming p2p Files Command List */
-        ret = YSM_DC_CommonResponseFile( victim, sock, buf, r_len );
+	    || victim->d_con.flags & DC_RECEIVING) {
+	/* Incoming p2p Files Command List */
+	ret = YSM_DC_CommonResponseFile( victim, sock, buf, r_len );
 
     } else {
-        /* Incoming p2p Misc Command List */
-        ret = YSM_DC_CommonResponseMisc( victim, sock, buf, r_len );
+	/* Incoming p2p Misc Command List */
+	ret = YSM_DC_CommonResponseMisc( victim, sock, buf, r_len );
     }
 
     if (ret <= 0) {
-        /* An error ocured during DC. that requires
-         * to close the current DC session, probably carlin attacks.
-         */
+	/* An error ocured during DC. that requires
+	 * to close the current DC session, probably carlin attacks.
+	 */
 
-        /* ret 0 just close file transfer.
-         * ret < 0 close the whole DC session.
-         */
+	/* ret 0 just close file transfer.
+	 * ret < 0 close the whole DC session.
+	 */
 
-        YSM_CloseTransfer( victim );
-        if (ret < 0) {
-            YSM_CloseDC( victim );
-        }
+	YSM_CloseTransfer( victim );
+	if (ret < 0) {
+	    YSM_CloseDC( victim );
+	}
     }
 
     return ret;
@@ -923,94 +939,94 @@ int        r_len = 0, ret = 0;
 /* Incoming File related Packets */
 
 int32_t YSM_DC_CommonResponseFile( slave_t    *victim,
-            int32_t        sock,
-            uint8_t    *buf,
-            int32_t        len )
+	int32_t        sock,
+	uint8_t    *buf,
+	int32_t        len )
 {
-int32_t ret = TRUE;
+    int32_t ret = TRUE;
 
     if (victim == NULL || sock <= 0 || buf == NULL || len <= 0)
-        return -1;
+	return -1;
 
     printfOutput( VERBOSE_DCON, "Incoming p2p File command: %x\n", buf[0]);
 
     switch (buf[0]) {
 
-        case PEER_FILE_INIT:
-            /* has to be for incoming files */
-            if (victim->d_con.flags & DC_RECEIVING) {
-                ret = YSM_DC_FileInitAck( victim,
-                            sock,
-                            buf,
-                            len );
-            } else
-                ret = -1;    /* abort DC! */
-            break;
+	case PEER_FILE_INIT:
+	    /* has to be for incoming files */
+	    if (victim->d_con.flags & DC_RECEIVING) {
+		ret = YSM_DC_FileInitAck( victim,
+			sock,
+			buf,
+			len );
+	    } else
+		ret = -1;    /* abort DC! */
+	    break;
 
-        case PEER_FILE_INIT_ACK:
-            /* has to be for outgoing files */
-            if (victim->d_con.flags & DC_TRANSFERING) {
-                ret = YSM_DC_FileStart( victim );
-            } else
-                ret = -1;    /* abort DC! */
+	case PEER_FILE_INIT_ACK:
+	    /* has to be for outgoing files */
+	    if (victim->d_con.flags & DC_TRANSFERING) {
+		ret = YSM_DC_FileStart( victim );
+	    } else
+		ret = -1;    /* abort DC! */
 
-            break;
+	    break;
 
-        case PEER_FILE_START:
-            if (!(victim->d_con.flags & DC_ACTIVITY)) {
+	case PEER_FILE_START:
+	    if (!(victim->d_con.flags & DC_ACTIVITY)) {
 
-                victim->d_con.flags |= DC_ACTIVITY;
+		victim->d_con.flags |= DC_ACTIVITY;
 
-                /* has to be for incoming files */
-                if (victim->d_con.flags & DC_RECEIVING) {
-                    ret = YSM_DC_FileStartAck( victim,
-                                sock,
-                                buf,
-                                len );
-                } else
-                    ret = -1;
+		/* has to be for incoming files */
+		if (victim->d_con.flags & DC_RECEIVING) {
+		    ret = YSM_DC_FileStartAck( victim,
+			    sock,
+			    buf,
+			    len );
+		} else
+		    ret = -1;
 
-            } else {
-            /* This can also be a PEER_MSG sent DURING a transfer
-             * I would suggest calling Reponse Misc from here on
-             */
+	    } else {
+		/* This can also be a PEER_MSG sent DURING a transfer
+		 * I would suggest calling Reponse Misc from here on
+		 */
 
-                ret = YSM_DC_CommonResponseMisc( victim,
-                                sock,
-                                buf,
-                                len );
-            }
-            break;
+		ret = YSM_DC_CommonResponseMisc( victim,
+			sock,
+			buf,
+			len );
+	    }
+	    break;
 
-        case PEER_FILE_START_ACK:
-            /* has to be for outgoing files */
-            if (victim->d_con.flags & DC_TRANSFERING) {
-                victim->d_con.flags |= DC_ACTIVITY;
-                /* okie, done, start the transfer! */
-                ret = YSM_DC_FileTransfer( victim, buf, len );
-            } else
-                ret = -1;
+	case PEER_FILE_START_ACK:
+	    /* has to be for outgoing files */
+	    if (victim->d_con.flags & DC_TRANSFERING) {
+		victim->d_con.flags |= DC_ACTIVITY;
+		/* okie, done, start the transfer! */
+		ret = YSM_DC_FileTransfer( victim, buf, len );
+	    } else
+		ret = -1;
 
-            break;
+	    break;
 
-        case PEER_FILE_STOP:
-            break;
+	case PEER_FILE_STOP:
+	    break;
 
-        case PEER_FILE_SPEED:
-            break;
+	case PEER_FILE_SPEED:
+	    break;
 
-        case PEER_FILE_DATA:
-            /* has to be for incoming files */
-            if (victim->d_con.flags & DC_RECEIVING) {
-                ret = YSM_DC_FileReceive( victim, buf, len );
-            } else
-                ret = -1;    /* abort DC! */
+	case PEER_FILE_DATA:
+	    /* has to be for incoming files */
+	    if (victim->d_con.flags & DC_RECEIVING) {
+		ret = YSM_DC_FileReceive( victim, buf, len );
+	    } else
+		ret = -1;    /* abort DC! */
 
-            break;
+	    break;
 
-        default:
-            ret = -1;        /* abort DC, shouldnt happend */
-            break;
+	default:
+	    ret = -1;        /* abort DC, shouldnt happend */
+	    break;
     }
 
     return ret;
@@ -1020,112 +1036,112 @@ int32_t ret = TRUE;
 /* Incoming Negotiation Packets */
 
 int32_t YSM_DC_CommonResponseNeg( slave_t    *victim,
-            int32_t        sock,
-            uint8_t    *buf,
-            int32_t        len )
+	int32_t        sock,
+	uint8_t    *buf,
+	int32_t        len )
 {
-int32_t ret = TRUE;
+    int32_t ret = TRUE;
 
     if (victim == NULL || sock <= 0 || buf == NULL || len <= 0)
-        return -1;
+	return -1;
 
     printfOutput( VERBOSE_DCON, "Incoming p2p Negotiation command: %x\n", buf[0]);
 
     switch (buf[0]) {
 
-        case PEER_INIT:
+	case PEER_INIT:
 
-            /* If this was the second negotiation
-             * (starting a file transfer)
-             * then end it here, its done. */
+	    /* If this was the second negotiation
+	     * (starting a file transfer)
+	     * then end it here, its done. */
 
-            if (victim->d_con.flags & DC_TRANSFERING) {
+	    if (victim->d_con.flags & DC_TRANSFERING) {
 
-                printfOutput( VERBOSE_DCON,
-                    "Pre-transfer Negotation Completed.\n");
+		printfOutput( VERBOSE_DCON,
+			"Pre-transfer Negotation Completed.\n");
 
-                victim->d_con.flags &= ~DC_EXPECTNEG;
-                /* PEER_INITACK */
-                YSM_DC_InitB( victim, sock );
+		victim->d_con.flags &= ~DC_EXPECTNEG;
+		/* PEER_INITACK */
+		YSM_DC_InitB( victim, sock );
 
-                /* PEER_FILE_INIT */
-                YSM_DC_FileInit( victim,
-                        1,
-                        victim->d_con.finfo.size );
+		/* PEER_FILE_INIT */
+		YSM_DC_FileInit( victim,
+			1,
+			victim->d_con.finfo.size );
 
-            } else if (victim->d_con.flags & DC_RECEIVING) {
+	    } else if (victim->d_con.flags & DC_RECEIVING) {
 
-                /* PEER_INITACK */
-                YSM_DC_InitB( victim, sock );
+		/* PEER_INITACK */
+		YSM_DC_InitB( victim, sock );
 
-                /* PEER_INIT */
-                YSM_DC_InitA( victim, sock );
+		/* PEER_INIT */
+		YSM_DC_InitA( victim, sock );
 
-            } else {
+	    } else {
 
-                printfOutput( VERBOSE_DCON,
-                    "Received remote DC information.\n"
-                    "Remote protocol version: %x\n"
-                    "Sending PEER INIT ACK and "
-                    "PEER INIT 2\n", buf[1]);
+		printfOutput( VERBOSE_DCON,
+			"Received remote DC information.\n"
+			"Remote protocol version: %x\n"
+			"Sending PEER INIT ACK and "
+			"PEER INIT 2\n", buf[1]);
 
-                ret = YSM_DC_ReceiveInitA( victim, buf, len );
+		ret = YSM_DC_ReceiveInitA( victim, buf, len );
 
-                if (ret) {
-                    /* PEER_INITACK */
-                    YSM_DC_InitB( victim, sock );
+		if (ret) {
+		    /* PEER_INITACK */
+		    YSM_DC_InitB( victim, sock );
 
-                    /* PEER_INIT2 */
-                    YSM_DC_InitC( victim, sock );
-                }
+		    /* PEER_INIT2 */
+		    YSM_DC_InitC( victim, sock );
+		}
 
-            }
+	    }
 
-            break;
+	    break;
 
-        case PEER_INITACK:
-            printfOutput(VERBOSE_DCON, "First PEER INIT ACK Received.\n");
+	case PEER_INITACK:
+	    printfOutput(VERBOSE_DCON, "First PEER INIT ACK Received.\n");
 
-            if (victim->d_con.flags & DC_RECEIVING) {
+	    if (victim->d_con.flags & DC_RECEIVING) {
 
-                printfOutput( VERBOSE_DCON,
-                    "Pre-transfer Negotation Completed.\n");
+		printfOutput( VERBOSE_DCON,
+			"Pre-transfer Negotation Completed.\n");
 
-                victim->d_con.flags &= ~DC_EXPECTNEG;
-            }
+		victim->d_con.flags &= ~DC_EXPECTNEG;
+	    }
 
-            break;
+	    break;
 
-        case PEER_INIT2:
+	case PEER_INIT2:
 
-            ret = YSM_DC_ReceiveInitC( victim, buf, len );
-            if (ret > 0) {
+	    ret = YSM_DC_ReceiveInitC( victim, buf, len );
+	    if (ret > 0) {
 
-                if ( victim->d_con.flags & DC_INCOMINGNEG )
-                    YSM_DC_InitC( victim, sock );
+		if ( victim->d_con.flags & DC_INCOMINGNEG )
+		    YSM_DC_InitC( victim, sock );
 
-                printfOutput( VERBOSE_DCON,
-                    "v8 Negotation Completed.\n");
+		printfOutput( VERBOSE_DCON,
+			"v8 Negotation Completed.\n");
 
 #ifndef COMPACT_DISPLAY
-                printfOutput( VERBOSE_BASE,
-                    "\nDC session to %s established.\n",
-                    victim->info.nickName );
+		printfOutput( VERBOSE_BASE,
+			"\nDC session to %s established.\n",
+			victim->info.nickName );
 #endif
 
-                victim->d_con.flags |= DC_CONNECTED;
-                victim->d_con.flags &= ~DC_EXPECTNEG;
+		victim->d_con.flags |= DC_CONNECTED;
+		victim->d_con.flags &= ~DC_EXPECTNEG;
 
-                g_state.promptFlags |= FL_RAW;
-            }
+		g_state.promptFlags |= FL_RAW;
+	    }
 
-            break;
+	    break;
 
-        default:
-            printfOutput( VERBOSE_DCON,
-                "Unknown Neg command received. Closing!\n");
-            ret = -1;
-            break;
+	default:
+	    printfOutput( VERBOSE_DCON,
+		    "Unknown Neg command received. Closing!\n");
+	    ret = -1;
+	    break;
 
 
     }
@@ -1138,30 +1154,30 @@ int32_t ret = TRUE;
 /* Incoming Misc(MSGS,etc) Packets */
 
 int32_t YSM_DC_CommonResponseMisc( slave_t    *victim,
-            int32_t        sock,
-            uint8_t    *buf,
-            int32_t        len )
+	int32_t        sock,
+	uint8_t    *buf,
+	int32_t        len )
 {
-int32_t ret = TRUE;
+    int32_t ret = TRUE;
 
     if (victim == NULL || sock <= 0 || buf == NULL || len <= 0)
-        return -1;
+	return -1;
 
     printfOutput( VERBOSE_DCON, "Incoming p2p Misc command: %x\n", buf[0]);
 
     switch (buf[0]) {
 
-        case PEER_MSG:
-            printfOutput( VERBOSE_DCON, "PEER_MSG received.\n");
-            ret = YSM_DC_IncomingMessage( victim, buf, len );
-            break;
+	case PEER_MSG:
+	    printfOutput( VERBOSE_DCON, "PEER_MSG received.\n");
+	    ret = YSM_DC_IncomingMessage( victim, buf, len );
+	    break;
 
-        default:
-            printfOutput( VERBOSE_DCON,
-                "Unexpected p2p command: %x\n", buf[0]);
-            printfOutput( VERBOSE_DCON, "Closing down connection..\n");
-            ret = -1;
-            break;
+	default:
+	    printfOutput( VERBOSE_DCON,
+		    "Unexpected p2p command: %x\n", buf[0]);
+	    printfOutput( VERBOSE_DCON, "Closing down connection..\n");
+	    ret = -1;
+	    break;
 
     }
 
@@ -1170,25 +1186,25 @@ int32_t ret = TRUE;
 
 
 static uint8_t dc_string_table[] = {
-  "As part of this software beta version Mirabilis is "
-  "granting a limited access to the ICQ network, "
-  "servers, directories, listings, information and databases (\""
-  "ICQ Services and Information\"). The "
-  "ICQ Service and Information may databases (\""
-  "ICQ Services and Information\"). The "
-  "ICQ Service and Information may\0"
+    "As part of this software beta version Mirabilis is "
+	"granting a limited access to the ICQ network, "
+	"servers, directories, listings, information and databases (\""
+	"ICQ Services and Information\"). The "
+	"ICQ Service and Information may databases (\""
+	"ICQ Services and Information\"). The "
+	"ICQ Service and Information may\0"
 };
 
 
 int YSM_EncryptDCPacket ( unsigned char *buf, int buf_len )
 {
-unsigned int check_code, x_key, pos;
-unsigned int B1, M1;
-unsigned char    X1, X2, X3;
-int        i;
+    unsigned int check_code, x_key, pos;
+    unsigned int B1, M1;
+    unsigned char    X1, X2, X3;
+    int        i;
 
     if (buf == NULL || buf_len <= 0)
-        return -1;
+	return -1;
 
     /* skip the command */
     /* NOTE, len must be skipped before calling this function. */
@@ -1210,11 +1226,11 @@ int        i;
 
     /* Run through buf */
     for (i = 0; i < (buf_len+3) / 4;) {
-        pos = x_key + dc_string_table[ i & 0xFF];
-        buf[i++] ^= pos & 0xFF;
-        buf[i++] ^= (pos >> 8) & 0xFF;
-        buf[i++] ^= (pos >> 16) & 0xFF;
-        buf[i++] ^= (pos >> 24) & 0xFF;
+	pos = x_key + dc_string_table[ i & 0xFF];
+	buf[i++] ^= pos & 0xFF;
+	buf[i++] ^= (pos >> 8) & 0xFF;
+	buf[i++] ^= (pos >> 16) & 0xFF;
+	buf[i++] ^= (pos >> 24) & 0xFF;
     }
 
     DW_2_Chars(&buf[0], check_code);
@@ -1225,13 +1241,13 @@ int        i;
 int YSM_DecryptDCPacket ( unsigned char *buf, unsigned int buf_len)
 {
 
-unsigned int    check_code;
-unsigned long    B1, M1, x_key, pos;
-unsigned char    X1, X2, X3;
-unsigned int    i = 0;
+    unsigned int    check_code;
+    unsigned long    B1, M1, x_key, pos;
+    unsigned char    X1, X2, X3;
+    unsigned int    i = 0;
 
     if (buf == NULL || buf_len <= 0)
-        return -1;
+	return -1;
 
     /* skip the command */
     /* NOTE, len must be skipped before calling this function. */
@@ -1247,11 +1263,11 @@ unsigned int    i = 0;
     /* Run through buf */
     for (i = 4; i < (buf_len + 3) / 4;)
     {
-        pos = x_key + dc_string_table[i&0xff];
-        buf[i++] ^= pos & 0xff;
-        buf[i++] ^= (pos >> 8) & 0xff;
-        buf[i++] ^= (pos >> 16) & 0xff;
-        buf[i++] ^= (pos >> 24) & 0xff;
+	pos = x_key + dc_string_table[i&0xff];
+	buf[i++] ^= pos & 0xff;
+	buf[i++] ^= (pos >> 8) & 0xff;
+	buf[i++] ^= (pos >> 16) & 0xff;
+	buf[i++] ^= (pos >> 24) & 0xff;
     }
 
 
@@ -1261,18 +1277,18 @@ unsigned int    i = 0;
     M1 = (B1 >> 24) & 0xff;
 
     if (M1 < 10 || M1 >= buf_len)
-        return 0;
+	return 0;
 
     X1 = buf[M1] ^ 0xff;
 
     if (((B1 >> 16) & 0xff) != X1)
-        return 0;
+	return 0;
 
     X2 = (unsigned char)((B1 >> 8) & 0xff);
 
     if (X2 < 220) {
-        X3 = dc_string_table[X2] ^ 0xff;
-        if ((B1 & 0xff) != X3) return 0;
+	X3 = dc_string_table[X2] ^ 0xff;
+	if ((B1 & 0xff) != X3) return 0;
     }
 
     return 1;
@@ -1280,21 +1296,20 @@ unsigned int    i = 0;
 
 
 static int32_t YSM_DC_MessageBase(
-    slave_t *victim,
-    char        *_msg,
-    int        dlen,
-    msg_type_t     msgType,
-    int16_t        m_status,
-    int16_t        _priority,
-    char        *extra,
-    int        extra_len,
-    int8_t        m_flags,
-    uint16_t    seq)
+	slave_t     *victim,
+	char        *_msg,
+	int          dlen,
+	msg_type_t   msgType,
+	int16_t      m_status,
+	int16_t      _priority,
+	char        *extra,
+	int          extra_len,
+	int8_t       m_flags,
+	uint16_t     seq)
 {
-
-char    *buf = NULL;
-int    buf_size = 0, pos = 0;
-int32_t    ret = TRUE;
+    char    *buf = NULL;
+    int      buf_size = 0, pos = 0;
+    int32_t  ret = TRUE;
 
     if (victim == NULL || dlen < 0)
         return -1;
@@ -1366,27 +1381,27 @@ int32_t    ret = TRUE;
 
     YSM_EncryptDCPacket( buf+2, pos-2 );
 
-    ret = YSM_WRITE_DC( victim, victim->d_con.rSocket, buf, pos );
+    ret = YSM_WRITE_DC(victim, victim->d_con.rSocket, buf, pos );
 
     YSM_FREE(buf);
     return ret;
 }
 
 int32_t YSM_DC_MessageGreet( slave_t    *victim,
-        char        cmd,
-        char        *textstring,
-        char        *reason,
-        char        *filename,
-        int        file_size,
-        uint16_t    port,
-        char        **out_ptr )    /* bytes */
+	char        cmd,
+	char        *textstring,
+	char        *reason,
+	char        *filename,
+	int        file_size,
+	uint16_t    port,
+	char        **out_ptr )    /* bytes */
 {
-int32_t        buf_len = 0, pos = 0, rem_data = 0;
-int8_t        *buf = NULL;
-uint8_t    portb[4];
+    int32_t        buf_len = 0, pos = 0, rem_data = 0;
+    int8_t        *buf = NULL;
+    uint8_t    portb[4];
 
     if (victim == NULL)
-        return -1;
+	return -1;
 
     buf_len += 2;    /* Command */
     buf_len += 16;    /* ID */
@@ -1415,7 +1430,7 @@ uint8_t    portb[4];
 
     /* IN CHAT REQUESTS THE NEXT FIELD IS MISSING */
     if (cmd != 0x2d && cmd != 0x3a) {
-        buf_len += 4;    /* Port Again */
+	buf_len += 4;    /* Port Again */
     }
 
     buf = ysm_calloc( 1, buf_len, __FILE__, __LINE__ );
@@ -1425,15 +1440,15 @@ uint8_t    portb[4];
 
     switch(cmd)         /* ID */
     {
-        case 0x2d:
-        default:
-            memcpy(&buf[pos], id_str_chat, sizeof(id_str_chat));
-            break;
+	case 0x2d:
+	default:
+	    memcpy(&buf[pos], id_str_chat, sizeof(id_str_chat));
+	    break;
 
-        case 0x29:
-        case 0x32:
-            memcpy(&buf[pos], id_str_file, sizeof(id_str_file));
-            break;
+	case 0x29:
+	case 0x32:
+	    memcpy(&buf[pos], id_str_file, sizeof(id_str_file));
+	    break;
     }
 
     /* Both have the same size, no problem at all */
@@ -1446,8 +1461,8 @@ uint8_t    portb[4];
     if (textstring != NULL) buf[pos] = strlen(textstring);
     pos += 4;
     if (textstring) {
-        memcpy(&buf[pos], textstring, strlen(textstring));
-        pos += strlen(textstring);
+	memcpy(&buf[pos], textstring, strlen(textstring));
+	pos += strlen(textstring);
     }
 
     pos += 2;    /* unknown */
@@ -1456,18 +1471,18 @@ uint8_t    portb[4];
 
     switch(cmd)     /* Unknown ID */
     {
-        case 0x2d:
-        case 0x29:
-            pos += 2;
-            buf[pos] = 0x01;
-            pos += 2;
-            break;
+	case 0x2d:
+	case 0x29:
+	    pos += 2;
+	    buf[pos] = 0x01;
+	    pos += 2;
+	    break;
 
-        case 0x32:
-            buf[pos] = 0x01;
-        default:
-            pos += 4;
-            break;
+	case 0x32:
+	    buf[pos] = 0x01;
+	default:
+	    pos += 4;
+	    break;
     }
 
     pos += 8;    /* Unknown */
@@ -1477,12 +1492,12 @@ uint8_t    portb[4];
 
     /* REASON -> LENGTH[4BYTES] + REASON */
     if (reason != NULL) {
-        buf[pos] = strlen(reason);
+	buf[pos] = strlen(reason);
     }
     pos += 4;
     if (reason) {
-        memcpy(&buf[pos], reason, strlen(reason));
-        pos += strlen(reason);
+	memcpy(&buf[pos], reason, strlen(reason));
+	pos += strlen(reason);
     }
 
     memcpy(buf+pos, &port, 2);
@@ -1495,8 +1510,8 @@ uint8_t    portb[4];
     pos += 2;
 
     if (filename) {
-        memcpy(&buf[pos], filename, strlen(filename));
-        pos += strlen(filename);
+	memcpy(&buf[pos], filename, strlen(filename));
+	pos += strlen(filename);
     }
     pos ++;    /* ending 0 */
 
@@ -1505,10 +1520,10 @@ uint8_t    portb[4];
 
     /* IN CHAT REQUESTS THE NEXT FIELD IS MISSING */
     if (cmd == 0x29 || cmd == 0x32) {
-        Word_2_Charsb( portb, port );
-        portb[2] = portb[3] = 0x00;
-        memcpy(&buf[pos], &portb[0], 4);
-        pos += 4;
+	Word_2_Charsb( portb, port );
+	portb[2] = portb[3] = 0x00;
+	memcpy(&buf[pos], &portb[0], 4);
+	pos += 4;
     }
 
     buf[rem_data] = pos - (rem_data+4);
@@ -1519,16 +1534,16 @@ uint8_t    portb[4];
 
 
 int32_t YSM_DC_Message(
-    slave_t  *victim,
-    char     *_msg,
-    int       dlen,
-    int8_t    msgType)
+	slave_t  *victim,
+	char     *_msg,
+	int       dlen,
+	int8_t    msgType)
 {
     /* PEER_MSG_MSG has FG/BG Colors as extra data */
     char    xtra[8], m_flags = 0;
 
     if (victim == NULL)
-        return -1;
+	return -1;
 
     /* FOREGROUND */
     xtra[0] = (char)0x00;
@@ -1544,25 +1559,25 @@ int32_t YSM_DC_Message(
     m_flags |= MFLAGTYPE_NORM;
 
     return YSM_DC_MessageBase( victim,
-                _msg,
-                dlen,
-                msgType,
-                0x0000,
-                0x0000,
-                xtra,
-                sizeof(xtra),
-                m_flags,
-                YSM_USER.d_con.seq_out-- );
+	    _msg,
+	    dlen,
+	    msgType,
+	    0x0000,
+	    0x0000,
+	    xtra,
+	    sizeof(xtra),
+	    m_flags,
+	    g_model.dc.seq_out-- );
 }
 
-int32_t YSM_DC_MessageACK(slave_t *victim, msg_type_t msgType)
+int32_t sendDCMessageAck(msg_t *msg)
 {
-/* PEER_MSG_MSG has FG/BG Colors as extra data */
-char    xtra[8], m_flags = 0, *_msg = "";
-int32_t    dlen = 0x00;
+    /* PEER_MSG_MSG has FG/BG Colors as extra data */
+    char    xtra[8], m_flags = 0, *_msg = "";
+    int32_t    dlen = 0x00;
 
-    if (victim == NULL)
-        return -1;
+    if (msg == NULL || msg->sender == NULL)
+	return -1;
 
     /* FOREGROUND */
     xtra[0] = (char)0x00;
@@ -1577,16 +1592,16 @@ int32_t    dlen = 0x00;
 
     m_flags |= MFLAGTYPE_ACK;
 
-    return YSM_DC_MessageBase( victim,
-                _msg,
-                dlen,
-                msgType,
-                0x0000,
-                0x0000,
-                xtra,
-                sizeof(xtra),
-                m_flags,
-                victim->d_con.seq_in );
+    return YSM_DC_MessageBase(msg->sender,
+	    _msg,
+	    dlen,
+	    msg->type,
+	    0x0000,
+	    0x0000,
+	    xtra,
+	    sizeof(xtra),
+	    m_flags,
+	    msg->sender->d_con.seq_in);
 }
 
 
@@ -1594,21 +1609,21 @@ int32_t    dlen = 0x00;
 /* Takes care of receiving the MSG_GREET_FILE packet */
 
 static int32_t YSM_DC_IncomingFile(
-    slave_t  *victim,
-    int32_t   len,        /* reason length */
-    int8_t   *data,       /* reason buffer */
-    msg_type_t m_type,     /* message type */
-    uint8_t    m_flags,    /* message flags */
-    int16_t    m_status )  /* accepted/denied */
+	slave_t  *victim,
+	int32_t   len,        /* reason length */
+	int8_t   *data,       /* reason buffer */
+	msg_type_t m_type,     /* message type */
+	uint8_t    m_flags,    /* message flags */
+	int16_t    m_status )  /* accepted/denied */
 {
     int32_t    pos = 0, fsize = 0, ret = TRUE;
     uint16_t  rport = 0, fnamelen = 0;
     int8_t    *pfname = NULL, *preason = NULL;
 
     if ((len + 1) > 1) {    /* data points to reason */
-        preason = ysm_calloc(1, len+1, __FILE__, __LINE__ );
-        if (preason == NULL) return -1;
-        memcpy( preason, data+pos, len );
+	preason = ysm_calloc(1, len+1, __FILE__, __LINE__ );
+	if (preason == NULL) return -1;
+	memcpy( preason, data+pos, len );
     }
     pos += len;
 
@@ -1620,14 +1635,14 @@ static int32_t YSM_DC_IncomingFile(
     pos += 2;
 
     if (fnamelen) {        /* Filename buffer */
-        pfname = ysm_calloc(1, fnamelen+1, __FILE__, __LINE__ );
-        if (!pfname) {
-            if (preason != NULL) {
-                YSM_FREE(preason);
-            }
-            return -1;
-        }
-        memcpy( pfname, data+pos, fnamelen );
+	pfname = ysm_calloc(1, fnamelen+1, __FILE__, __LINE__ );
+	if (!pfname) {
+	    if (preason != NULL) {
+		YSM_FREE(preason);
+	    }
+	    return -1;
+	}
+	memcpy( pfname, data+pos, fnamelen );
     }
 
     pos += fnamelen;
@@ -1636,160 +1651,160 @@ static int32_t YSM_DC_IncomingFile(
 
     if (m_flags & MFLAGTYPE_ACK)
     {
-        switch (m_status)
-        {
-        case 0x00:
-            break;
+	switch (m_status)
+	{
+	    case 0x00:
+		break;
 
-        case 0x01:
-            printfOutput( VERBOSE_BASE, "\n"
-            "File transfer to %s aborted. (denied by the slave).\n",
-            victim->info.nickName);
+	    case 0x01:
+		printfOutput( VERBOSE_BASE, "\n"
+			"File transfer to %s aborted. (denied by the slave).\n",
+			victim->info.nickName);
 
-            if (pfname != NULL) {
-                YSM_FREE(pfname);
-            }
+		if (pfname != NULL) {
+		    YSM_FREE(pfname);
+		}
 
-            if (preason != NULL) {
-                YSM_FREE(preason);
-            }
-            return 0;
-        case 0x04:
-            printfOutput( VERBOSE_BASE, "\n"
-            "File transfer to %s aborted. (the slave was away).\n",
-            victim->info.nickName);
+		if (preason != NULL) {
+		    YSM_FREE(preason);
+		}
+		return 0;
+	    case 0x04:
+		printfOutput( VERBOSE_BASE, "\n"
+			"File transfer to %s aborted. (the slave was away).\n",
+			victim->info.nickName);
 
-            if (pfname != NULL) {
-                YSM_FREE(pfname);
-            }
+		if (pfname != NULL) {
+		    YSM_FREE(pfname);
+		}
 
-            if (preason != NULL) {
-                YSM_FREE(preason);
-            }
+		if (preason != NULL) {
+		    YSM_FREE(preason);
+		}
 
-            return 0;
-        case 0x09:
-            printfOutput( VERBOSE_BASE, "\n"
-            "File transfer to %s aborted. "
-            "(the slave was occupied).\n",
-            victim->info.nickName);
+		return 0;
+	    case 0x09:
+		printfOutput( VERBOSE_BASE, "\n"
+			"File transfer to %s aborted. "
+			"(the slave was occupied).\n",
+			victim->info.nickName);
 
-            if (pfname != NULL) {
-                YSM_FREE(pfname);
-            }
+		if (pfname != NULL) {
+		    YSM_FREE(pfname);
+		}
 
-            if (preason != NULL) {
-                YSM_FREE(preason);
-            }
+		if (preason != NULL) {
+		    YSM_FREE(preason);
+		}
 
-            return 0;
-        case 0x0a:
-            printfOutput( VERBOSE_BASE, "\n"
-            "File transfer to %s aborted. "
-            "(the slave was in DND).\n",
-            victim->info.nickName);
+		return 0;
+	    case 0x0a:
+		printfOutput( VERBOSE_BASE, "\n"
+			"File transfer to %s aborted. "
+			"(the slave was in DND).\n",
+			victim->info.nickName);
 
-            if (pfname != NULL) {
-                YSM_FREE(pfname);
-            }
+		if (pfname != NULL) {
+		    YSM_FREE(pfname);
+		}
 
-            if (preason != NULL) {
-                YSM_FREE(preason);
-            }
+		if (preason != NULL) {
+		    YSM_FREE(preason);
+		}
 
-            return 0;
+		return 0;
 
-        case 0x0e:
-            printfOutput( VERBOSE_BASE, "\n"
-            "File transfer to %s aborted. (the slave was in NA).\n",
-            victim->info.nickName);
+	    case 0x0e:
+		printfOutput( VERBOSE_BASE, "\n"
+			"File transfer to %s aborted. (the slave was in NA).\n",
+			victim->info.nickName);
 
-            if (pfname != NULL) {
-                YSM_FREE(pfname);
-            }
+		if (pfname != NULL) {
+		    YSM_FREE(pfname);
+		}
 
-            if (preason != NULL) {
-                YSM_FREE(preason);
-            }
+		if (preason != NULL) {
+		    YSM_FREE(preason);
+		}
 
-            return 0;
+		return 0;
 
-        default:
-            printfOutput( VERBOSE_BASE, "\n"
-            "File transfer to %s aborted. (m_status is unknown).\n",
-            victim->info.nickName);
+	    default:
+		printfOutput( VERBOSE_BASE, "\n"
+			"File transfer to %s aborted. (m_status is unknown).\n",
+			victim->info.nickName);
 
-            if (pfname != NULL) {
-                YSM_FREE(pfname);
-            }
+		if (pfname != NULL) {
+		    YSM_FREE(pfname);
+		}
 
-            if (preason != NULL) {
-                YSM_FREE(preason);
-            }
+		if (preason != NULL) {
+		    YSM_FREE(preason);
+		}
 
-            return 0;
+		return 0;
 
-        }
+	}
 
-        /* Incoming File Transfer Ack, start transfering */
-        ret = YSM_DC_FileC( victim, rport);
+	/* Incoming File Transfer Ack, start transfering */
+	ret = YSM_DC_FileC( victim, rport);
 
-        if (ret)
-        {
-            printfOutput( VERBOSE_BASE,
-            "\nStarting %sFile Transfer.. "
-            "(the slave accepted the request).\n",
-            (m_flags & MFLAGTYPE_CRYPTACK) ? "ENCRYPTED " : "");
-        }
+	if (ret)
+	{
+	    printfOutput( VERBOSE_BASE,
+		    "\nStarting %sFile Transfer.. "
+		    "(the slave accepted the request).\n",
+		    (m_flags & MFLAGTYPE_CRYPTACK) ? "ENCRYPTED " : "");
+	}
 
-        g_state.promptFlags |= FL_RAW;
+	g_state.promptFlags |= FL_RAW;
     }
     else if (m_flags & MFLAGTYPE_NORM)
     {
-        if ((m_flags & MFLAGTYPE_CRYPTNORM)
-        && (isKeyEmpty(victim->crypto.strkey)
-        || victim->fprint != FINGERPRINT_YSM_CLIENT_CRYPT ))
-        {
-            printfOutput(VERBOSE_BASE,
-                "\nIncoming ENCRYPTED file transfer from: %s "
-                "was IGNO.\n"
-                "The key used to encrypt the transfer isn't "
-                "known by\n"
-                "your ysm client. read about the 'key' command."
-                "\n",
-                victim->info.nickName);
+	if ((m_flags & MFLAGTYPE_CRYPTNORM)
+		&& (isKeyEmpty(victim->crypto.strkey)
+		    || victim->fprint != FINGERPRINT_YSM_CLIENT_CRYPT ))
+	{
+	    printfOutput(VERBOSE_BASE,
+		    "\nIncoming ENCRYPTED file transfer from: %s "
+		    "was IGNO.\n"
+		    "The key used to encrypt the transfer isn't "
+		    "known by\n"
+		    "your ysm client. read about the 'key' command."
+		    "\n",
+		    victim->info.nickName);
 
-            YSM_CloseTransfer(victim);
-        }
-        else
-        {
-            printfOutput(VERBOSE_BASE,
-                "\nIncoming %sfile transfer request from: %s.\n",
-                (m_flags & MFLAGTYPE_CRYPTNORM) ? "ENCRYPTED " : "",
-                victim->info.nickName);
+	    YSM_CloseTransfer(victim);
+	}
+	else
+	{
+	    printfOutput(VERBOSE_BASE,
+		    "\nIncoming %sfile transfer request from: %s.\n",
+		    (m_flags & MFLAGTYPE_CRYPTNORM) ? "ENCRYPTED " : "",
+		    victim->info.nickName);
 
-            printfOutput(VERBOSE_BASE,
-                "(use the faccept/fdecline command "
-                "to accept/decline the request)\n"
-                "Filename: '%s' [%d kb].\n"
-                "Reason: %s\n",
-                YSM_CharsetConvertOutputString(&pfname, 1),
-                fsize/1024,
-                YSM_CharsetConvertOutputString(&preason, 1));
-        }
+	    printfOutput(VERBOSE_BASE,
+		    "(use the faccept/fdecline command "
+		    "to accept/decline the request)\n"
+		    "Filename: '%s' [%d kb].\n"
+		    "Reason: %s\n",
+		    YSM_CharsetConvertOutputString(&pfname, 1),
+		    fsize/1024,
+		    YSM_CharsetConvertOutputString(&preason, 1));
+	}
 
-        g_state.promptFlags |= FL_RAW;
+	g_state.promptFlags |= FL_RAW;
     }
     else
     {
-        /* File transfer cancelled */
+	/* File transfer cancelled */
     }
 
     if (pfname != NULL)
-        YSM_FREE(pfname);
+	YSM_FREE(pfname);
 
     if (preason != NULL)
-        YSM_FREE(preason);
+	YSM_FREE(preason);
 
     return ret;
 }
@@ -1800,19 +1815,19 @@ static int32_t YSM_DC_IncomingFile(
 
 static int32_t YSM_DC_FileTIncoming( slave_t *victim )
 {
-struct    sockaddr_in addr;
-int32_t    addrlen, cli_sock;
-struct    timeval tv;
-fd_set    net_fd;
+    struct    sockaddr_in addr;
+    int32_t    addrlen, cli_sock;
+    struct    timeval tv;
+    fd_set    net_fd;
 
     if (victim == NULL)
-        return -1;
+	return -1;
 
     /* Wait for the client to connect */
     addrlen = sizeof(addr);
     cli_sock = accept( victim->d_con.finfo.rSocket,
-            (struct sockaddr *)&addr,
-            (int *)&addrlen );
+	    (struct sockaddr *)&addr,
+	    (int *)&addrlen );
 
     if (cli_sock < 0) return -1;
 
@@ -1822,41 +1837,41 @@ fd_set    net_fd;
     /* Loop through this socket */
     while(1) {
 
-         /* Set a timeout of DC_TRANSFERTIMEOUT seconds to receive
-         * activity. if the socket timeouts, the transfer connection is
-         * closed.
-          */
+	/* Set a timeout of DC_TRANSFERTIMEOUT seconds to receive
+	 * activity. if the socket timeouts, the transfer connection is
+	 * closed.
+	 */
 
-        FD_ZERO(&net_fd);
-        tv.tv_sec = DC_TRANSFERTIMEOUT;
-        tv.tv_usec = 0;
-        FD_SET(cli_sock, &net_fd);
+	FD_ZERO(&net_fd);
+	tv.tv_sec = DC_TRANSFERTIMEOUT;
+	tv.tv_usec = 0;
+	FD_SET(cli_sock, &net_fd);
 
-        if (select( cli_sock + 1, &net_fd, NULL, NULL, &tv) < 0) {
-            printfOutput( VERBOSE_BASE,
-            "File receiving aborted. "
-            "The other side closed the connection.\n" );
-            close( cli_sock );
-            return -1;
-        }
+	if (select( cli_sock + 1, &net_fd, NULL, NULL, &tv) < 0) {
+	    printfOutput( VERBOSE_BASE,
+		    "File receiving aborted. "
+		    "The other side closed the connection.\n" );
+	    close( cli_sock );
+	    return -1;
+	}
 
-        /* drop connection if we reached connection timeout */
-        if (!FD_ISSET( cli_sock, &net_fd )) {
+	/* drop connection if we reached connection timeout */
+	if (!FD_ISSET( cli_sock, &net_fd )) {
 
-            printfOutput( VERBOSE_BASE,
-            "File receiving aborted. The connection timed out.\n");
-            close( cli_sock );
-            return -1;
-        }
+	    printfOutput( VERBOSE_BASE,
+		    "File receiving aborted. The connection timed out.\n");
+	    close( cli_sock );
+	    return -1;
+	}
 
-        /* else, generate a response */
-        if (YSM_DC_CommonResponse( victim, cli_sock ) <= 0) {
-            /* Abort transfer normally */
-            close( cli_sock );
-            return 0;
-        }
+	/* else, generate a response */
+	if (YSM_DC_CommonResponse( victim, cli_sock ) <= 0) {
+	    /* Abort transfer normally */
+	    close( cli_sock );
+	    return 0;
+	}
 
-        threadSleep( 0, 2 );
+	threadSleep( 0, 2 );
     }
 
     victim->d_con.flags &= ~DC_EXPECTNEG;
@@ -1872,63 +1887,63 @@ fd_set    net_fd;
 
 static int32_t YSM_DC_FileTOutgoing( slave_t *victim )
 {
-struct in_addr    r_addr;
-uint32_t    rIP;
-struct timeval    tv;
-fd_set        net_fd;
+    struct in_addr    r_addr;
+    uint32_t    rIP;
+    struct timeval    tv;
+    fd_set        net_fd;
 
     if (victim == NULL)
-        return -1;
+	return -1;
 
     victim->d_con.finfo.rSocket = 0;
 
     /* Can't connect if we dont know the port/addr where to transfer to */
     if (victim->d_con.finfo.rPort == 0
-        || victim->d_con.rIP_ext == 0 || victim->d_con.rIP_int == 0) {
-        printfOutput( VERBOSE_DCON,
-            "FileTOutgoing(): victim's port to transfer is 0, "
-            "aborting..\n");
-        return -1;
+	    || victim->d_con.rIP_ext == 0 || victim->d_con.rIP_int == 0) {
+	printfOutput( VERBOSE_DCON,
+		"FileTOutgoing(): victim's port to transfer is 0, "
+		"aborting..\n");
+	return -1;
     }
 
     /* Start with the external address! */
     if(victim->d_con.rIP_ext != 0)
-        rIP = victim->d_con.rIP_ext;
+	rIP = victim->d_con.rIP_ext;
     else
-        rIP = victim->d_con.rIP_int;
+	rIP = victim->d_con.rIP_int;
 
     do {
 
-        r_addr.s_addr = rIP;
+	r_addr.s_addr = rIP;
 
-        printfOutput( VERBOSE_DCON,
-            "\n" MSG_DIRECT_CONNECTING "%s:%d..\n",
-            inet_ntoa(r_addr),
-            victim->d_con.finfo.rPort);
+	printfOutput( VERBOSE_DCON,
+		"\n" MSG_DIRECT_CONNECTING "%s:%d..\n",
+		inet_ntoa(r_addr),
+		victim->d_con.finfo.rPort);
 
 
-        victim->d_con.finfo.rSocket = YSM_Connect(
-                    inet_ntoa(r_addr),
-                    victim->d_con.finfo.rPort,
-                    0x0 );
+	victim->d_con.finfo.rSocket = YSM_Connect(
+		inet_ntoa(r_addr),
+		victim->d_con.finfo.rPort,
+		0x0 );
 
-        if (rIP == victim->d_con.rIP_int) break;
+	if (rIP == victim->d_con.rIP_int) break;
 
-        if (victim->d_con.finfo.rSocket < 0)
-            rIP = victim->d_con.rIP_int;
+	if (victim->d_con.finfo.rSocket < 0)
+	    rIP = victim->d_con.rIP_int;
 
     } while (victim->d_con.finfo.rSocket < 0);
 
 
     if (victim->d_con.finfo.rSocket < 0) {
-        printfOutput(VERBOSE_BASE, MSG_DIRECT_ERR3 "\n");
-        return -1;
+	printfOutput(VERBOSE_BASE, MSG_DIRECT_ERR3 "\n");
+	return -1;
     }
 
     printfOutput(VERBOSE_BASE, "\n" MSG_DIRECT_ESTABLISHED "\n");
     printfOutput(VERBOSE_BASE, "Started Transfering..\n"
-        "You may cancel it by using the 'fcancel' command.\n"
-        "You can check its status by using the 'fstatus' command.\n" );
+	    "You may cancel it by using the 'fcancel' command.\n"
+	    "You can check its status by using the 'fstatus' command.\n" );
 
     g_state.promptFlags |= FL_RAW;
 
@@ -1941,36 +1956,36 @@ fd_set        net_fd;
     /* Loop through this socket */
     while(1) {
 
-         /* Set a timeout of DC_TRANSFERTIMEOUT seconds to receive
-         * activity. if the socket timeouts, the transfer connection is
-         * closed.
-          */
+	/* Set a timeout of DC_TRANSFERTIMEOUT seconds to receive
+	 * activity. if the socket timeouts, the transfer connection is
+	 * closed.
+	 */
 
-        FD_ZERO(&net_fd);
-        tv.tv_sec = DC_TRANSFERTIMEOUT;
-        tv.tv_usec = 0;
-        FD_SET(victim->d_con.finfo.rSocket, &net_fd);
-        select( victim->d_con.finfo.rSocket + 1,
-            &net_fd,
-            NULL,
-            NULL,
-            &tv);
+	FD_ZERO(&net_fd);
+	tv.tv_sec = DC_TRANSFERTIMEOUT;
+	tv.tv_usec = 0;
+	FD_SET(victim->d_con.finfo.rSocket, &net_fd);
+	select( victim->d_con.finfo.rSocket + 1,
+		&net_fd,
+		NULL,
+		NULL,
+		&tv);
 
-        /* drop connection if we reached connection timeout */
-        if (!FD_ISSET( victim->d_con.finfo.rSocket, &net_fd )) {
-            close( victim->d_con.finfo.rSocket );
-            return -1;
-        }
+	/* drop connection if we reached connection timeout */
+	if (!FD_ISSET( victim->d_con.finfo.rSocket, &net_fd )) {
+	    close( victim->d_con.finfo.rSocket );
+	    return -1;
+	}
 
-        /* else, generate a response */
-        if (YSM_DC_CommonResponse( victim,
-                victim->d_con.finfo.rSocket ) <= 0) {
-            /* Abort transfer normally */
-            close( victim->d_con.finfo.rSocket );
-            return 0;
-        }
+	/* else, generate a response */
+	if (YSM_DC_CommonResponse( victim,
+		    victim->d_con.finfo.rSocket ) <= 0) {
+	    /* Abort transfer normally */
+	    close( victim->d_con.finfo.rSocket );
+	    return 0;
+	}
 
-        threadSleep(0, 100);
+	threadSleep(0, 100);
 
     }
 
@@ -1986,9 +2001,9 @@ static void YSM_DC_FileT( slave_t    *victim )
 {
 
     if (victim->d_con.flags & DC_TRANSFERING) {
-        YSM_DC_FileTOutgoing( victim );
+	YSM_DC_FileTOutgoing( victim );
     } else if (victim->d_con.flags & DC_RECEIVING) {
-        YSM_DC_FileTIncoming( victim );
+	YSM_DC_FileTIncoming( victim );
     }
 
     /* exiting thread */
@@ -2001,40 +2016,40 @@ static void YSM_DC_FileT( slave_t    *victim )
 
 int32_t YSM_DC_FileDecline( slave_t *victim, int8_t *reason )
 {
-/* PEER_MSG_GREET has Greet Msg as extra data */
-char    *file_greet = NULL, m_flags = 0;
-int32_t    file_greet_len = 0;
+    /* PEER_MSG_GREET has Greet Msg as extra data */
+    char    *file_greet = NULL, m_flags = 0;
+    int32_t    file_greet_len = 0;
 
     file_greet_len = YSM_DC_MessageGreet( victim,
-                    0x29,
-                    "File",
-                    reason,
-                    NULL,
-                    0,
-                    0,
-                    &file_greet );
+            0x29,
+            "File",
+            reason,
+            NULL,
+            0,
+            0,
+            &file_greet );
 
     if (file_greet == NULL || file_greet_len == 0)
         return -1;
 
     /* check if this is an outgoing ENCRYPT ack */
     if (!isKeyEmpty( victim->crypto.strkey )
-        && victim->fprint == FINGERPRINT_YSM_CLIENT_CRYPT ) {
+            && victim->fprint == FINGERPRINT_YSM_CLIENT_CRYPT ) {
         m_flags |= MFLAGTYPE_CRYPTACK;
     } else {
         m_flags |= MFLAGTYPE_ACK;
     }
 
     return YSM_DC_MessageBase( victim,
-                NULL,
-                0,
-                0x1a,
-                0x0001,
-                0x0000,
-                file_greet,
-                file_greet_len,
-                m_flags,
-                victim->d_con.seq_in );
+            NULL,
+            0,
+            0x1a,
+            0x0001,
+            0x0000,
+            file_greet,
+            file_greet_len,
+            m_flags,
+            victim->d_con.seq_in );
 }
 
 /* OUTGOING file transfers.
@@ -2044,12 +2059,12 @@ int32_t    file_greet_len = 0;
 static int32_t YSM_DC_FileC( slave_t    *victim, uint16_t rport )
 {
 #ifdef WIN32
-HANDLE        th;
-DWORD        tid;
+    HANDLE        th;
+    DWORD        tid;
 #elif OS2
-int        tid;
+    int        tid;
 #else
-pthread_t    tid;
+    pthread_t    tid;
 #endif
 
     /* Save the remote port */
@@ -2060,18 +2075,18 @@ pthread_t    tid;
 
 #ifdef WIN32
     th = CreateThread(
-        NULL,
-        0,
-        (LPTHREAD_START_ROUTINE)&YSM_DC_FileT,
-        victim,
-        0,
-        (LPDWORD)&tid );
+	    NULL,
+	    0,
+	    (LPTHREAD_START_ROUTINE)&YSM_DC_FileT,
+	    victim,
+	    0,
+	    (LPDWORD)&tid );
 #elif OS2
     tid = _beginthread( (void *)&YSM_DC_FileT,
-                    NULL,
-                    THREADSTACKSIZE,
-                    victim
-                    );
+	    NULL,
+	    THREADSTACKSIZE,
+	    victim
+	    );
 #else
     pthread_create( &tid, NULL, (void *)&YSM_DC_FileT, victim );
 #endif
@@ -2085,20 +2100,18 @@ pthread_t    tid;
  * for ACKING a transfer and binding a port, etc..
  */
 
-int32_t YSM_DC_FileB( slave_t    *victim,
-        char        *filename,
-        char        *reason )
+int32_t YSM_DC_FileB(slave_t *victim, char *filename, char *reason)
 {
-/* PEER_MSG_GREET has Greet Msg as extra data */
-char    *file_greet = NULL, m_flags = 0;
-int32_t    file_greet_len = 0;
+    /* PEER_MSG_GREET has Greet Msg as extra data */
+    char    *file_greet = NULL, m_flags = 0;
+    int32_t    file_greet_len = 0;
 #ifdef WIN32
-HANDLE        th;
-DWORD        tid;
+    HANDLE        th;
+    DWORD        tid;
 #elif OS2
-int        tid;
+    int        tid;
 #else
-pthread_t    tid;
+    pthread_t    tid;
 #endif
 
 
@@ -2118,40 +2131,40 @@ pthread_t    tid;
     /* Fill our local port for the transfer, FileB() is waiting for it */
     victim->d_con.finfo.lPort = htons(g_cfg.dcport2);
     if (YSM_DC_BindPort( victim->d_con.finfo.rSocket,
-            &victim->d_con.finfo.lPort ) < 0) return -1;
+                &victim->d_con.finfo.lPort ) < 0) return -1;
 #ifdef WIN32
     th = CreateThread(
-        NULL,
-        0,
-        (LPTHREAD_START_ROUTINE)&YSM_DC_FileT,
-        victim,
-        0,
-        (LPDWORD)&tid );
+            NULL,
+            0,
+            (LPTHREAD_START_ROUTINE)&YSM_DC_FileT,
+            victim,
+            0,
+            (LPDWORD)&tid );
 #elif OS2
     tid = _beginthread( (void *)&YSM_DC_FileT,
-                NULL,
-                THREADSTACKSIZE,
-                victim
-                );
+            NULL,
+            THREADSTACKSIZE,
+            victim
+            );
 #else
     pthread_create( &tid, NULL, (void *)&YSM_DC_FileT, victim );
 #endif
 
     file_greet_len = YSM_DC_MessageGreet( victim,
-                    0x29,
-                    "File",
-                    reason,
-                    filename,
-                    victim->d_con.finfo.size,
-                    victim->d_con.finfo.lPort,
-                    &file_greet );
+            0x29,
+            "File",
+            reason,
+            filename,
+            victim->d_con.finfo.size,
+            victim->d_con.finfo.lPort,
+            &file_greet );
 
     if (file_greet == NULL || file_greet_len == 0)
         return -1;
 
     /* check if this is an outgoing ENCRYPT ack */
     if (!isKeyEmpty( victim->crypto.strkey )
-    && victim->fprint == FINGERPRINT_YSM_CLIENT_CRYPT )
+            && victim->fprint == FINGERPRINT_YSM_CLIENT_CRYPT )
     {
         m_flags |= MFLAGTYPE_CRYPTACK;
     }
@@ -2161,15 +2174,15 @@ pthread_t    tid;
     }
 
     return YSM_DC_MessageBase( victim,
-                NULL,
-                0,
-                0x1a,
-                0x0000,
-                0x0000,
-                file_greet,
-                file_greet_len,
-                m_flags,
-                victim->d_con.seq_in );
+            NULL,
+            0,
+            0x1a,
+            0x0000,
+            0x0000,
+            file_greet,
+            file_greet_len,
+            m_flags,
+            victim->d_con.seq_in );
 }
 
 
@@ -2177,27 +2190,27 @@ pthread_t    tid;
  * for initiating a transfer.
  */
 
-static int32_t YSM_DC_FileA( slave_t    *victim, char *reason )
+static int32_t YSM_DC_FileA(slave_t *victim, char *reason)
 {
-/* PEER_MSG_GREET has Greet Msg as extra data */
-char    *file_greet = NULL, m_flags = 0;
-int32_t    file_greet_len = 0;
+    /* PEER_MSG_GREET has Greet Msg as extra data */
+    char    *file_greet = NULL, m_flags = 0;
+    int32_t  file_greet_len = 0;
 
     file_greet_len = YSM_DC_MessageGreet( victim,
-                    0x29,
-                    "File",
-                    reason,
-                    victim->d_con.finfo.name,
-                    victim->d_con.finfo.size,
-                    0x0000,
-                    &file_greet );
+            0x29,
+            "File",
+            reason,
+            victim->d_con.finfo.name,
+            victim->d_con.finfo.size,
+            0x0000,
+            &file_greet );
 
     if (file_greet == NULL || file_greet_len == 0)
         return -1;
 
     /* check if we should encrypt the outgoing file transfer. */
     if (!isKeyEmpty( victim->crypto.strkey )
-    && victim->fprint == FINGERPRINT_YSM_CLIENT_CRYPT )
+            && victim->fprint == FINGERPRINT_YSM_CLIENT_CRYPT )
     {
         m_flags |= MFLAGTYPE_CRYPTNORM;
     }
@@ -2215,7 +2228,7 @@ int32_t    file_greet_len = 0;
             file_greet,
             file_greet_len,
             m_flags,
-            YSM_USER.d_con.seq_out-- );
+            g_model.dc.seq_out-- );
 
     return 0;
 }
@@ -2227,8 +2240,8 @@ int32_t    file_greet_len = 0;
 
 void YSM_DC_FileParseFilename( int8_t *fname )
 {
-int8_t        *paux = NULL;
-int32_t        newsize = 0;
+    int8_t        *paux = NULL;
+    int32_t        newsize = 0;
 
 #ifdef WIN32
     paux = strrchr(fname, '\\');
@@ -2239,9 +2252,9 @@ int32_t        newsize = 0;
 #endif
 #endif
     if (paux != NULL) {
-        newsize = strlen(paux) - 1;
-        memcpy( fname, paux+1, newsize );
-        fname[newsize] = 0x00;
+	newsize = strlen(paux) - 1;
+	memcpy( fname, paux+1, newsize );
+	fname[newsize] = 0x00;
     }
 }
 
@@ -2256,12 +2269,12 @@ int32_t        newsize = 0;
 
 int32_t YSM_DC_File( slave_t    *victim, int8_t *fname, int8_t *desc )
 {
-struct stat    filestat;
+    struct stat    filestat;
 
     /* Check if the file exists */
     if (stat(fname, &filestat) < 0) {
-        printfOutput( VERBOSE_BASE, "File not found. Try the full path!.\n");
-        return -1;
+	printfOutput( VERBOSE_BASE, "File not found. Try the full path!.\n");
+	return -1;
     }
 
     if (desc == NULL) desc = "File sent with ysmICQ";
@@ -2269,8 +2282,8 @@ struct stat    filestat;
     /* Open the file and save its FD */
     victim->d_con.finfo.fd = fopen(fname, "rb");
     if (victim->d_con.finfo.fd == NULL) {
-        printfOutput( VERBOSE_BASE, "Unable to open the file for reading.\n");
-        return -1;
+	printfOutput( VERBOSE_BASE, "Unable to open the file for reading.\n");
+	return -1;
     }
 
     victim->d_con.finfo.size = filestat.st_size;
@@ -2280,8 +2293,8 @@ struct stat    filestat;
     YSM_DC_FileParseFilename(fname);
 
     if (strlen(fname) >= MAX_PEER_FILENAMEL) {
-        printfOutput( VERBOSE_BASE, "Filename too long. Don't get mad..\n");
-        return -1;
+	printfOutput( VERBOSE_BASE, "Filename too long. Don't get mad..\n");
+	return -1;
     }
 
     memset(victim->d_con.finfo.name, 0, MAX_PEER_FILENAMEL);
@@ -2293,8 +2306,8 @@ struct stat    filestat;
 
 int32_t YSM_DC_FileInit( slave_t *victim, int32_t numfiles, int32_t numbytes )
 {
-int8_t    *buf = NULL;
-int32_t    pos = 0, ret = TRUE;
+    int8_t    *buf = NULL;
+    int32_t    pos = 0, ret = TRUE;
 
     pos += 2;            /* cmd len */
     pos ++;                /* byte command */
@@ -2306,14 +2319,14 @@ int32_t    pos = 0, ret = TRUE;
     pos += 4;
 
     /* Sender's nick, word + zero */
-    pos += strlen(YSM_USER.info.nickName) + 3;
+    pos += strlen(g_model.user.nickName) + 3;
 
     buf = ysm_calloc( 1, pos, __FILE__, __LINE__ );
     if (buf == NULL) return -1;
 
     pos = 0;
 
-    buf[pos] = 19 + strlen(YSM_USER.info.nickName) + 1;
+    buf[pos] = 19 + strlen(g_model.user.nickName) + 1;
     pos += 2;
 
     buf[pos] = PEER_FILE_INIT;
@@ -2333,13 +2346,13 @@ int32_t    pos = 0, ret = TRUE;
     DW_2_Chars( &buf[pos], victim->d_con.finfo.speed );
     pos += 4;
 
-    buf[pos] = strlen(YSM_USER.info.nickName) + 1;
+    buf[pos] = strlen(g_model.user.nickName) + 1;
     pos += 2;
 
     memcpy( &buf[pos],
-        YSM_USER.info.nickName,
-        strlen(YSM_USER.info.nickName) );
-    pos += strlen(YSM_USER.info.nickName) + 1;
+	    g_model.user.nickName,
+	    strlen(g_model.user.nickName) );
+    pos += strlen(g_model.user.nickName) + 1;
 
     ret = YSM_WRITE_DC( victim, victim->d_con.finfo.rSocket, buf, pos );
 
@@ -2349,8 +2362,8 @@ int32_t    pos = 0, ret = TRUE;
 
 int32_t YSM_DC_FileInitAck( slave_t *victim, int32_t sock, int8_t *buf, int32_t len )
 {
-int8_t    *data = NULL;
-int32_t    pos = 0, num_files = 0, num_bytes = 0, speed = 0, ret = TRUE;
+    int8_t    *data = NULL;
+    int32_t    pos = 0, num_files = 0, num_bytes = 0, speed = 0, ret = TRUE;
 
     /* first parse incoming data and store required data */
     pos ++;                /* byte command */
@@ -2398,8 +2411,8 @@ int32_t    pos = 0, num_files = 0, num_bytes = 0, speed = 0, ret = TRUE;
     pos += 2;
 
     memcpy( &data[pos],
-        victim->info.nickName,
-        strlen(victim->info.nickName) );
+	    victim->info.nickName,
+	    strlen(victim->info.nickName) );
 
     pos += strlen(victim->info.nickName) + 1;
 
@@ -2411,8 +2424,8 @@ int32_t    pos = 0, num_files = 0, num_bytes = 0, speed = 0, ret = TRUE;
 
 int32_t YSM_DC_FileStart( slave_t *victim )
 {
-int8_t    *buf = NULL;
-int32_t    pos = 0, ret = TRUE;
+    int8_t    *buf = NULL;
+    int32_t    pos = 0, ret = TRUE;
 
     pos += 2;                /* cmd len */
     pos ++;                    /* byte command */
@@ -2445,8 +2458,8 @@ int32_t    pos = 0, ret = TRUE;
     pos += 2;
 
     memcpy( &buf[pos],
-        victim->d_con.finfo.name,
-        strlen(victim->d_con.finfo.name) );
+	    victim->d_con.finfo.name,
+	    strlen(victim->d_con.finfo.name) );
     pos += strlen(victim->d_con.finfo.name) + 1;
 
     buf[pos] = 0x01;
@@ -2467,12 +2480,12 @@ int32_t    pos = 0, ret = TRUE;
 
 
 int32_t YSM_DC_FileStartAck( slave_t    *victim,
-        int32_t        sock,
-        int8_t        *data,
-        int32_t        len )
+	int32_t        sock,
+	int8_t        *data,
+	int32_t        len )
 {
-int8_t    *buf = NULL;
-int32_t    pos = 0, num_bytes = 0, speed = 0, ret = TRUE;
+    int8_t    *buf = NULL;
+    int32_t    pos = 0, num_bytes = 0, speed = 0, ret = TRUE;
 
 
     /* first parse incoming data and store required data */
@@ -2486,8 +2499,8 @@ int32_t    pos = 0, num_bytes = 0, speed = 0, ret = TRUE;
     memset( victim->d_con.finfo.name, 0, MAX_PEER_FILENAMEL );
 
     memcpy( &victim->d_con.finfo.name[0],
-        &data[pos],
-        (speed >= MAX_PEER_FILENAMEL) ? MAX_PEER_FILENAMEL-1 : speed );
+	    &data[pos],
+	    (speed >= MAX_PEER_FILENAMEL) ? MAX_PEER_FILENAMEL-1 : speed );
 
     pos += speed;
     pos += 3;
@@ -2541,8 +2554,8 @@ int32_t    pos = 0, num_bytes = 0, speed = 0, ret = TRUE;
 
 int32_t YSM_DC_FileStop( slave_t *victim, int32_t numfile )
 {
-int8_t    *buf = NULL;
-int32_t    pos = 0, ret = TRUE;
+    int8_t    *buf = NULL;
+    int32_t    pos = 0, ret = TRUE;
 
     pos += 2;            /* cmd len */
     pos ++;                /* byte command */
@@ -2570,8 +2583,8 @@ int32_t    pos = 0, ret = TRUE;
 
 int32_t YSM_DC_FileSpeed( slave_t *victim, int32_t newspeed )
 {
-int8_t    *buf = NULL;
-int32_t    pos = 0, ret = TRUE;
+    int8_t    *buf = NULL;
+    int32_t    pos = 0, ret = TRUE;
 
     pos += 2;            /* cmd len */
     pos ++;                /* byte command */
@@ -2603,7 +2616,7 @@ int32_t    pos = 0, ret = TRUE;
 
 int32_t YSM_DC_FileSpeedAck( slave_t *victim, int8_t *buf, int32_t len )
 {
-int32_t    pos = 0, ret = TRUE, newspeed = 0;
+    int32_t    pos = 0, ret = TRUE, newspeed = 0;
 
 
     pos ++;                /* byte command */
@@ -2617,8 +2630,8 @@ int32_t    pos = 0, ret = TRUE, newspeed = 0;
 
 int32_t YSM_DC_FileData( slave_t *victim, int8_t *data, int32_t dlen )
 {
-int8_t    *buf = NULL;
-int32_t    pos = 0, ret = TRUE;
+    int8_t    *buf = NULL;
+    int32_t    pos = 0, ret = TRUE;
 
     pos += 2;        /* cmd len */
     pos ++;            /* byte command */
@@ -2646,10 +2659,10 @@ int32_t    pos = 0, ret = TRUE;
 
 int32_t YSM_DC_FileTransfer( slave_t *victim, int8_t *buf, int32_t len )
 {
-int8_t    *read_buf, *pread_buf = NULL;
-int32_t    read_len = 0, read_len2 = 0, transbytes = 0, foffset = 0;
-double    sleepspeed = 0, transkb = 0;
-keyInstance    *crypt_key = NULL;
+    int8_t    *read_buf, *pread_buf = NULL;
+    int32_t    read_len = 0, read_len2 = 0, transbytes = 0, foffset = 0;
+    double    sleepspeed = 0, transkb = 0;
+    keyInstance    *crypt_key = NULL;
 
     read_buf = ysm_malloc( MAX_PEER_DATA_SIZE, __FILE__, __LINE__ );
     if (read_buf == NULL) return 0;
@@ -2665,13 +2678,13 @@ keyInstance    *crypt_key = NULL;
     /* get the offset from where to start sending */
     memcpy(&foffset, buf+1, 4);
     if (fseek(victim->d_con.finfo.fd, foffset, SEEK_SET) != 0) {
-        YSM_FREE(pread_buf);
-        return 0;
+	YSM_FREE(pread_buf);
+	return 0;
     }
 
     if (foffset) {
-        printfOutput( VERBOSE_BASE, "\nThe slave requested to resume..\n" );
-        victim->d_con.finfo.size -= foffset;
+	printfOutput( VERBOSE_BASE, "\nThe slave requested to resume..\n" );
+	victim->d_con.finfo.size -= foffset;
     }
 
     sleepspeed = (0x64 - victim->d_con.finfo.speed);
@@ -2679,82 +2692,82 @@ keyInstance    *crypt_key = NULL;
     else sleepspeed = 0;
 
     while (victim->d_con.finfo.fd != NULL
-    && !feof(victim->d_con.finfo.fd)) {
+	    && !feof(victim->d_con.finfo.fd)) {
 
-        /* we read 2048 minus the minimum space we would need if this
-         * was an encrypted file transfer. */
-        read_len = fread( read_buf,
-                    1,
-                    2048 -
-                    sizeof(struct YSMCryptH) -
-                    MAX_CRYPT_PADDING,
-                    victim->d_con.finfo.fd );
+	/* we read 2048 minus the minimum space we would need if this
+	 * was an encrypted file transfer. */
+	read_len = fread( read_buf,
+		1,
+		2048 -
+		sizeof(struct YSMCryptH) -
+		MAX_CRYPT_PADDING,
+		victim->d_con.finfo.fd );
 
-        if (read_len) {
+	if (read_len) {
 
-            /* read_len2 is used because its size might be changed
-             * through the encryption routines */
-            read_len2 = read_len;
+	    /* read_len2 is used because its size might be changed
+	     * through the encryption routines */
+	    read_len2 = read_len;
 
-            /* encrypt the outgoing file data if neccesary */
-            crypt_key = YSM_EncryptAnyData( victim,
-                            &read_buf,
-                            &read_len2,
-                            MAX_PEER_DATA_SIZE );
+	    /* encrypt the outgoing file data if neccesary */
+	    crypt_key = YSM_EncryptAnyData( victim,
+		    &read_buf,
+		    &read_len2,
+		    MAX_PEER_DATA_SIZE );
 
-            if (YSM_DC_FileData( victim, read_buf, read_len2 ) <= 0)
-            {
-                printfOutput( VERBOSE_BASE,
-                    "\nAn error showed up during the "
-                    "transfer, aborting..\n" );
+	    if (YSM_DC_FileData( victim, read_buf, read_len2 ) <= 0)
+	    {
+		printfOutput( VERBOSE_BASE,
+			"\nAn error showed up during the "
+			"transfer, aborting..\n" );
 
-                YSM_FREE(pread_buf);
+		YSM_FREE(pread_buf);
 
-                if (crypt_key != NULL)
-                    YSM_FREE(read_buf);
+		if (crypt_key != NULL)
+		    YSM_FREE(read_buf);
 
-                return 0;
-            }
-        }
+		return 0;
+	    }
+	}
 
-        victim->d_con.finfo.size -= read_len;
-        transbytes += read_len;
+	victim->d_con.finfo.size -= read_len;
+	transbytes += read_len;
 
-        /* update our kb/s trace */
-        if ((time(NULL) - victim->d_con.finfo.statstime) > 1) {
-            victim->d_con.finfo.kbs =
-            (transbytes - victim->d_con.finfo.statsbytes)/1024;
-            victim->d_con.finfo.statsbytes = transbytes;
-            victim->d_con.finfo.statstime = time(NULL);
-        }
+	/* update our kb/s trace */
+	if ((time(NULL) - victim->d_con.finfo.statstime) > 1) {
+	    victim->d_con.finfo.kbs =
+		(transbytes - victim->d_con.finfo.statsbytes)/1024;
+	    victim->d_con.finfo.statsbytes = transbytes;
+	    victim->d_con.finfo.statstime = time(NULL);
+	}
 
-        threadSleep(0, (int32_t)sleepspeed);
+	threadSleep(0, (int32_t)sleepspeed);
     }
 
     if (victim->d_con.finfo.size) {
-        printfOutput( VERBOSE_BASE,
-            "\nFile named '%s' transfered incompletely.\n",
-            victim->d_con.finfo.name );
+	printfOutput( VERBOSE_BASE,
+		"\nFile named '%s' transfered incompletely.\n",
+		victim->d_con.finfo.name );
     } else {
-        printfOutput( VERBOSE_BASE,
-            "\nFile named '%s' transfered successfully.\n",
-            victim->d_con.finfo.name );
+	printfOutput( VERBOSE_BASE,
+		"\nFile named '%s' transfered successfully.\n",
+		victim->d_con.finfo.name );
     }
 
     transkb = transbytes/1024;
 
     printfOutput( VERBOSE_BASE,
-        "%sFile transfer finished [%d bytes (%.0f kb) transfered].\n",
-        (crypt_key != NULL) ? "Encrypted " : "",
-        transbytes,
-        transkb );
+	    "%sFile transfer finished [%d bytes (%.0f kb) transfered].\n",
+	    (crypt_key != NULL) ? "Encrypted " : "",
+	    transbytes,
+	    transkb );
 
     g_state.promptFlags |= FL_RAW;
 
     YSM_FREE(pread_buf);
 
     if (crypt_key != NULL) {
-        YSM_FREE(read_buf);
+	YSM_FREE(read_buf);
     }
 
     return 0;
@@ -2763,13 +2776,13 @@ keyInstance    *crypt_key = NULL;
 
 int32_t YSM_DC_FileReceiveOpenHandle( slave_t *victim )
 {
-int32_t        size;
-int8_t        *path = NULL;
-struct stat    filestat;
+    int32_t        size;
+    int8_t        *path = NULL;
+    struct stat    filestat;
 
     if (victim->d_con.finfo.fd != NULL) {
-        /* descriptor is already open */
-        return 0;
+	/* descriptor is already open */
+	return 0;
     }
 
     size = strlen(g_state.configDir) + 1;
@@ -2779,50 +2792,50 @@ struct stat    filestat;
 
     /* does our incoming directory exist? */
     snprintf( path,
-        size,
-        "%s/%s",
-        g_state.configDir,
-        YSM_INCOMINGDIRECTORY );
+	    size,
+	    "%s/%s",
+	    g_state.configDir,
+	    YSM_INCOMINGDIRECTORY );
 
     path[size - 1] = 0x00;
 
     if (stat(path, &filestat)) {
-        printfOutput( VERBOSE_BASE,
-            "incoming directory doesn't exist.\n"
-            "Creating %s\n", path );
+	printfOutput( VERBOSE_BASE,
+		"incoming directory doesn't exist.\n"
+		"Creating %s\n", path );
 
-        /* mkdir returns 0 if success */
-        if (mkdir(path, 0700)) {
-            printfOutput( VERBOSE_BASE, "Couldn't create directory.\n" );
-            YSM_FREE(path);
-            return -1;
-        }
+	/* mkdir returns 0 if success */
+	if (mkdir(path, 0700)) {
+	    printfOutput( VERBOSE_BASE, "Couldn't create directory.\n" );
+	    YSM_FREE(path);
+	    return -1;
+	}
     }
 
     /* last minute file checks, we shouldn't reach this code though */
     if (strstr(victim->d_con.finfo.name, "\\..")
-    || strstr(victim->d_con.finfo.name,"..\\")
-    || strstr(victim->d_con.finfo.name,"../")
-    || strstr(victim->d_con.finfo.name,"/..")) {
-            printfOutput( VERBOSE_BASE,
-            "Suspicious filename detected. Aborting..\n");
-            return -1;
+	    || strstr(victim->d_con.finfo.name,"..\\")
+	    || strstr(victim->d_con.finfo.name,"../")
+	    || strstr(victim->d_con.finfo.name,"/..")) {
+	printfOutput( VERBOSE_BASE,
+		"Suspicious filename detected. Aborting..\n");
+	return -1;
     }
 
     snprintf( path,
-        size,
-        "%s/%s/%s",
-        g_state.configDir,
-        YSM_INCOMINGDIRECTORY,
-        victim->d_con.finfo.name );
+	    size,
+	    "%s/%s/%s",
+	    g_state.configDir,
+	    YSM_INCOMINGDIRECTORY,
+	    victim->d_con.finfo.name );
 
     path[size - 1] = 0x00;
 
     victim->d_con.finfo.fd = fopen( path, "ab" );
     if (victim->d_con.finfo.fd == NULL) {
-        printfOutput( VERBOSE_BASE, "Unable to open %s for write.\n", path);
-        YSM_FREE(path);
-        return -1;
+	printfOutput( VERBOSE_BASE, "Unable to open %s for write.\n", path);
+	YSM_FREE(path);
+	return -1;
     }
 
     YSM_FREE(path);
@@ -2832,15 +2845,15 @@ struct stat    filestat;
 
 int32_t YSM_DC_FileReceive( slave_t *victim, int8_t *buf, int32_t len )
 {
-size_t        ret = 0;
-int8_t        *writedata = NULL;
-int32_t        writelen = 0;
-double        transkb = 0;
-keyInstance    *key = NULL;
+    size_t        ret = 0;
+    int8_t        *writedata = NULL;
+    int32_t        writelen = 0;
+    double        transkb = 0;
+    keyInstance    *key = NULL;
 
 
     if (YSM_DC_FileReceiveOpenHandle( victim ) < 0)
-        return 0;
+	return 0;
 
     writedata = buf;
     writedata++;    /* byte command */
@@ -2848,61 +2861,61 @@ keyInstance    *key = NULL;
 
     /* decrypt the incoming file data if neccesary */
     if (YSM_DecryptFileData( victim,
-                &writedata,
-                &writelen,
-                &key ) < 0) {
+		&writedata,
+		&writelen,
+		&key ) < 0) {
 
-        /* this is a very critical error.. */
-        return 0;
+	/* this is a very critical error.. */
+	return 0;
     }
 
     /* since this function is called several times to receive a file
      * we do the following: */
     if (victim->d_con.finfo.statstime == 0)
-        victim->d_con.finfo.statstime = time(NULL);
+	victim->d_con.finfo.statstime = time(NULL);
 
     ret = fwrite( writedata, 1, writelen, victim->d_con.finfo.fd );
     if (ret != (size_t)writelen) {
-        printfOutput( VERBOSE_BASE, "fwrite() returned an invalid len.\n");
-        return 0;
+	printfOutput( VERBOSE_BASE, "fwrite() returned an invalid len.\n");
+	return 0;
     }
 
     victim->d_con.finfo.size -= ret;
 
     /* update our kb/s trace */
     if ((time(NULL) - victim->d_con.finfo.statstime) > 1) {
-        victim->d_con.finfo.kbs =
-            (victim->d_con.finfo.statsbytes -
-             victim->d_con.finfo.size)/1024;
+	victim->d_con.finfo.kbs =
+	    (victim->d_con.finfo.statsbytes -
+	     victim->d_con.finfo.size)/1024;
 
-            victim->d_con.finfo.statsbytes =
-                victim->d_con.finfo.size;
+	victim->d_con.finfo.statsbytes =
+	    victim->d_con.finfo.size;
 
-            victim->d_con.finfo.statstime = time(NULL);
+	victim->d_con.finfo.statstime = time(NULL);
     }
 
     /* Successful file transfered */
     if (!victim->d_con.finfo.size) {
-        victim->d_con.finfo.totnum--;
-        victim->d_con.finfo.num++;
+	victim->d_con.finfo.totnum--;
+	victim->d_con.finfo.num++;
 
-        printfOutput( VERBOSE_BASE,
-            "\nFile named '%s' received successfully.\n",
-            victim->d_con.finfo.name );
+	printfOutput( VERBOSE_BASE,
+		"\nFile named '%s' received successfully.\n",
+		victim->d_con.finfo.name );
 
-        transkb = victim->d_con.finfo.totsize/1024;
-        if (!victim->d_con.finfo.totnum) {
-            printfOutput( VERBOSE_BASE,
-                "%sFile transfer finished "
-                "[%d files - %d bytes (%.0f kb) received].\n",
-                (key != NULL) ? "Encrypted " : "",
-                victim->d_con.finfo.num-1,
-                victim->d_con.finfo.totsize,
-                transkb );
-        }
+	transkb = victim->d_con.finfo.totsize/1024;
+	if (!victim->d_con.finfo.totnum) {
+	    printfOutput( VERBOSE_BASE,
+		    "%sFile transfer finished "
+		    "[%d files - %d bytes (%.0f kb) received].\n",
+		    (key != NULL) ? "Encrypted " : "",
+		    victim->d_con.finfo.num-1,
+		    victim->d_con.finfo.totsize,
+		    transkb );
+	}
 
-        g_state.promptFlags |= FL_RAW;
-        return 0;
+	g_state.promptFlags |= FL_RAW;
+	return 0;
     }
 
     return 1;

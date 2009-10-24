@@ -44,7 +44,7 @@ static int writePipe(int8_t *str)
     }
 }
 
-int writeOutput(int verboseLevel, int8_t *str)
+int writeOutput(int verboseLevel, const int8_t *str)
 {
     int retVal = 0;
 //    DEBUG_PRINT("str: %s", str);

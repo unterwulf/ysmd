@@ -5,6 +5,8 @@
 #include "setup.h"
 #include "ystring.h"
 #include "output.h"
+#include "fingerprint.h"
+#include "icqv7.h"        /* CAPFL_UTF8 */
 
 static struct timeval tv;
 static fd_set read_fds, dc_fds, net_fds;
@@ -587,19 +589,12 @@ int32_t parseSlave(uint8_t *name)
     still organized :)
  */
 
-void printOrganizedSlaves(
-    uint16_t    FilterStatus,
-    int8_t     *Fstring,
-    int8_t      FilterIgnore)
+void printOrganizedSlaves(uint16_t FilterStatus, char *Fstring, int8_t FilterIgnore)
 {
-    int32_t                 x = 0;
-    slave_hnd_t             slave = {SLAVE_HND_START, 0};
-    string_t               *str;
-    buddy_special_status_t  bss;
-    sl_status_t             status = 0;
-    sl_caps_t               caps = 0;
-    uint8_t                 nick[MAX_NICK_LEN];
-    uint8_t                 statusStr[] = "FIXME";
+    int32_t   x = 0;
+    slave_t  *slave = NULL;
+    string_t *str;
+    uint8_t   statusStr[] = "FIXME";
 
     static uint16_t arr_status[] = {
         STATUS_OFFLINE,
@@ -619,27 +614,26 @@ void printOrganizedSlaves(
     /* We increase x so we skip the first array member (offline) */
     if (FilterStatus != STATUS_OFFLINE) x++;
 
+    lockSlaveList();
+
     for (; x < NUM_ELEM_ARR(arr_status); x++)
     {
         FilterStatus = arr_status[x];
-        while (getNextSlave(&slave) == 0)
+        slave = NULL;
+        while ((slave = getNextSlave(slave)) != 0)
         {
-            getSlaveStatus(&slave, &status);
-            getSlaveCapabilities(&slave, &caps);
-            getSlaveSpecialStatus(&slave, &bss);
-            getSlaveNick(&slave, &nick, sizeof(nick));
-
             if (Fstring != NULL)
-                if (strncasecmp(nick, Fstring, strlen(Fstring)) != 0)
+                if (strncasecmp(slave->info.nickName,
+                            Fstring, strlen(Fstring)) != 0)
                     continue;
 
-            if (FilterIgnore && bss.ignoreId)
+            if (FilterIgnore && slave->budType.ignoreId)
                 continue;
 
             if ((FilterStatus == STATUS_UNKNOWN
-                && !isStatusValid(status))
-                || (status == FilterStatus)
-                || (FilterStatus == STATUS_NA && status == STATUS_NA2))
+                && !isStatusValid(slave->status))
+                || (slave->status == FilterStatus)
+                || (FilterStatus == STATUS_NA && slave->status == STATUS_NA2))
             {
                 printfString(str,
                     "%ld %s"
@@ -647,20 +641,20 @@ void printOrganizedSlaves(
                     "%s" 
                     " "
                     "%s %s %s %s %s %s\n",
-                    slave.uin,
-                    nick,
-                    strStatus(status),
-                    bss.visibleId ? "VIS" : "---",
-                    bss.invisibleId ? "INV" : "---",
-                    bss.ignoreId ? "IGN" : "---",
-                    bss.birthday ? "BDY" : "---",
-                    caps & CAPFL_UTF8 ? "UTF" : "---",
-                    statusStr);
+                    slave->uin,
+                    slave->info.nickName,
+                    strStatus(slave->status),
+                    slave->budType.visibleId ? "VIS" : "---",
+                    slave->budType.invisibleId ? "INV" : "---",
+                    slave->budType.ignoreId ? "IGN" : "---",
+                    slave->budType.birthday ? "BDY" : "---",
+                    slave->caps & CAPFL_UTF8 ? "UTF" : "---",
+                    slave->statusStr);
             }
         }
     }
 
+    unlockSlaveList();
     writeOutput(VERBOSE_BASE, getString(str));
     freeString(str);
 }
-

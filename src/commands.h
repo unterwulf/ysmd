@@ -61,10 +61,6 @@ typedef struct
 
 #define YSM_COMMAND_STATUS_HELP        "Change/Check your current status.\n"                        "usage: 'status [new_status]'\n\n"
 
-#define YSM_COMMAND_LASTSENT_HELP    "Send a message to the last slave you messaged.\n(Also check the <tab> key function)\n"                                        "usage: 'a [message]'\n\n"
-
-#define YSM_COMMAND_REPLY_HELP        "Send a message to the last slave who messaged you.\n(Also check the <tab> key function)\n"                                    "usage: 'r [message]'\n\n"
-
 #define YSM_COMMAND_WHOIS_HELP        "Request information on a slave or icq#\n"                    "usage: 'whois <name>'\n"                            "usage: 'whois <uin>'\n\n"
 
 #define YSM_COMMAND_SEARCH_HELP        "Search icq users by their e-mail!.\n"                        "usage: 'search example@email.com'\n\n"
@@ -93,8 +89,6 @@ typedef struct
 
 #define YSM_COMMAND_ALERT_HELP        "Add/Remove a slave to/from your alert list.\n"                    "usage: 'alert <name>'\n\n"
 
-#define YSM_COMMAND_LAST_HELP        "Show the last received message.\n\n"
-
 #define YSM_COMMAND_HIST_HELP        "Read a slave's log file (message HISTORY).\n"                    "usage: 'hist <name>'\n"
 
 #define YSM_COMMAND_LOADCONFIG_HELP    "Reload configuration file settings.\n"                        "usage: 'loadconfig'\n\n"
@@ -103,13 +97,13 @@ typedef struct
 
 #define YSM_COMMAND_RUN_HELP        "Run a command in your current shell.\n"                    "usage: '! ls -al'\n\n"
 
-#define YSM_COMMAND_FORWARD_HELP    "Forward your incoming messages to a specified slave or icq#.\n"        "usage: 'forward [name]'\n"                            "usage: 'forward [uin]'\n"
-
 #define YSM_COMMAND_SEEN_HELP    "Display signon, last status change and\nlast message received time of a specified slave.\n"                                        "usage: 'seen <name>'\n\n"
 
 #define YSM_COMMAND_PASSWORD_HELP    "Change your ICQ password. Passwords must be between 4 and 8 characters long.\n"                            "usage: 'password <new_pasword>'\n\n"
 
-#define YSM_COMMAND_RECONNECT_HELP    "Reconnect to the ICQ Network.\n"                        "usage: 'reconnect'\n\n"
+#define YSM_COMMAND_CONNECT_HELP    "Connect to the ICQ Network.\n"                        "usage: 'reconnect'\n\n"
+
+#define YSM_COMMAND_DISCONNECT_HELP    "Reconnect to the ICQ Network.\n"                        "usage: 'reconnect'\n\n"
 
 #define YSM_COMMAND_CONTACTS_HELP    "Send contacts to a slave or icq #.\n"                        "usage: 'contacts <dest_slave> <slave1> [slave2] [slave3] ..'\n\n"
 
@@ -152,8 +146,6 @@ static void cmdMSG(uint16_t argc, int8_t **argv);
 static void cmdMPLAIN(uint16_t argc, int8_t **argv);
 void cmdCHAT(uint16_t argc, int8_t **argv);
 static void cmdSTATUS(uint16_t argc, int8_t **argv);
-static void cmdLASTSENT(uint16_t argc, int8_t **argv);
-static void cmdREPLY(uint16_t argc, int8_t **argv);
 static void cmdWHOIS(uint16_t argc, int8_t **argv);
 static void cmdSLAVESON(uint16_t argc, int8_t **argv);
 static void cmdSEARCH(uint16_t argc, int8_t **argv);
@@ -171,12 +163,11 @@ static void cmdIGNORE(uint16_t argc, int8_t **argv);
 static void cmdVISIBLE(uint16_t argc, int8_t **argv);
 static void cmdINVISIBLE(uint16_t argc, int8_t **argv);
 static void cmdALERT(uint16_t argc, int8_t **argv);
-static void cmdLAST(uint16_t argc, int8_t **argv);
 static void cmdKEY(uint16_t argc, int8_t **argv);
-static void cmdFORWARD(uint16_t argc, int8_t **argv);
 static void cmdSEEN(uint16_t argc, int8_t **argv);
 static void cmdPASSWORD(uint16_t argc, int8_t **argv);
-static void cmdRECONNECT(uint16_t argc, int8_t **argv);
+static void cmdCONNECT(int argc, char **argv);
+static void cmdDISCONNECT(int argc, char **argv);
 static void cmdCONTACTS(uint16_t argc, int8_t **argv);
 static void cmdURL(uint16_t argc, int8_t **argv);
 static void cmdFILECANCEL(uint16_t argc, int8_t **argv);

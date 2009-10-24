@@ -11,9 +11,11 @@ typedef struct
 } string_t;
 
 string_t *initString(void);
-char *getString(string_t *buf);
-void freeString(string_t *buf);
-int concatString(string_t *str, int8_t *str2);
+char *getString(const string_t *str);
+size_t getStringLen(const string_t *str);
+void clearString(string_t *str);
+void freeString(string_t *str);
+int concatString(string_t *str, const char *str2);
 int printfString(string_t *str, const char *fmt, ...);
 int vprintfString(string_t *str, const char *fmt, va_list ap);
 

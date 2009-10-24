@@ -5,6 +5,7 @@
 #include "bs_oscar.h"
 #include "network.h" // flap_head_bit_t
 #include "icqv7.h"   // SNAC_HEAD_SIZE, YSM_CHANNEL_SNACDATA
+#include "wrappers.h"
 
 static void dumpFlap(string_t *str, const flap_head_t *flap)
 {
@@ -75,25 +76,32 @@ void dumpPacket(string_t *str, bsd_t bsd)
     flap_head_t flap;
     snac_head_t snac;
     uint32_t    len;
-    uint8_t    *buf = NULL;
 
     /* dump the flap */
     bsReadFlapHead(bsd, &flap);
-    dumpFlap(str, flap);
+    dumpFlap(str, &flap);
+    len = flap.len;
 
-    if (flap->len >= SNAC_HEAD_SIZE && flap->channelId == YSM_CHANNEL_SNACDATA)
+    DEBUG_PRINT("flap.len: %d", flap.len);
+
+    if (flap.len >= SIZEOF_SNAC_HEAD && flap.channelId == YSM_CHANNEL_SNACDATA)
     {
         /* dump a snac if we have one */
         bsReadSnacHead(bsd, &snac);
         dumpSnac(str, &snac);
+        len -= SIZEOF_SNAC_HEAD;
     }
 
     /* dump the rest of the data */
-    buf = YSM_MALLOC(flap->len - SNAC_HEAD_SIZE);
-    if (buf != NULL)
+    if (len)
     {
-        bsRead(bsd, buf, len);
-        dumpHex(str, buf, len);
-        YSM_FREE(buf);
+        uint8_t *buf = YSM_MALLOC(len);
+
+        if (buf)
+        {
+            bsRead(bsd, buf, len);
+            dumpHex(str, buf, len);
+            YSM_FREE(buf);
+        }
     }
 }

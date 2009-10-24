@@ -2,54 +2,54 @@
 #define _SLAVES_H_
 
 #include "ysm.h"
-#include "handle.h"
+#include "ylist.h"
 
-#define SLAVE_HND_FIND        -2
-#define SLAVE_HND_START       -3
-#define SLAVE_HND_END         -4
-#define SLAVE_HND_NOT_A_SLAVE -10
+typedef struct
+{
+    COMMON_LIST
 
-typedef struct {
-    hnd_t hnd;
-    uin_t uin;
-} slave_hnd_t;
+    uin_t                  uin;
+    sl_fprint_t            fprint;
+    sl_caps_t              caps;
+    req_id_t               reqId;
+    sl_status_t            status;
+    sl_status_t            status_flags;
+    char                  *statusStr;
+    sl_flags_t             flags;
+    buddy_special_status_t budType;
+    buddy_timing_t         timing;
+    direct_connection_t    d_con;
+    buddy_main_info_t      info;
+    encryption_info_t      crypto;
+} slave_t;
+
+typedef enum
+{
+    UPDATE_NICK,
+    UPDATE_SLAVE
+} slave_update_t;
 
 int   initSlaveList(void);
 void  freeSlaveList(void);
-int   getNextSlave(slave_hnd_t *hnd);
+void  lockSlaveList(void);
+void  unlockSlaveList(void);
 
-int   addSlaveToList(
-    uint8_t      *nick,
+slave_t *addSlaveToList(
+    char         *nick,
     uin_t         uin,
     sl_flags_t    flags,
     uint8_t      *c_key,
     uint32_t      budId,
     uint32_t      grpId,
-    uint16_t      budType,
-    slave_hnd_t  *newHnd);
+    uint16_t      budType);
 
-void     deleteSlaveFromList(slave_hnd_t *hnd);
-uint32_t getSlavesListLen(void);
-int      querySlaveByUin(uin_t uin, slave_hnd_t *hnd);
-int      querySlaveByNick(const uint8_t *nick, slave_hnd_t *hnd);
-int      querySlaveByReqId(req_id_t reqId, slave_hnd_t *hnd);
-int      getSlaveStatus(slave_hnd_t *hnd, sl_status_t *status);
-int      setSlaveStatus(slave_hnd_t *hnd, sl_status_t status);
-int      getSlaveCapabilities(slave_hnd_t *hnd, sl_caps_t *caps);
-int      setSlaveCapabilities(slave_hnd_t *hnd, sl_caps_t caps);
-int      getSlaveReqId(slave_hnd_t *hnd, req_id_t *reqId);
-int      setSlaveReqId(slave_hnd_t *hnd, req_id_t reqId);
-int      getSlaveFingerprint(slave_hnd_t *hnd, sl_fprint_t *fprint);
-int      setSlaveFingerprint(slave_hnd_t *hnd, sl_fprint_t fprint);
-int      getSlaveFlags(slave_hnd_t *hnd, sl_flags_t *flags);
-int      setSlaveFlags(slave_hnd_t *hnd, sl_flags_t flags);
-int      getSlaveSpecialStatus(slave_hnd_t *hnd, buddy_special_status_t *bss);
-int      setSlaveSpecialStatus(slave_hnd_t *hnd, const buddy_special_status_t *bss);
-int      getSlaveTiming(slave_hnd_t *hnd, buddy_timing_t *timing);
-int      setSlaveTiming(slave_hnd_t *hnd, const buddy_timing_t *timing);
-int      getSlaveDC(slave_hnd_t *hnd, direct_connection_t *dc);
-int      setSlaveDC(slave_hnd_t *hnd, const direct_connection_t *dc);
-int      getSlaveNick(slave_hnd_t *hnd, uint8_t *nick, uint8_t size);
-int      setSlaveNick(slave_hnd_t *hnd, const uint8_t *nick);
+void     deleteSlaveFromList(slave_t *victim);
+long     getSlavesListLen(void);
+int      updateSlave(slave_update_t type, char *nick, uin_t uin);
+
+slave_t *getSlaveByUin(uin_t uin);
+slave_t *getSlaveByNick(const char *nick);
+slave_t *getSlaveByReqId(req_id_t reqId);
+slave_t *getNextSlave(const slave_t *slave);
 
 #endif /* _SLAVES_H_ */

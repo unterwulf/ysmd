@@ -5,7 +5,7 @@
 #
 
 CC=		@CC@
-CFLAGS=		-W -Wall -Wno-unused -Wbad-function-cast -Wcast-qual -Wshadow -Wnested-externs -Wstrict-prototypes -Waggregate-return @CFLAGS@
+CFLAGS=		-W -Wno-unused -Wbad-function-cast -Wcast-qual -Wshadow -Wnested-externs -Wstrict-prototypes -Waggregate-return @CFLAGS@
 DEFS=		@DEFS@
 CPPFLAGS=	-I. -Irijndael @CPPFLAGS@
 LIBS=		@LIBS@ @LDFLAGS@
@@ -20,7 +20,7 @@ DESTDIR=
 
 PROG=		ysmd
 PROG_FLAGS=	$(CFLAGS) $(CPPFLAGS)
-SRCS=		main.c network.c setup.c toolbox.c charset.c ylist.c slaves.c commands.c prompt.c wrappers.c crypt.c direct.c misc.c timers.c ystring.c output.c dump.c
+SRCS=		main.c network.c setup.c toolbox.c charset.c ylist.c slaves.c commands.c prompt.c wrappers.c crypt.c direct.c misc.c timers.c ystring.c output.c dump.c bytestream.c bs_oscar.c control.c
 OBJS=		$(SRCS:.c=.o)
 EXTERN_OBJS=	rijndael/rijndael-alg-fst.o rijndael/rijndael-api-fst.o $(CMDOBJS)
 
@@ -44,7 +44,7 @@ clean:
 	-rm -f $(OBJS) $(EXTERN_OBJS) core *.core $(PROG)
 
 distclean: clean
-	-rm -f Makefile config.h
+	-rm -f Makefile
 
 install-prog:
 	@if [ ! -d $(DESTDIR)$(bindir) ]; then \

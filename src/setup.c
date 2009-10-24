@@ -8,16 +8,29 @@
 #include "crypt.h"
 #include "charset.h"
 #include "output.h"
+#include "control.h"
 #include <stdarg.h>
 
 int8_t YSM_DefaultCHATMessage[MAX_DATA_LEN+1];
+
+static void sigHandler(int32_t sig)
+{
+    /* don't do a thing. depending on the OS we get
+     * called by process or thread, and unless we
+     * spend more time on this function, its better
+     * to do nothing on ctrl+c
+     */
+    if (sig == SIGCHLD)
+    {
+        while (waitpid (-1, NULL, WNOHANG) > 0)
+            ;   /* don't hang, if no kids are dead yet */
+    }
+}
 
 void initDefaultConfig(ysm_config_t *cfg)
 {
     cfg->verbose = 0x5;
     cfg->spoof = FALSE;
-    cfg->awaytime = 5;
-    cfg->antisocial = FALSE;
     cfg->updateNicks = TRUE;
     cfg->dcdisable = FALSE;
     cfg->dclan = FALSE;
@@ -26,7 +39,6 @@ void initDefaultConfig(ysm_config_t *cfg)
     cfg->dcport2 = 0;
 
     /* needs to store a 4 bytes UIN */
-    cfg->forward = 0;
     cfg->outputType = OT_STDOUT;
 
     memset(&cfg->CHATMessage,  0, sizeof(cfg->CHATMessage));
@@ -44,7 +56,7 @@ int initialize(void)
     signal(SIGINT, sigHandler);
     signal(SIGCHLD, sigHandler);
 
-    memset(&YSM_USER, 0, sizeof(YSM_USER));
+    memset(&g_model, 0, sizeof(g_model));
 
     /* Network initialization */
     initNetwork();
@@ -80,11 +92,11 @@ void initConfig(void)
 
     if ((fd = fopen(g_state.configFile, "r")) != NULL)
     {
-        strncpy(YSM_USER.network.authHost,
+        strncpy(g_model.network.authHost,
                 YSM_DEFAULTSRV,
-                sizeof(YSM_USER.network.authHost)-1);
-        YSM_USER.network.authHost[sizeof(YSM_USER.network.authHost)-1] = '\0';
-        YSM_USER.network.authPort = YSM_DEFAULTPORT;
+                sizeof(g_model.network.authHost)-1);
+        g_model.network.authHost[sizeof(g_model.network.authHost)-1] = '\0';
+        g_model.network.authPort = YSM_DEFAULTPORT;
 
         readConfig(fd, 0);
         fclose(fd);
@@ -98,11 +110,11 @@ void initConfig(void)
 
 void setupHomeDirectory(void)
 {
-    int8_t *home;
+    char *home;
 
     home = getenv("HOME");
 
-    if (home == NULL)
+    if (!home)
     {
         printfOutput(VERBOSE_BASE,
             "Couldn't determine the home directory.");
@@ -113,7 +125,7 @@ void setupHomeDirectory(void)
         "%s/%s", home, YSM_CFGDIRECTORY);
 
     snprintf(g_state.configFile, sizeof(g_state.configFile),
-        "%s/%s", g_state.configDir, YSM_CFGFILENAME);
+        "%s/%s", home, YSM_CFGFILENAME);
 
     snprintf(g_state.slavesFile, sizeof(g_state.slavesFile),
         "%s/%s", g_state.configDir, YSM_SLAVESFILENAME);
@@ -132,63 +144,62 @@ void initSlaves(void)
     {
         printfOutput(VERBOSE_BASE,
             "Contact list couldn't be read! File not found.\n" );
-        YSM_ERROR(ERROR_CRITICAL, 0);
+//        YSM_ERROR(ERROR_CRITICAL, 0);
     }
 }
 
 void readConfig(FILE *fd, char reload)
 {
-    int8_t buf[MAX_PATH];
-    int8_t *name;
-    int8_t *value;
-    int8_t *tmp;
-    int8_t i;
+    char  buf[MAX_PATH];
+    char *name;
+    char *value;
+    char *tmp;
+    int   i;
     static struct
     {
-        int8_t *name;
-        void   *dst;
+        const char *name;
+        void       *dst;
         enum
         {
-            PAR_STATUS, PAR_OUTPUT, PAR_INT8, PAR_INT16, PAR_INT32,
-            PAR_STR, PAR_BOOL8, PAR_BOOL16, PAR_END
+            PAR_STATUS, PAR_OUTPUT, PAR_CONTROL, PAR_INT8, PAR_INT16,
+            PAR_INT32, PAR_STR, PAR_BOOL8, PAR_BOOL16, PAR_END
         } type;
-        int16_t  param;
+        int        param;
     } directives[] =
     {
-        { "status",         &YSM_USER.status,            PAR_STATUS, 0 },
-        { "uin",            &YSM_USER.uin,               PAR_INT32,  0 },
-        { "server",         &YSM_USER.network.authHost,  PAR_STR,    sizeof(YSM_USER.network.authHost) },
-        { "serverport",     &YSM_USER.network.authPort,  PAR_STR,    sizeof(YSM_USER.network.authPort) },
-        { "password",       &YSM_USER.password,          PAR_STR,    sizeof(YSM_USER.password) },
-        { "awaytime",       &g_cfg.awaytime,             PAR_INT8,   0 },
-        { "chatmessage",    &YSM_DefaultCHATMessage,     PAR_STR,    sizeof(YSM_DefaultCHATMessage) },
-        { "output",         NULL,                        PAR_OUTPUT, 0 },
-        { "proxy",          &YSM_USER.proxy.host,        PAR_STR,    sizeof(YSM_USER.proxy.host) },
-        { "proxyport",      &YSM_USER.proxy.port,        PAR_INT16,  0 },
-        { "proxyhttps",     &YSM_USER.proxy.flags,       PAR_BOOL8,  YSM_PROXY_HTTPS },
-        { "proxyresolve",   &YSM_USER.proxy.flags,       PAR_BOOL8,  YSM_PROXY_RESOLVE },
-        { "proxyauth",      &YSM_USER.proxy.flags,       PAR_BOOL8,  YSM_PROXY_AUTH },
-        { "proxyusername",  &YSM_USER.proxy.username,    PAR_STR,    sizeof(YSM_USER.proxy.username) },
-        { "proxypassword",  &YSM_USER.proxy.password,    PAR_STR,    sizeof(YSM_USER.proxy.password) },
-        { "antisocial",     &g_cfg.antisocial,           PAR_BOOL8,  1 },
-        { "updatenicks",    &g_cfg.updateNicks,          PAR_BOOL8,  1 },
-        { "dcdisable",      &g_cfg.dcdisable,            PAR_BOOL8,  1 },
-        { "dclan",          &g_cfg.dclan,                PAR_BOOL8,  1 },
-        { "dcport1",        &g_cfg.dcport1,              PAR_INT16,  0 },
-        { "dcport2",        &g_cfg.dcport2,              PAR_INT16,  0 },
-        { "webaware",       &YSM_USER.status_flags,      PAR_BOOL16, STATUS_FLWEBAWARE },
-        { "mybirthday",     &YSM_USER.status_flags,      PAR_BOOL16, STATUS_FLBIRTHDAY },
-        { "verbose",        &g_cfg.verbose,              PAR_INT8,   0 },
+        { "status",         &g_model.status,            PAR_STATUS, 0 },
+        { "uin",            &g_model.uin,               PAR_INT32,  0 },
+        { "server",         &g_model.network.authHost,  PAR_STR,    sizeof(g_model.network.authHost) },
+        { "serverport",     &g_model.network.authPort,  PAR_STR,    sizeof(g_model.network.authPort) },
+        { "password",       &g_model.password,          PAR_STR,    sizeof(g_model.password) },
+        { "chatmessage",    &YSM_DefaultCHATMessage,    PAR_STR,    sizeof(YSM_DefaultCHATMessage) },
+        { "output",         NULL,                       PAR_OUTPUT, 0 },
+        { "control",        NULL,                       PAR_CONTROL, 0 },
+        { "proxy",          &g_model.proxy.host,        PAR_STR,    sizeof(g_model.proxy.host) },
+        { "proxyport",      &g_model.proxy.port,        PAR_INT16,  0 },
+        { "proxyhttps",     &g_model.proxy.flags,       PAR_BOOL8,  YSM_PROXY_HTTPS },
+        { "proxyresolve",   &g_model.proxy.flags,       PAR_BOOL8,  YSM_PROXY_RESOLVE },
+        { "proxyauth",      &g_model.proxy.flags,       PAR_BOOL8,  YSM_PROXY_AUTH },
+        { "proxyusername",  &g_model.proxy.username,    PAR_STR,    sizeof(g_model.proxy.username) },
+        { "proxypassword",  &g_model.proxy.password,    PAR_STR,    sizeof(g_model.proxy.password) },
+        { "updatenicks",    &g_cfg.updateNicks,         PAR_BOOL8,  1 },
+        { "dcdisable",      &g_cfg.dcdisable,           PAR_BOOL8,  1 },
+        { "dclan",          &g_cfg.dclan,               PAR_BOOL8,  1 },
+        { "dcport1",        &g_cfg.dcport1,             PAR_INT16,  0 },
+        { "dcport2",        &g_cfg.dcport2,             PAR_INT16,  0 },
+        { "webaware",       &g_model.status_flags,      PAR_BOOL16, STATUS_FLWEBAWARE },
+        { "mybirthday",     &g_model.status_flags,      PAR_BOOL16, STATUS_FLBIRTHDAY },
+        { "verbose",        &g_cfg.verbose,             PAR_INT8,   0 },
 #ifdef YSM_USE_CHARCONV
-        { "charsettrans",   &g_cfg.charsetTrans,         PAR_STR,    sizeof(g_cfg.charsetTrans) },
-        { "charsetlocal",   &g_cfg.charsetLocal,         PAR_STR,    sizeof(g_cfg.charsetLocal) },
+        { "charsettrans",   &g_cfg.charsetTrans,        PAR_STR,    sizeof(g_cfg.charsetTrans) },
+        { "charsetlocal",   &g_cfg.charsetLocal,        PAR_STR,    sizeof(g_cfg.charsetLocal) },
 #endif
-        { NULL,             NULL,                        PAR_END,    0 }
+        { NULL,             NULL,                       PAR_END,    0 }
     };
 
     snprintf(YSM_DefaultCHATMessage, sizeof(YSM_DefaultCHATMessage), YSM_CHAT_MESSAGE);
 
-    YSM_USER.status_flags |= STATUS_FLDC_CONT;
+    g_model.status_flags |= STATUS_FLDC_CONT;
 
     while (!feof(fd))
     {
@@ -279,7 +290,7 @@ void readConfig(FILE *fd, char reload)
                         break;
 
                     case PAR_STATUS:
-                        if (!convertStatus(FROM_STR, (const uint8_t **)&value, &(YSM_USER.status)))
+                        if (!convertStatus(FROM_STR, (const uint8_t **)&value, &(g_model.status)))
                         {
                             printfOutput(VERBOSE_BASE,
                                 "Invalid status value %s.\n", value);
@@ -314,6 +325,30 @@ void readConfig(FILE *fd, char reload)
                         exit(1);
                         break;
 
+                    case PAR_CONTROL:
+                    {
+                        int count = sscanf(value, "%4[a-z]://%32[a-z0-9.]:%u",
+                                tmp, g_cfg.ctlAddress, &g_cfg.ctlPort);
+
+                        if (count > 2)
+                        {
+                            if (strcasecmp(tmp, "tcp") == 0 && count == 3)
+                            {
+                                g_cfg.ctlType = CT_TCP;
+                                break;
+                            }
+                            else if (strcasecmp(tmp, "unix") == 0)
+                            {
+                                g_cfg.ctlType = CT_UNIX;
+                                break;
+                            }
+                        }
+
+                        printf("Invalid value for control directive in config file.\n");
+                        exit(1);
+                        break;
+                    }
+
                     default:
                         YSM_ERROR(ERROR_CRITICAL, 0);
                 }
@@ -328,19 +363,19 @@ void readConfig(FILE *fd, char reload)
 
     /* Before leaving check there's at least the minimum required fields */
 
-    if (!YSM_USER.uin)
+    if (!g_model.uin)
     {
         printfOutput(VERBOSE_BASE,
             "Missing UIN in config. Can't continue.\n");
         exit(0);
     }
-    else if (YSM_USER.network.authHost[0] == '\0')
+    else if (g_model.network.authHost[0] == '\0')
     {
         printfOutput(VERBOSE_BASE,
             "Missing ICQ Server in config. Can't continue.\n");
         exit(0);
     }
-    else if (!YSM_USER.network.authPort)
+    else if (!g_model.network.authPort)
     {
         printfOutput(VERBOSE_BASE,
             "Missing ICQ Server port in config. Can't continue.\n");
@@ -363,6 +398,8 @@ void readSlaves(FILE *fd)
         DEBUG_PRINT("invalid file descriptor");
         return;
     }
+
+    lockSlaveList();
 
     /* parse slaves */
     while (!feof(fd))
@@ -418,18 +455,21 @@ void readSlaves(FILE *fd)
         addSlaveToList(auxnick, atol(auxuin), 0, auxkey, 0, 0, 0);
     }
 
+    unlockSlaveList();
+
     DEBUG_PRINT("read %d slaves", getSlavesListLen());
     printfOutput(VERBOSE_MOATA, "%s%d]\n", MSG_READ_SLAVES, getSlavesListLen());
 }
 
 void addSlave(char *name, uin_t uin)
 {
-    int result;
-    slave_hnd_t hnd;
+    slave_t *slave;
 
-    result = addSlaveToList(name, uin, 0, NULL, 0, 0, 0, &hnd);
+    lockSlaveList();
 
-    if (result != 0)
+    slave = addSlaveToList(name, uin, 0, NULL, 0, 0, 0);
+
+    if (slave == NULL)
     {
         printfOutput(VERBOSE_BASE,
             "ERR NO! Illegal Slave Cloning detected..perv!\n"
@@ -441,10 +481,12 @@ void addSlave(char *name, uin_t uin)
         "INFO Adding a SLAVE with #%d. Call him %s from now on.",
         uin, name);
 
-    addSlaveToDisk(hnd);
+    addSlaveToDisk(slave);
+
+    unlockSlaveList();
 }
 
-void addSlaveToDisk(slave_hnd_t *hnd)
+void addSlaveToDisk(const slave_t *victim)
 {
     FILE     *YSM_tmp = NULL, *fd = NULL;
     int8_t    YSMBuff[MAX_PATH];
@@ -464,18 +506,18 @@ void addSlaveToDisk(slave_hnd_t *hnd)
         return;
 
     /* Fill Name and UIN */
-    fprintf(YSM_tmp, "%s:%d:", victim->info.nickName, hnd->uin);
+    fprintf(YSM_tmp, "%s:%d:", victim->info.nickName, victim->uin);
 
+#if 0
     /* Fill Key */
     if (!isKeyEmpty(victim->crypto.strkey))
     {
         for(x = 0; x < strlen(victim->crypto.strkey); x++)
             fprintf(YSM_tmp, "%c", victim->crypto.strkey[x]);
     }
+#endif
 
-    fprintf(YSM_tmp, ":" );
-
-    fprintf(YSM_tmp, "\n");
+    fprintf(YSM_tmp, ":\n");
 
     while (!feof(fd))
     {
@@ -505,10 +547,10 @@ void addSlaveToDisk(slave_hnd_t *hnd)
     fclose(YSM_tmp);
 }
 
-void deleteSlave(slave_hnd_t hnd)
+void deleteSlave(slave_t *victim)
 {
-    deleteSlaveFromDisk(hnd.uin);
-    deleteSlaveFromList(hnd);
+    deleteSlaveFromDisk(victim->uin);
+    deleteSlaveFromList(victim);
 }
 
 void deleteSlaveFromDisk(uin_t uin)

@@ -3,6 +3,8 @@
 #include "wrappers.h"
 #include "bytestream.h"
 #include "bs_oscar.h"
+#include "ystring.h"
+#include "wrappers.h"
 
 bs_pos_t bsAppendByte(bsd_t bsd, uint8_t byte)
 {
@@ -74,8 +76,9 @@ bs_pos_t bsAppendTlv(bsd_t bsd, uint16_t type, uint16_t len, const int8_t *value
 void bsUpdateWord(bsd_t bsd, bs_pos_t pos, uint16_t word)
 {
     uint8_t buf[SIZEOF_WORD];
+        DEBUG_PRINT("");
 
-    Word_2_Charsb(word, buf);
+    Word_2_Charsb(buf, word);
     bsUpdate(bsd, pos, buf, SIZEOF_WORD);
 }
 
@@ -83,7 +86,7 @@ void bsUpdateWordLE(bsd_t bsd, bs_pos_t pos, uint16_t word)
 {
     uint8_t buf[SIZEOF_WORD];
 
-    Word_2_Chars(word, buf);
+    Word_2_Chars(buf, word);
     bsUpdate(bsd, pos, buf, SIZEOF_WORD);
 }
 
@@ -98,8 +101,9 @@ void bsUpdateFlapHeadLen(bsd_t bsd, bs_pos_t flapPos)
 void bsUpdateTlvLen(bsd_t bsd, bs_pos_t tlvPos)
 {
     bs_pos_t len;
+    DEBUG_PRINT("");
 
-    len = bsGetLen(bsd) - tlvPos - SIZEOF_TLV;
+    len = bsGetLen(bsd) - tlvPos - SIZEOF_TLV_HEAD;
     bsUpdateWord(bsd, tlvPos + TLV_LEN_OFFSET, len);
 }
 
@@ -111,7 +115,7 @@ void bsUpdateWordLen(bsd_t bsd, bs_pos_t wordPos)
     bsUpdateWord(bsd, wordPos, len);
 }
 
-void bsUpdateWordLELen(bsd_t bsd, bs_pos_t wordle)
+void bsUpdateWordLELen(bsd_t bsd, bs_pos_t wordPos)
 {
     bs_pos_t len;
 
@@ -127,12 +131,10 @@ uint32_t bsReadByte(bsd_t bsd, uint8_t *byte)
 uint32_t bsReadWord(bsd_t bsd, uint16_t *word)
 {
     uint8_t buf[SIZEOF_WORD];
-    bs_pos_t retVal;
-
-    retVal = bsRead(bsd, buf, SIZEOF_WORD);
+    uint32_t len = bsRead(bsd, buf, SIZEOF_WORD);
     *word = Chars_2_Wordb(buf);
 
-    return retVal;
+    return len;
 }
 
 uint32_t bsReadWordLE(bsd_t bsd, uint16_t *word)
@@ -179,7 +181,7 @@ uint32_t bsReadFlapHead(bsd_t bsd, flap_head_t *flap)
 
     if (cmd != '\x2A')
     {
-        bsSeek(bsd, -SIZEOF_BYTE, BS_CUR_POS);
+        bsSeek(bsd, -SIZEOF_BYTE, BS_SEEK_CUR);
         return -1;
     }
 
@@ -205,13 +207,37 @@ int32_t bsReadSnacHead(bsd_t bsd, snac_head_t *snac)
 
 int32_t bsReadTlv(bsd_t bsd, tlv_t *tlv)
 {
+    uint32_t len = 0;
+
     if (tlv == NULL)
         return -1;
 
-    bsReadWord(bsd, tlv->type);
-    bsReadWord(bsd, tlv->len);
+    len += bsReadWord(bsd, &tlv->type);
+    len += bsReadWord(bsd, &tlv->len);
 
-    return SIZEOF_TLV;
+    return len;
+}
+
+int32_t bsReadString(bsd_t bsd, str_type_t type, long inLen, string_t *str)
+{
+    long  len;
+    char *buf;
+
+    switch (type)
+    {
+        case ST_STRING08: bsReadByte(bsd, &len); break;
+        case ST_STRING16: bsReadWord(bsd, &len); break;
+        case ST_NORMAL: len = inLen; break;
+        default: return -1;
+    }
+
+    buf = YSM_CALLOC(1, len+1);
+    bsRead(bsd, buf, len);
+    clearString(str);
+    concatString(str, buf);
+    YSM_FREE(buf);
+
+    return len;
 }
 
 bs_pos_t bsAppendVprintfType(

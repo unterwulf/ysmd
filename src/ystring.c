@@ -4,9 +4,7 @@
 
 string_t *initString()
 {
-    string_t *str;
-
-    str = (string_t *) YSM_MALLOC(sizeof(string_t));
+    string_t *str = (string_t *) YSM_MALLOC(sizeof(string_t));
 
     if (str != NULL)
     {
@@ -14,9 +12,11 @@ string_t *initString()
         str->ptr = NULL;
         str->len = 0;
     }
+
+    return str;
 }
 
-char *getString(string_t *str)
+char *getString(const string_t *str)
 {
     return str->data;
 }
@@ -32,10 +32,20 @@ void freeString(string_t *str)
     YSM_FREE(str);
 }
 
+void clearString(string_t *str)
+{
+    if (str->data != NULL)
+        str->data[0] = '\0';
+
+    str->ptr = str->data;
+}
+
 static int reallocString(string_t *str, size_t newLen)
 {
     int8_t *newData;
     size_t offset;
+
+    DEBUG_PRINT("len: %lu, newlen: %lu", str->len, newLen);
 
     if ((newData = YSM_REALLOC(str->data, newLen + 1)) != NULL)
     {
@@ -53,13 +63,13 @@ static int reallocString(string_t *str, size_t newLen)
     return FALSE;
 }
 
-int concatString(string_t *str, int8_t *str2)
+int concatString(string_t *str, const char *str2)
 {
     size_t newLen;
     size_t reqLen;
     size_t addLen;
 
-    addLen = strlen(str2);
+    addLen = strlen(str2) + 1;
     reqLen = str->ptr - str->data + addLen;
     newLen = (str->data == NULL) ? STRING_INIT_LEN : str->len;
 
@@ -73,7 +83,7 @@ int concatString(string_t *str, int8_t *str2)
             return FALSE;
     }
 
-    strncat(str->ptr, str2, addLen);
+    strncat(str->ptr, str2, addLen - 1);
     str->ptr += addLen;
 
     return TRUE;

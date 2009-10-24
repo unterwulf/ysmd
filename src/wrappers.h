@@ -2,6 +2,7 @@
 #define _WRAPPERS_H_
 
 #include "bytestream.h"
+#include "slaves.h"
 
 #define YSM_MALLOC(x)     ysm_malloc((x), __FILE__, __LINE__)
 #define YSM_CALLOC(x, y)  ysm_calloc((x), (y), __FILE__, __LINE__)
@@ -18,7 +19,7 @@ size_t  YSM_READ_LN(int32_t sock, int8_t *obuf, size_t maxsize);
 int     bsAppendReadLoop(bsd_t bsd, int32_t sock, size_t count, uint8_t priority);
 int     writeBs(int32_t sock, bsd_t bsd);
 int     YSM_WRITE(int32_t sock, void *data, int32_t data_len);
-int32_t YSM_WRITE_DC(uin_t uin, int32_t sock, void *data, int32_t data_len);
+int     YSM_WRITE_DC(slave_t *victim, int32_t sock, void *data, int32_t data_len);
 void    ysm_exit(int32_t status, int8_t ask);
 
 #endif /* _WRAPPERS_H_ */
