@@ -2536,11 +2536,13 @@ void sendAuthReq(uin_t uin, uint8_t *nick, uint8_t *message)
     freeBs(bsd);
 }
 
-void sendAuthRsp(uin_t uin, uint8_t *nick)
+void sendAuthRsp(uin_t uin)
 {
-    bsd_t bsd;
+    bsd_t     bsd;
+    string_t *nick;
 
     bsd = initBs();
+    nick = initString();
 
     bsAppendPrintfString08(bsd, "%ld", uin); /* uin string08 */
     bsAppendByte(bsd, 0x01);                 /* flag: 1-accept, 2-decline */
@@ -2552,10 +2554,11 @@ void sendAuthRsp(uin_t uin, uint8_t *nick)
         bsGetLen(bsd),
         g_sinfo.seqnum++, 0);
 
-    printfOutput(VERBOSE_BASE, "OUT AUTH_RSP %ld %s\n",
-         uin,
-         nick ? nick : NOT_A_SLAVE);
+    getSlaveNick(uin, nick);
 
+    printfOutput(VERBOSE_BASE, "OUT AUTH_RSP %ld %s\n", uin, getString(nick));
+
+    freeString(nick);
     freeBs(bsd);
 }
 
@@ -2713,27 +2716,35 @@ static void buddyAddSlave(
 /* BuddyDelSlave - removes a slave from the server-side contact list.
  */
 
-void YSM_BuddyDelSlave(slave_t *contact)
+void YSM_BuddyDelSlave(uin_t uin)
 {
-    if (contact == NULL)
+    string_t               *nick;
+    buddy_special_status_t  budType;
+
+    if (uin == NOT_A_SLAVE)
         return;
+
+    slaveGetNick(uin, nick);
+    slaveGetSpecialStatus(uin, &budType);
 
     printfOutput(VERBOSE_MOATA,
         "INFO REMOVE_SRV %dl %s with budid: %x "
         "and groupd id: %x\n",
-        contact->uin,
-        contact->info.nickName,
-        contact->budType.budId,
-        contact->budType.grpId);
+        uin,
+        getString(nick),
+        budType.budId,
+        budType.grpId);
 
     YSM_BuddyAddItem(contact,
         YSM_BUDDY_GROUPNAME,
-        contact->budType.grpId,
-        contact->budType.budId,
+        budType.grpId,
+        budType.budId,
         YSM_BUDDY_SLAVE,
         0,               /* cmd */
         0,               /* auth */
         CLI_SSI_REMOVE); /* remove! */
+
+    freeString(nick);
 }
 
 void YSM_BuddyRequestModify(void)

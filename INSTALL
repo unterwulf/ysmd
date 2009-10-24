@@ -2,10 +2,6 @@
 ###############
 		./configure 
 
-You may disable threads support by adding '--disable-threads'
-i.e: "./configure --disable-threads".
-
-
 1.1 Compiling
 #############
 		make clean

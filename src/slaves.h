@@ -4,6 +4,13 @@
 #include "ysm.h"
 #include "ylist.h"
 
+typedef uint16_t slave_hndl_t;
+
+typedef struct {
+    slave_hndl_t hndl;
+    uin_t        uin;
+} slave_shndl_t;
+
 typedef struct
 {
     COMMON_LIST
@@ -22,7 +29,7 @@ typedef struct
     buddy_main_info_t      info;
     encryption_info_t      crypto;
 } slave_t;
- 
+
 typedef enum {
     SLAVE_NICK,
     SLAVE_UIN,

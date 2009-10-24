@@ -1,9 +1,8 @@
 AC_INIT(src/main.c)
 # give welcome
 echo ""
-echo ""
-echo "ysmICQ client. [http://ysmv7.sourceforge.net]"
-echo "raddy at gmx dot net"
+echo "ysmd ICQ client. [http://ysmd.sourceforge.net]"
+echo "vs at kp4 dot ru"
 echo ""
 
 # do we have what we need?
@@ -13,20 +12,6 @@ AC_PROG_MAKE_SET
 
 # check missing posix types 
 CHECK_POSIX_TYPES
-
-# enable command line options.
-ac_arg_threads="no"
-ac_arg_readline="no"
-
-AC_ARG_ENABLE([threads], 
-	AC_HELP_STRING([--disable-threads],
-	[disable threads support]),
-	ac_arg_threads=$enableval, ac_arg_threads=yes)
-
-AC_ARG_ENABLE([readline], 
-	AC_HELP_STRING([--disable-readline],
-	[do not try to use the readline library]),
-	ac_arg_readline=$enableval, ac_arg_readline=yes)
 
 ##### fribidi #####
 
@@ -55,28 +40,8 @@ fi
 
 ##### fribidi #####
 
-AC_CACHE_CHECK([whether to enable threads support],
-	ac_arg_threads, ac_arg_threads)
-
-AC_CACHE_CHECK([whether to use the readline library],
-	ac_arg_readline, ac_arg_readline)
-
-
-# only check for readline if we have threads support
-if test "x$ac_arg_threads" = "xyes"; then
-	CHECK_POSIX_THREADS
-
-	# check for readline if we have threads only
-	if test "$pthread_libs" != "no" && test "x$ac_arg_readline" = "xyes";
-	then
-		CHECK_READLINE
-	else
-		vl_cv_lib_readline="no"
-	fi
-else
-	vl_cv_lib_readline="no"
-fi
-
+# check if we have threads support
+CHECK_POSIX_THREADS
 
 # check for iconv
 CHECK_ICONV
@@ -93,16 +58,6 @@ AC_CHECK_LIB([nsl],
 		LIBS="-lnsl $LIBS")
 
 # final checks
-
-if test "$vl_cv_lib_readline" == "no"; then
-	# are we using getline instead? do we have threads?
-	if test "$pthread_libs"; then
-		CMDOBJS="cmdline/getline.o $CMDOBJS"
-	else
-		# no threads, use ysmreadline!.
-		CMDOBJS="cmdline/ysmline.o $CMDOBJS"
-	fi
-fi
 
 AC_SUBST(pthread_libs)
 AC_SUBST(CMDOBJS)

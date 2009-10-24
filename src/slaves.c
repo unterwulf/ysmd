@@ -85,12 +85,19 @@ void YSM_PrintOrganizedSlaves(
     freeString(str);
 }
 
-slave_t *getNextSlave(slave_t *slave)
+int getNextSlave(slave_hdl_t *hdl)
 {
-    if (slave == NULL)
-        return (slave_t *)g_slave_list.start;
-    else
-        return (slave_t *)slave->suc;
+    slave_t *suc;
+
+    if (hdl == NULL)
+        return 0;
+
+    slave = getPtr(hdl->desc);
+    suc = (slave_t *)slave->suc;
+    hdl->desc = suc->desc;
+    hdl->uin = suc->uin;
+
+    return 1;
 }
 
 static slave_t *insertSlaveNode(slave_t *new)    /* inserts ordered */
@@ -309,7 +316,19 @@ slave_t *addSlaveToList(
             break;
     }
 
-    return insertSlaveNode(new);
+    insertSlaveNode(new);
+    hnd = linkSlaveHandle(new);
+
+    if (hnd != -1)
+    {
+        new->hnd = hnd;
+        return new;
+    }
+    else
+    {
+        deleteSlaveFromList(new->uin);
+        return NULL;
+    }
 }
 
 void deleteSlaveFromList(uin_t uin)
@@ -320,6 +339,7 @@ void deleteSlaveFromList(uin_t uin)
 
     if (victim)
     {
+        unlinkSlaveHandle(victim->hnd);
         /* Free the slave from the linked list of slaves */
         deleteListNode(&g_slave_list, (list_node_t *) victim);
     }

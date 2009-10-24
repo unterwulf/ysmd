@@ -1,89 +1,10 @@
- ysmICQ authors file.
-/********************/
+ysmd authors file
+*****************
+
+Vitaly Sinilin [vs at kp4 dot ru]
+    Author
+    Russia, Saint-Petersburg
 
 rad2k [raddy at gmx dot net]
-	Programming, all hands person.
-	Argentina - Buenos Aires.
-
- Thanks to..
-/***********/
-
-Stephen Jones and lonestar.org 
-	for their huge support.
-	(lonestar has been a GREAT support for mICQ when Matt was among us)
-	(If you need a free-shell, you better get it at sdf.lonestar.org)
-
-Alex Samorukov [samm at os2 dot ru]
-	for porting ysm to OS/2.
-
-Rudolf P.
-	his BSD fixes, patches and testing.
-
-Matthias B. AKA MSB
-	his patches have helped in growing the ChangeLog a couple kb's.
-
-fgsch at olimpo dot com dot br
-	for his submited source changes, ideas and support.
-	
-gera
-	for his work on ysm's encryption support.
-
-alejo
-	for his submited source changes, ideas and support.
-	[the COMPACT_DISPLAY was his idea and implementation]
-
-David Lindauer [camille at bluegrass dot net] 
-	for starting the ysm ms.windows port.
-
-aSy
-	for hooking me up with a proxy connection in order to
-	develop ysm's proxy support. He also started the HELP system!.
-
-liquidk 
-	for providing me with sparc support and testing accounts.
-
-claudio
-	for his submited source changes and portability issues fixes.
-
-tx
-	for starting ysm's manpage.
-
-pix
-	for testing and his ascii art.
-
-aweil
-	for starting the 'YSMCovert' project, for his ideas and support.
-
-Aquatique
-	for maintaining the FreeBSD port and his charset convertion help.
-
-jrz
-	for his submitted modifications and ideas.
-
-
-
- shouts to..for testing and reports.
-/*********************************/
-	+++  Roeland Th. Jansen.
-	+++  fidel
-	+++  leftdink
-	+++  pixedelic 
-	+++  sean
-	+++  sludge
-	+++  Nw2o
-	+++  f22
-	+++  zombie
-	+++  cHALiTO
-	+++ ..and everyone im missing here, I got tired of writing
-	a non-ending list of names. This list is NOT up to date!.
-	
-
-I'd like to express my deepest sadness for what happened to Matthew
-the original mICQ Author, who just did an outstanding job with his 
-code, and I would like to share the results of this code with him.
-
-
-.- rad2k - Argentina, Climbing the ICQ Mountain.
---------
-
-$Id: AUTHORS,v 1.16 2004/07/17 21:49:15 rad2k Exp $
+    Author of original ysmICQ
+    Argentina, Buenos Aires

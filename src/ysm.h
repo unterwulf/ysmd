@@ -47,7 +47,7 @@
 
 #define YSM_CHAT_MESSAGE       "I'm busy in a conversation. Your message has been logged. I'll get back to you ASAP."
 
-#define NOT_A_SLAVE            (uint8_t *)"[not a slave]"
+#define NOT_A_SLAVE            0
 /* cast to uint8_t* is needed to avoid compiler warning */
 
 /* Authorization Request definitions */
@@ -201,20 +201,20 @@ typedef struct
 {
     uint16_t                seq_in;
     uint16_t                seq_out;
-    int32_t                  rSocket;
+    int32_t                 rSocket;
     uint16_t                rPort;
     uint32_t                rIP_int;
     uint32_t                rIP_ext;
     uint16_t                version;
-    int32_t                  rCookie;
-#define DC_EXPECTDATA    0x01
+    int32_t                 rCookie;
+#define DC_EXPECTDATA   0x01
 #define DC_EXPECTNEG    0x02
-#define DC_OUTGOINGNEG    0x04
-#define DC_INCOMINGNEG    0x08
+#define DC_OUTGOINGNEG  0x04
+#define DC_INCOMINGNEG  0x08
 #define DC_CONNECTED    0x10
-#define DC_TRANSFERING    0x20
+#define DC_TRANSFERING  0x20
 #define DC_RECEIVING    0x40
-#define DC_ACTIVITY    0x80
+#define DC_ACTIVITY     0x80
 
     uint8_t                 flags;
     struct YSM_DIRECT_CONNECTION_FILETINFO    finfo;
@@ -236,11 +236,11 @@ typedef struct
 
 typedef struct
 {
-    int8_t      username[MAX_PATH];
-    int8_t      password[MAX_PATH];
-    int8_t      host[MAX_PATH];
-    uint16_t   port;
-    uint8_t    flags;
+    uint8_t   username[MAX_PATH];
+    uint8_t   password[MAX_PATH];
+    uint8_t   host[MAX_PATH];
+    uint16_t  port;
+    uint8_t   flags;
 } proxy_info_t;
 
 #define FL_LOGGEDIN          0x01
@@ -248,20 +248,20 @@ typedef struct
 
 typedef struct
 {
-    uint16_t    seqnum;
+    uint16_t  seqnum;
 
     /* queued slave scans */
-    int32_t     scanqueue;
+    int32_t   scanqueue;
 
     /* buddy list information */
-    int32_t     blentries;
-    int32_t     blgroupsidentries;
-    bsd_t       blgroupsid;
-    int32_t     blusersidentries;
-    bsd_t       blusersid;
-    uint32_t    blysmgroupid;
-    uint16_t    blprivacygroupid;
-    uint8_t     flags;
+    int32_t   blentries;
+    int32_t   blgroupsidentries;
+    bsd_t     blgroupsid;
+    int32_t   blusersidentries;
+    bsd_t     blusersid;
+    uint32_t  blysmgroupid;
+    uint16_t  blprivacygroupid;
+    uint8_t   flags;
 } ysm_server_info_t;
 
 typedef struct
@@ -344,7 +344,7 @@ extern ysm_config_t          g_cfg;
 extern ysm_state_t           g_state;
 extern sem_t                 semOutput;
 #ifdef YSM_TRACE_MEMLEAK
-extern int unfreed_blocks;
+extern uint16_t              unfreed_blocks;
 #endif
 
 #endif /* _YSM_H_ */

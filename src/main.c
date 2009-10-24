@@ -6,6 +6,7 @@
 #include "timers.h"
 #include "output.h"
 #include "network.h"
+#include "ystring.h"
 #include <locale.h>
 
 ysm_config_t g_cfg;
@@ -90,7 +91,8 @@ static void cycleThread(void)
 
 static void dcThread(void)
 {
-    slave_t *slave = NULL;
+    uin_t      slave = NOT_A_SLAVE;
+    string_t  *nick;
 
     initDC();
 
@@ -98,7 +100,7 @@ static void dcThread(void)
     {
         slave = YSM_DC_Wait4Client();
 
-        if (slave == NULL)
+        if (slave == NOT_A_SLAVE)
         {
             printfOutput(VERBOSE_DCON,
                 "Incoming DC request failed. "
@@ -106,9 +108,11 @@ static void dcThread(void)
         }
         else
         {
+            getSlaveNick(uin, nick);
             printfOutput(VERBOSE_DCON, "IN DC_REQ %ld %s\n",
-                slave->uin,
-                slave->info.nickName);
+                uin,
+                getString(nick));
+            freeString(nick);
         }
     }
 }

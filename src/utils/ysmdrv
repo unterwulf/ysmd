@@ -1,0 +1,23 @@
+#!/bin/bash
+
+TIME=`date +%H:%M:%S`
+echo
+
+if read dir tag uin name par1 par2 par3; then
+    if [ "$dir" = "IN" -a "$tag" = "MSG" ]; then
+        echo -n "$TIME $name> "
+        while read; do
+            echo $REPLY
+        done;
+    elif [ "$dir" = "INFO" -a "$tag" = "STATUS" ]; then
+        echo "$TIME $name change status to $par1"
+    else
+        echo "$TIME Unknown message:"
+        echo "BEGIN"
+        echo "$dir $tag $uin $name $par1 $par2 $par3"
+        while read; do
+            echo $REPLY
+        done;
+        echo "END"
+    fi
+fi

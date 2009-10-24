@@ -88,7 +88,7 @@ int initDC(void)
     return 0;
 }
 
-slave_t * YSM_DC_Wait4Client(void)
+uin_t YSM_DC_Wait4Client(void)
 {
     int32_t     cli_sock, addrlen, r_len;
     uint32_t   r_ip1 = 0, r_ip2 = 0;
@@ -104,7 +104,8 @@ slave_t * YSM_DC_Wait4Client(void)
                 (struct sockaddr *)&addr,
                 (int *)&addrlen);
 
-    if (cli_sock < 0) return NULL;
+    if (cli_sock < 0)
+        return NOT_A_SLAVE;
 
     /* Read the Init Packet.
      * Set a timeout of 1 second to receive activity.
@@ -121,7 +122,7 @@ slave_t * YSM_DC_Wait4Client(void)
     /* drop connection if the first packet didn't arrive */
     if (!FD_ISSET(cli_sock, &net_fd)) {
         close(cli_sock);
-        return NULL;
+        return NOT_A_SLAVE;
     }
 
     r_len = YSM_DC_ReadPacket( cli_sock, buf);
@@ -132,7 +133,7 @@ slave_t * YSM_DC_Wait4Client(void)
             "Error reading first PEER_INIT packet.\n" );
 
         close(cli_sock);
-        return NULL;
+        return NOT_A_SLAVE;
     }
 
     /* INIT_PEER packet checks.
@@ -146,7 +147,7 @@ slave_t * YSM_DC_Wait4Client(void)
             "PEER_INIT packet length isn't correct.\n" );
 
         close( cli_sock );
-        return NULL;
+        return NOT_A_SLAVE;
     }
 
     /*
@@ -160,7 +161,7 @@ slave_t * YSM_DC_Wait4Client(void)
             "Incompatible p2p protocol version (oldie).\n" );
 
         close( cli_sock );
-        return NULL;
+        return NOT_A_SLAVE;
     }
 
     /* Get packet information. */
@@ -175,7 +176,7 @@ slave_t * YSM_DC_Wait4Client(void)
             "YSM_DC_Wait4Client: "
             "Invalid/Not in list UIN specified.\n" );
         close( cli_sock );
-        return NULL;
+        return NOT_A_SLAVE;
     }
 
     /* carlin attack checks ->
@@ -204,7 +205,7 @@ slave_t * YSM_DC_Wait4Client(void)
          */
         if (YSM_Query->d_con.flags & DC_CONNECTED) {
             close( cli_sock );
-            return NULL;
+            return NOT_A_SLAVE;
 
         } else {
             YSM_Query->d_con.rSocket = cli_sock;
@@ -219,7 +220,7 @@ slave_t * YSM_DC_Wait4Client(void)
             "Possible spoofing attack detected.\n" );
 
         close( cli_sock );
-        return NULL;
+        return NOT_A_SLAVE;
     }
 
     /* seq */
@@ -229,7 +230,7 @@ slave_t * YSM_DC_Wait4Client(void)
     YSM_DC_InitB( YSM_Query, YSM_Query->d_con.rSocket );
     YSM_DC_InitA( YSM_Query, YSM_Query->d_con.rSocket );
 
-    return YSM_Query;
+    return YSM_Query->uin;
 }
 
 void dcSelect(void)
@@ -559,12 +560,12 @@ uint32_t    rIP;
 /* Close a direct connection with a slave. */
 /* close socket, reset flags, etc.         */
 
-void YSM_CloseDC(slave_t *victim)
+void YSM_CloseDC(uin_t uin)
 {
-    if (victim == NULL)
+    if (uin == NOT_A_SLAVE)
         return;
 
-    YSM_CloseTransfer(victim);
+    YSM_CloseTransfer(uin);
 
     /* close the victim's socket */
     close(victim->d_con.rSocket);
@@ -572,17 +573,13 @@ void YSM_CloseDC(slave_t *victim)
     /* reset victim's flags */
     victim->d_con.flags = 0;
 
-#ifndef COMPACT_DISPLAY
     printfOutput(VERBOSE_BASE,
         "DC session to %s closed.\n", victim->info.nickName);
-#endif
-    g_state.promptFlags |= FL_RAW;
-    g_state.promptFlags |= FL_OVERWRITTEN;
 }
 
-void YSM_CloseTransfer(slave_t *victim)
+void YSM_CloseTransfer(uin_t uin)
 {
-    if (victim == NULL)
+    if (uin == NOT_A_SLAVE)
         return;
 
     victim->d_con.finfo.statstime = victim->d_con.finfo.statsbytes = 0;

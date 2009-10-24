@@ -132,13 +132,18 @@ int YSM_WRITE(int32_t sock, void *data, int32_t data_len)
     return r;
 }
 
-int32_t YSM_WRITE_DC(slave_t *victim, int32_t sock, void *data, int32_t data_len)
+int32_t YSM_WRITE_DC(uin_t uin, int32_t sock, void *data, int32_t data_len)
 {
+    direct_connection_t dc;
+
+    getSlaveDirectConnection(uin, &dc);
+    
     /* checks on DC, open a DC if it doesn't exist! */
-    if (victim->d_con.flags & DC_CONNECTED)
-        return SOCK_WRITE(sock , data, data_len);
-    else {
-        printfOutput( VERBOSE_BASE,
+    if (dc.flags & DC_CONNECTED)
+        return SOCK_WRITE(sock, data, data_len);
+    else
+    {
+        printfOutput(VERBOSE_BASE,
             "No open DC session found with slave.\n"
             "Use the 'opendc' command to open a DC session.\n ");
 

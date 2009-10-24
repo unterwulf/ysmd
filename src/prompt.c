@@ -339,7 +339,7 @@ static void YSM_PreIncoming(
 }
 
 static void YSM_PostIncoming(
-    slave_t    *sender,
+    uin_t       uin,
     msg_type_t  msgType,
     uint8_t    *msgData,
     uint16_t    msgLen)
@@ -349,16 +349,16 @@ static void YSM_PostIncoming(
         /* do we have to send messages? either CHAT or FORWARD? */
 
         if (g_cfg.forward)
-            forwardMessage(sender->uin, msgData);
+            forwardMessage(uin, msgData);
 
         if (g_state.promptFlags & FL_CHATM)
         {
-            if (!(sender->flags & FL_CHAT))
+            if (!(getSlaveFlags(uin) & FL_CHAT))
             {
                 /* only send the reply to those who don't
                  * belong to my chat session! */
 
-                sendMessage(sender->uin, g_cfg.CHATMessage, FALSE);
+                sendMessage(uin, g_cfg.CHATMessage, FALSE);
             }
         }
     }
@@ -512,7 +512,7 @@ void YSM_DisplayMsg(
     }
 
 displaymsg_exit:
-    YSM_PostIncoming(sender, msgType, msgLen, msgData);
+    YSM_PostIncoming(uin, msgType, msgLen, msgData);
 
     if (free_msgData)
     {
@@ -532,11 +532,11 @@ int32_t YSM_ParseMessageData(uint8_t *data, uint32_t length)
         /* lets make all < 32 ascii characters
          * be replaced by a space. but the ones we need :P
          */
-        if (data[x] == 0x00) continue;    /* NUL */
+        if (data[x] == '\0') continue;    /* NUL */
         if (data[x] == 0x08) continue;    /* backspace */
-        if (data[x] == 0x09) continue;    /* TAB */
-        if (data[x] == 0x0a) continue;    /* LF */
-        if (data[x] == 0x0d) continue;    /* CR */
+        if (data[x] == '\t') continue;    /* TAB */
+        if (data[x] == '\r') continue;    /* LF */
+        if (data[x] == '\n') continue;    /* CR */
 
         if (data[x] < 32) data[x] = 0x20;
     }
