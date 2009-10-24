@@ -67,6 +67,7 @@ int initialize(void)
     initCharset();
 #endif
 
+    initSlaveList();
     printfOutput(VERBOSE_MOATA, "Retrieving slave data.");
     initSlaves();
 
@@ -423,27 +424,27 @@ void readSlaves(FILE *fd)
 
 void addSlave(char *name, uin_t uin)
 {
-    slave_t *result = NULL;
+    int result;
+    slave_hnd_t hnd;
 
-    result = addSlaveToList(name, uin, 0, NULL, 0, 0, 0);
+    result = addSlaveToList(name, uin, 0, NULL, 0, 0, 0, &hnd);
 
-    if (result == NULL)
+    if (result != 0)
     {
         printfOutput(VERBOSE_BASE,
-            "NO! Illegal Slave Cloning detected..perv!\n"
-            "SLAVE ALREADY exists in your list!.\n");
+            "ERR NO! Illegal Slave Cloning detected..perv!\n"
+            "SLAVE ALREADY exists in your list!.");
         return;
     }
 
     printfOutput(VERBOSE_BASE,
-        "Adding a SLAVE with #%d. Call him %s from now on.\n",
-        result->uin,
-        result->info.nickName);
+        "INFO Adding a SLAVE with #%d. Call him %s from now on.",
+        uin, name);
 
-    addSlaveToDisk(result);
+    addSlaveToDisk(hnd);
 }
 
-void addSlaveToDisk(slave_t *victim)
+void addSlaveToDisk(slave_hnd_t *hnd)
 {
     FILE     *YSM_tmp = NULL, *fd = NULL;
     int8_t    YSMBuff[MAX_PATH];
@@ -463,7 +464,7 @@ void addSlaveToDisk(slave_t *victim)
         return;
 
     /* Fill Name and UIN */
-    fprintf(YSM_tmp, "%s:%d:", victim->info.nickName, (int)victim->uin);
+    fprintf(YSM_tmp, "%s:%d:", victim->info.nickName, hnd->uin);
 
     /* Fill Key */
     if (!isKeyEmpty(victim->crypto.strkey))
@@ -502,6 +503,12 @@ void addSlaveToDisk(slave_t *victim)
 
     fclose(fd);
     fclose(YSM_tmp);
+}
+
+void deleteSlave(slave_hnd_t hnd)
+{
+    deleteSlaveFromDisk(hnd.uin);
+    deleteSlaveFromList(hnd);
 }
 
 void deleteSlaveFromDisk(uin_t uin)

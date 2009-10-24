@@ -3,6 +3,7 @@
 #include "wrappers.h"
 #include "prompt.h"
 #include "setup.h"
+#include "ystring.h"
 #include "output.h"
 
 static struct timeval tv;
@@ -558,3 +559,108 @@ ssize_t YSM_tokenize(char* str, const char* sep, char** arr, ssize_t count)
 
     return ret;
 }
+
+int32_t parseSlave(uint8_t *name)
+{
+    uint16_t len = 0, x = 0, y = 0;
+
+    if (name == NULL)
+        return -1;
+
+    len = strlen(name);
+
+    for (x = 0; x < len; x++)
+    {
+        if (isalnum((uint8_t)name[x]) && (uint8_t)name[x] > 32)
+        {
+            name[y] = name[x];
+            y++;
+        }
+    }
+    name[y] = '\0';
+
+    return y;
+}
+
+/*     Instead of behaving the very same way that printSlaves,
+    when supplied with YSM_OFFLINE (print them all) the output is
+    still organized :)
+ */
+
+void printOrganizedSlaves(
+    uint16_t    FilterStatus,
+    int8_t     *Fstring,
+    int8_t      FilterIgnore)
+{
+    int32_t                 x = 0;
+    slave_hnd_t             slave = {SLAVE_HND_START, 0};
+    string_t               *str;
+    buddy_special_status_t  bss;
+    sl_status_t             status = 0;
+    sl_caps_t               caps = 0;
+    uint8_t                 nick[MAX_NICK_LEN];
+    uint8_t                 statusStr[] = "FIXME";
+
+    static uint16_t arr_status[] = {
+        STATUS_OFFLINE,
+        STATUS_UNKNOWN,
+        STATUS_INVISIBLE,
+        STATUS_DND,
+        STATUS_OCCUPIED,
+        STATUS_FREE_CHAT,
+        STATUS_NA,
+        STATUS_AWAY,
+        STATUS_ONLINE
+    };
+
+    str = initString();
+    concatString(str, "INFO ONLINE_LIST\n");
+
+    /* We increase x so we skip the first array member (offline) */
+    if (FilterStatus != STATUS_OFFLINE) x++;
+
+    for (; x < NUM_ELEM_ARR(arr_status); x++)
+    {
+        FilterStatus = arr_status[x];
+        while (getNextSlave(&slave) == 0)
+        {
+            getSlaveStatus(&slave, &status);
+            getSlaveCapabilities(&slave, &caps);
+            getSlaveSpecialStatus(&slave, &bss);
+            getSlaveNick(&slave, &nick, sizeof(nick));
+
+            if (Fstring != NULL)
+                if (strncasecmp(nick, Fstring, strlen(Fstring)) != 0)
+                    continue;
+
+            if (FilterIgnore && bss.ignoreId)
+                continue;
+
+            if ((FilterStatus == STATUS_UNKNOWN
+                && !isStatusValid(status))
+                || (status == FilterStatus)
+                || (FilterStatus == STATUS_NA && status == STATUS_NA2))
+            {
+                printfString(str,
+                    "%ld %s"
+                    " "
+                    "%s" 
+                    " "
+                    "%s %s %s %s %s %s\n",
+                    slave.uin,
+                    nick,
+                    strStatus(status),
+                    bss.visibleId ? "VIS" : "---",
+                    bss.invisibleId ? "INV" : "---",
+                    bss.ignoreId ? "IGN" : "---",
+                    bss.birthday ? "BDY" : "---",
+                    caps & CAPFL_UTF8 ? "UTF" : "---",
+                    statusStr);
+            }
+        }
+    }
+
+    writeOutput(VERBOSE_BASE, getString(str));
+    freeString(str);
+}
+

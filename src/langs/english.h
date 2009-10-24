@@ -106,7 +106,6 @@
 #define MSG_BUDDY_SAVING2    "]" " ["
 #define MSG_BUDDY_SAVING3    "]"    
 
-#define MSG_BUDDY_SAVINGOK    " [OK] SLAVE SAVED"
 #define MSG_BUDDY_SAVINGERROR    " [ERROR]"
 #define MSG_BUDDY_SAVINGERROR2    "Maybe adding a disabled account?."
 

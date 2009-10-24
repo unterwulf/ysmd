@@ -15,6 +15,16 @@
 
 ysm_server_info_t g_sinfo;
 
+typedef struct {
+    slave_hnd_t  sender;
+    uint16_t     status;
+    uint16_t     statusFlags;
+    uint8_t      id[8];
+    msg_type_t   type;
+    uint16_t     len;
+    uint8_t     *ptr;
+} msg_t;
+
 int32_t initNetwork(void)
 {
     /* zero all sinfo fields */
@@ -34,10 +44,10 @@ int32_t initNetwork(void)
 
 int32_t YSM_HostToAddress(int8_t *inhost, uint32_t *outaddress)
 {
-struct hostent    *myhostent;
+    struct hostent    *myhostent;
 #if !defined(WIN32) && !defined(_AIX) && !defined(__sun__) && !defined(sun)
-struct in_addr    myaddr;
-int32_t        retval = 0;
+    struct in_addr    myaddr;
+    int32_t        retval = 0;
 #else
 #ifndef    INADDR_NONE
 #define    INADDR_NONE    -1
@@ -50,10 +60,12 @@ int32_t        retval = 0;
     /* first check if we have a number-and-dots notation */
 #if !defined(WIN32) && !defined(_AIX) && !defined(__sun__) && !defined(sun)
     retval = inet_aton(inhost, &myaddr);
-    if (retval == 0) {
+    if (retval == 0)
+    {
 #else
     *outaddress = inet_addr(inhost);
-    if (*outaddress == INADDR_NONE) {
+    if (*outaddress == INADDR_NONE)
+    {
 #endif
         /* inet_aton failed, we seem to have a hostname
          * instead of a number-and-dots notation as we
@@ -362,7 +374,7 @@ int networkSignIn(void)
 
 void networkReconnect(void)
 {
-    slave_t   *slave = NULL;
+    slave_hnd_t slave = {SLAVE_HND_START, 0};
 
     /* Starting time is 10 seconds */
     uint32_t   x = 10;
@@ -372,16 +384,16 @@ void networkReconnect(void)
     g_state.reconnecting = TRUE;
 
     /* Reset slaves status */
-    while (slave = getNextSlave(slave))
+    while (getNextSlave(&slave) == 0)
     {
-        slave->status = STATUS_OFFLINE;
+        setSlaveStatus(&slave, STATUS_OFFLINE);
     }
 
     while (y <= 0)
     {
         printfOutput(VERBOSE_BASE,
-            "Disconnection detected. "
-            "Reconnecting in %d seconds.\n" , x );
+                "Disconnection detected. "
+                "Reconnecting in %d seconds.\n", x);
 
         threadSleep(x, 0);
 
@@ -394,8 +406,8 @@ void networkReconnect(void)
             else
             {
                 printfOutput(VERBOSE_BASE,
-                    "\nMaximum reconnects reached. "
-                    "Network must be down..\n" );
+                        "ERR Maximum reconnects reached. "
+                        "Network must be down..\n");
                 YSM_ERROR(ERROR_NETWORK, 0);
             }
         }
@@ -451,22 +463,20 @@ static int32_t sendSnac(
 
 void serverResponseHandler(void)
 {
-    int8_t    *buf = NULL;
     flap_head_t  head;
-    int32_t    dataLen = 0, readLen = 0, pos = 0;
-    tlv_t      tlv;
-    string_t  *str;
-    bsd_t      bsd;
-    bs_pos_t   pos;
+    tlv_t        tlv;
+    string_t    *str;
+    bsd_t        bsd;
+    bs_pos_t     pos;
 
     bsd = initBs();
 
-    bsAppendReadLoop(bsd, YSM_USER.network.rSocket, FLAP_HEAD_SIZE, 0);
+    bsAppendReadLoop(bsd, YSM_USER.network.rSocket, SIZEOF_FLAP_HEAD, 0);
     bsRewind(bsd);
     bsReadFlapHead(bsd, &head);
     bsAppendReadLoop(bsd, YSM_USER.network.rSocket, head.len, 0);
 
-    if (bsGetFlag(bsd) & BS_FL_INVALID)
+    if (bsGetFlags(bsd) & BS_FL_INVALID)
     {
         freeBs(bsd);
         return;
@@ -510,20 +520,1554 @@ void serverResponseHandler(void)
     freeBs(bsd);
 }
 
-static const uint8_t icqCloneIdent[] = {
-    0x00,0x01,0x00,0x03,0x00,0x02,0x00,0x01,
-    0x00,0x03,0x00,0x01,0x00,0x15,0x00,0x01,
-    0x00,0x04,0x00,0x01,0x00,0x06,0x00,0x01,
-    0x00,0x09,0x00,0x01,0x00,0x0A,0x00,0x01,
-};
-
 static const uint8_t Rates_Acknowledge[] = {
     0x00,0x01,0x00,0x02,0x00,0x03,0x00,0x04,0x00,0x05,
 };
 
+void YSM_ParseCapabilities(slave_hnd_t *victim, bsd_t bsd, int32_t len)
+{
+    uint8_t     i = 0;
+    uint8_t     capVal[SIZEOF_CAP];
+    uint8_t     capsCount = 0;
+    sl_caps_t   caps = 0;
+    sl_fprint_t fprint = 0;
+
+    static const struct
+
+        { char *val;        sl_caps_t flag;     char *desc; }
+    
+    flagCapsMap[] =
+    {
+        { CAP_SRVRELAY,     CAPFL_SRVRELAY,     "SRVRELAY"  },
+        { CAP_ISICQ,        CAPFL_ISICQ,        "ISICQ"     },
+        { CAP_UTF8,         CAPFL_UTF8,         "UTF8"      },
+        { CAP_RTF,          CAPFL_RTF,          "RTF"       },
+        { NULL,             0,                   NULL       }
+    };
+
+    static const struct
+
+        { char *val;        sl_fprint_t fprint;             char *desc;      }
+
+    fprintCapsMap[] =
+    {
+        { CAP_M2001,        FINGERPRINT_M2000_CLIENT,       "M2001"          },
+        { CAP_M2001_2,      FINGERPRINT_M20012_CLIENT,      "M2001_2"        },
+        { CAP_M2002,        FINGERPRINT_M2002_CLIENT,       "M2002"          },
+        { CAP_MICQ,         FINGERPRINT_MICQ_CLIENT,        "MICQ"           },
+        { CAP_MLITE,        FINGERPRINT_MICQLITE_CLIENT,    "ICQ LITE"       },
+        { CAP_SIMICQ,       FINGERPRINT_SIMICQ_CLIENT,      "SIMICQ"         },
+        { CAP_TRILL_NORM,   FINGERPRINT_TRILLIAN_CLIENT,    "TRILLIAN"       },
+        { CAP_TRILL_CRYPT,  FINGERPRINT_TRILLIAN_CLIENT,    "TRILLIAN CRYPT" },
+        { CAP_LICQ,         FINGERPRINT_LICQ_CLIENT,        "LICQ"           },
+        { NULL,             0,                               NULL            }
+    };
+
+    if (victim == NULL || len <= 0)
+        return;
+
+    for (capsCount = len / SIZEOF_CAP; capsCount > 0; capsCount--)
+    {
+        bsRead(bsd, capVal, SIZEOF_CAP);
+
+        for (i = 0; flagCapsMap[i].val != NULL; i++)
+        {
+            if (!memcmp(capVal, flagCapsMap[i].val, SIZEOF_CAP))
+            {
+                caps |= flagCapsMap[i].flag;
+                printfOutput(VERBOSE_MOATA,
+                        "Found cap: %s\n", flagCapsMap[i].desc);
+                break;
+            }
+        }
+
+        if (flagCapsMap[i].val != NULL)
+            continue;
+
+        /* might be Fingerprinting Capabilities */
+        for (i = 0; fprintCapsMap[i].val != NULL; i++)
+        {
+            if (!memcmp(capVal, fprintCapsMap[i].val, 16))
+            {
+                fprint = fprintCapsMap[i].fprint;
+                printfOutput(VERBOSE_MOATA,
+                        "Found fingerprint cap: %s\n", fprintCapsMap[i].desc);
+                break;
+            }
+        }
+
+        if (fprintCapsMap[i].val != NULL)
+            continue;
+
+        for (i = 0; i < SIZEOF_CAP; i++)
+            printfOutput(VERBOSE_MOATA, "\\x%.2x", capVal[i]);
+
+        printfOutput(VERBOSE_MOATA, "\n");
+    }
+
+    /* this is a patch for ICQ2Go who can't take UTF8 */
+    if (fprint == FINGERPRINT_MICQLITE_CLIENT && !(caps & CAPFL_ISICQ))
+    {
+        caps &= ~CAPFL_UTF8;
+        fprint = FINGERPRINT_ICQ2GO_CLIENT;
+        printfOutput(VERBOSE_MOATA, "Found an ICQ2Go Client\n");
+    }
+
+    setSlaveCapabilities(victim, caps);
+    setSlaveFingerprint(victim, fprint);
+}
+
+void YSM_BuddyParseStatus(
+    slave_hnd_t         *victim,     /* IN */
+    bsd_t                bsd,        /* IN */
+    direct_connection_t *dcinfo,     /* OUT */
+    sl_fprint_t         *fprint,     /* OUT */
+    uint16_t            *status,     /* OUT */
+    uint16_t            *flags,      /* OUT */
+    time_t              *onsince,    /* OUT */
+    uint8_t            **statusStr)  /* OUT */
+{
+    uint16_t    newStatus = 0;
+    uint16_t    newFlags = 0;
+    sl_fprint_t newFprint;
+    uint8_t     number;
+    uint16_t    type, len, encoding;
+    uint8_t     len8;
+    bool_t      notfound = TRUE;
+    tlv_t       tlv;
+    uint16_t    tlvCount;
+    bs_pos_t    nextTlvPos;
+
+    if (victim == NULL)
+        return;
+
+    bsSeek(bsd, SIZEOF_WORD, BS_SEEK_CUR); /* skip warning level */
+    bsReadWord(bsd, &tlvCount);
+
+//    DEBUG_PRINT("tlvCount: %d", tlvCount);
+
+    for (; tlvCount > 0; tlvCount--)
+    {
+        bsReadTlv(bsd, &tlv);
+        nextTlvPos = bsTell(bsd) + tlv.len;
+
+        switch (tlv.type)
+        {
+            case 0x000A:
+                if (tlv.len > 0)
+                {
+                    bsReadDwordLE(bsd, &dcinfo->rIP_ext);
+                }
+                break;
+
+            /* Direct Connection Info */
+            case 0x000C:
+                if (tlv.len > 0)
+                {
+                    /* Internal IP Address */
+                    bsReadDwordLE(bsd, &dcinfo->rIP_int);
+
+                    /* Port where client is listening */
+                    bsSeek(bsd, SIZEOF_WORD, BS_SEEK_CUR);
+                    bsReadWordLE(bsd, &dcinfo->rPort);
+
+                    /* DC type*/
+                    bsSeek(bsd, SIZEOF_BYTE, BS_SEEK_CUR);
+
+                    /* Protocol Version */
+                    bsReadWordLE(bsd, &dcinfo->version);
+
+                    /* DC Cookie */
+                    bsReadDwordLE(bsd, &dcinfo->rCookie);
+
+                    /* Web front port */
+                    bsSeek(bsd, SIZEOF_DWORD, BS_SEEK_CUR);
+
+                    /* Client futures */
+                    bsSeek(bsd, SIZEOF_DWORD, BS_SEEK_CUR);
+
+                    /* Do fingerprinting. First check if theres the YSM
+                     * encryption identification, else look for common
+                     * YSM clients (old ones) */
+
+                    /* VS: ???*/
+
+                    bsReadDword(bsd, &newFprint);
+                    bsSeek(bsd, SIZEOF_DWORD, BS_SEEK_CUR);
+                    bsReadDword(bsd, fprint);
+
+                    if (*fprint != FINGERPRINT_YSM_CLIENT_CRYPT)
+                    {
+                        *fprint = newFprint;
+                    }
+                }
+                break;
+
+            /* Capabilities */
+            case 0x000D:
+                if (tlv.len > 0)
+                {
+                    YSM_ParseCapabilities(victim, bsd, tlv.len);
+                }
+                break;
+
+            /* User status */
+            case 0x0006:
+                notfound = FALSE;
+                if (tlv.len > 0)
+                {
+                    bsReadWord(bsd, &newFlags);
+                    bsReadWord(bsd, &newStatus);
+                }
+                break;
+
+            case 0x0003:
+                /* time_t */
+                if (tlv.len == 0x4)
+                {
+                    bsReadDword(bsd, (uint32_t *)onsince);
+                    *onsince -= YSM_USER.delta;
+                }
+
+                /* just cheat and quit, we only care */
+                /* about the STATUS and online since */
+                /* by now. */
+                break;
+
+            /* user icon id & hash */
+            case 0x001D:
+                while (bsTell(bsd) < nextTlvPos)
+                {
+                    bsReadWord(bsd, &type);
+                    bsReadByte(bsd, &number);
+                    bsReadByte(bsd, &len8);
+
+                    if (type == 0x0002)
+                    {
+                        /* a status/available message */
+                        if (len8 >= 4)
+                        {
+                            bsReadWord(bsd, &len);
+                            *statusStr = YSM_CALLOC(1, len+1);
+                            bsRead(bsd, *statusStr, len);
+                            bsReadWord(bsd, &encoding);
+                            if (encoding == 0x0001)
+                            {
+                                /* we have an encoding */
+                                bsReadWord(bsd, &len);
+//                                READ_STRING(&statusStr, ptr, len);
+                                bsSeek(bsd, len, BS_SEEK_CUR);
+                                *statusStr = NULL;
+                            }
+                            else
+                            {
+                                YSM_CharsetConvertString(
+                                    statusStr,
+                                    CHARSET_INCOMING,
+                                    MFLAGTYPE_UTF8,
+                                    TRUE);
+                            }
+                        }
+                    }
+                }
+                break;
+
+            default:
+                break;
+        }
+
+        bsSeek(bsd, nextTlvPos, BS_SEEK_SET);
+    }
+
+     /* This is really raro, at a beginning I believe i was */
+     /* actually receiving the ONLINE status change, but it */
+     /* now seems i'm not! Anyways, we know that if its an */
+     /* ONCOMING bud message and we dont find the status, */
+     /* its online, smart, huh? =) */
+
+    if (notfound)
+        *status = STATUS_ONLINE;
+    else
+        *status = newStatus;
+
+    *flags = newFlags;
+}
+
+void YSM_BuddyUpdateStatus(
+    slave_hnd_t         *victim,
+    direct_connection_t *dcinfo,
+    uint16_t             status,
+    sl_flags_t           flags,
+    sl_fprint_t          fprint,
+    time_t               onsince,
+    int8_t              *statusStr)
+{
+    buddy_special_status_t   bss;
+    direct_connection_t      dc;
+    sl_status_t              oldStatus;
+    sl_flags_t               oldFlags;
+    buddy_timing_t           timing;
+    uint8_t                  nick[MAX_NICK_LEN];
+    
+    if (victim == NULL || dcinfo == NULL)
+        return;
+
+    getSlaveStatus(victim, &oldStatus);
+    getSlaveSpecialStatus(victim, &bss);
+    getSlaveDC(victim, &dc);
+
+    dc.rIP_int    = dcinfo->rIP_int;
+    dc.rIP_ext    = dcinfo->rIP_ext;
+    dc.rPort      = htons(dcinfo->rPort);
+    dc.rCookie    = dcinfo->rCookie;
+    dc.version    = htons(dcinfo->version);
+
+    setSlaveDC(victim, &dc);
+
+    if (flags & STATUS_FLBIRTHDAY)
+    {
+        if (bss.birthday != 0x2)
+            bss.birthday = 0x1;
+    }
+    else
+        bss.birthday = FALSE;
+
+    /* Fingerprint the remote client */
+    switch (fprint)
+    {
+        case FINGERPRINT_MIRANDA_CLIENT:
+        case FINGERPRINT_STRICQ_CLIENT:
+        case FINGERPRINT_MICQ_CLIENT:
+        case FINGERPRINT_LIB2K_CLIENT:
+        case FINGERPRINT_YSM_CLIENT:
+        case FINGERPRINT_YSM_CLIENT_CRYPT:
+        case FINGERPRINT_TRILLIAN_CLIENT:
+        case FINGERPRINT_MICQ2003A_CLIENT_1:
+        case FINGERPRINT_MICQ2003A_CLIENT_2:
+        case FINGERPRINT_MICQLITE_CLIENT:
+            setSlaveFingerprint(victim, fprint);
+            break;
+
+        /* maybe it was detected inside YSM_ParseCapabilities */
+        /* but if its v8 lets say its an icq 2003 pro A */
+        default:
+            if (dc.version == 0x08)
+                setSlaveFingerprint(victim, FINGERPRINT_MICQ2003A_CLIENT_1);
+            break;
+    }
+
+    if (victim->statusStr != NULL)
+        YSM_FREE(victim->statusStr);
+
+    victim->statusStr = statusStr;
+
+    /* clear slave fields if its going offline. */
+    if (status == STATUS_OFFLINE)
+    {
+        setSlaveCapabilities(victim, 0);
+        setSlaveFingerprint(victim, 0);
+    }
+
+    /* Slave Timestamps */
+    if (oldStatus != status)
+    {
+        getSlaveTiming(victim, &timing);
+
+        if (oldStatus == STATUS_OFFLINE)
+        {
+            /* If it's the first time we see this
+             * slave, don't update the status change.
+             */
+
+            if (timing.signOn == 0)
+                timing.statusChange = 0;
+            else
+                timing.statusChange = onsince;
+
+            timing.signOn = onsince;
+        }
+        else
+        {
+            timing.statusChange = time(NULL);
+        }
+
+        setSlaveTiming(victim, &timing);
+    }
+
+    /* 1) is the slave in our ignore list? don't bother us with their
+     * status changes, we dont care, we might really hate that slave
+     * 2) fix for a known bug where the server keeps re-sending us
+     * the status of each slave even though its the very same unchanged
+     * 3) are we in CHAT MODE ? we dont print messages which don't belong
+     * to our chat session!. */
+
+    getSlaveFlags(victim, &oldFlags);
+
+    if (!bss.ignoreId && oldStatus != status
+    && !((g_state.promptFlags & FL_CHATM) && !(oldFlags & FL_CHAT)))
+    {
+        getSlaveNick(victim, nick, sizeof(nick));
+
+        /* Is this slave's Birthday? */
+        if (bss.birthday == 0x1)
+        {
+            printfOutput(VERBOSE_BASE,
+                    "INFO BIRTHDAY %ld %s\n",
+                    victim->uin, nick);
+
+            /* only inform once this way */
+            bss.birthday = 0x2;
+        }
+
+        /* Okie, now print the status change line */
+        printfOutput(VERBOSE_STCHANGE,
+                "INFO STATUS %ld %s %s\n",
+                victim->uin, nick, strStatus(status));
+    }
+
+    setSlaveStatus(victim, status);
+    setSlaveSpecialStatus(victim, &bss);
+}
+
+void YSM_BuddyChangeStatus(const snac_head_t *snac, bsd_t bsd)
+{
+    direct_connection_t    dcinfo;
+    uint16_t      flags = 0;
+    sl_status_t   status = STATUS_OFFLINE;
+    sl_fprint_t   fprint = 0;
+    uint8_t       uinLen = 0;
+    time_t        onsince = 0;
+    uint8_t      *statusStr = NULL;
+    int8_t       *puin = NULL;
+    slave_hnd_t   victim;
+
+    if (snac == NULL)
+        return;
+
+    bsReadByte(bsd, &uinLen);          /* UIN string length */
+    if (uinLen >= MAX_UIN_LEN) return;
+
+    puin = YSM_CALLOC(1, uinLen+1);
+    bsRead(bsd, puin, uinLen);      /* UIN string */
+
+//    DEBUG_PRINT("uin: %s", puin);
+
+    if (querySlaveByUin(atol(puin), &victim) != 0)
+    {
+        DEBUG_PRINT(
+            "Received a status change for UIN %s which is not "
+            "in your list.\n", puin);
+
+        YSM_FREE(puin);
+        return;
+    }
+
+    YSM_FREE(puin);
+    memset(&dcinfo, 0, sizeof(dcinfo));
+
+    switch (snac->subTypeId)
+    {
+        case YSM_SRV_ONCOMING_BUD:
+            YSM_BuddyParseStatus(
+                    &victim,
+                    bsd,
+                    &dcinfo,
+                    &fprint,
+                    &status,
+                    &flags,
+                    &onsince,
+                    &statusStr);
+            break;
+
+        case YSM_SRV_OFFGOING_BUD:
+            DEBUG_PRINT("INFO %ld went offline.", victim.uin);
+            break;
+
+        default:
+            DEBUG_PRINT("Unknown subtype id");
+            return;
+    }
+
+    YSM_BuddyUpdateStatus(
+        &victim,
+        &dcinfo,
+        status,
+        flags,
+        fprint,
+        onsince,
+        statusStr);
+}
+
+void incomingClientAck(flap_head_t *flap, bsd_t bsd)
+{
+    uint8_t   *autotext = NULL;
+    uint8_t    mType = 0;
+    uint32_t   pos = 0;
+    uint8_t    len = 0;
+    uint16_t   txtlen = 0;
+    uint16_t   type;
+
+    bsSeek(bsd, 8, BS_SEEK_CUR);
+    bsReadWord(bsd, &type);
+
+    if (type != 0x02)
+    {
+        /* this should be a type 2 ACK */
+        return;
+    }
+
+    /* here comes a BSTR with the UIN */
+    bsReadByte(bsd, &len);
+    if (len > MAX_UIN_LEN)
+    {
+        /* someone is fcking with us? */
+        return;
+    }
+
+    bsSeek(bsd, len + 1 + 2, BS_SEEK_CUR);
+    bsReadByte(bsd, &len);
+
+    if (len != 0x1b && len != 0x00)
+    {
+        /* this should be the len of a sub chunk.
+         * we only allow either 1b or 0.
+         */
+        return;
+    }
+
+    bsReadByte(bsd, &len);
+    bsSeek(bsd, len + 1 + 2 + 4 + 12, BS_SEEK_CUR);
+
+    /* we only care about 'auto message' replies */
+    bsReadByte(bsd, &mType);
+
+    switch (mType)
+    {
+        case 0xe8:
+        case 0xe9:
+        case 0xea:
+        case 0xeb:
+        case 0xec:
+
+            bsSeek(bsd, 2 + 2 + 2, BS_SEEK_CUR);
+            bsReadWord(bsd, &txtlen);
+
+            if (txtlen > 0)
+            {
+                /* there is an automessage text! */
+                autotext = YSM_CALLOC(1, txtlen + 1);
+                bsRead(bsd, autotext, txtlen);
+
+                printfOutput(VERBOSE_BASE,
+                        "\r\n%-15.15s" " : \n%s\n",
+                        "Auto message",
+                        YSM_CharsetConvertOutputString(&autotext, 1));
+
+                YSM_FREE(autotext);
+            }
+    }
+}
+
+/*
+ * The return value of this function should tell its caller if its
+ * required to send an ACK, since certain m_types dont require ACKS.
+ * ret = 0 -> something happened, error type normal (DC handles this)
+ * ret < 0 -> something happened, error type critical (DC handles this)
+ * ret = 1 -> everything went ok, dont send an ACK.
+ * ret > 1 -> everything went ok, send an ACK.
+ */
+
+static int32_t YSM_ReceiveMessageData(msg_t *msg)
+{
+    uint8_t        *datap = NULL, *preason = NULL;
+    int32_t         i = 0, c = 0, ret = 2;
+    buddy_timing_t  timing;
+
+    DEBUG_PRINT("from %dl, len: %d", msg->sender.uin, msg->len);
+
+    /* Are we in Antisocial mode? */
+    if (g_cfg.antisocial && msg->type != YSM_MESSAGE_AUTH)
+        return 0;
+
+    getSlaveTiming(&msg->sender, &timing);
+    timing.lastMessage = time(NULL);
+    setSlaveTiming(&msg->sender, &timing);
+
+    switch (msg->type)
+    {
+        case YSM_MESSAGE_NORMAL:
+            g_state.lastRead = msg->sender.uin;
+            break;
+
+        case YSM_MESSAGE_AUTH:
+            for (i = 0; i < msg->len; i++)
+            {
+                if ((uint8_t)message[i] == 0xfe) c++;
+
+                /* on the 5th 0xfe we have the reason msg */
+                if (c == 5) {
+                    preason = strchr(message + i, 0xfe);
+                    if (preason != NULL)
+                        preason++;
+                    else
+                        preason = "No Reason";
+
+                    /* Break out of the for loop! */
+                    break;
+                }
+            }
+
+            datap = preason;
+            break;
+
+        case YSM_MESSAGE_CONTACTS:
+        case YSM_MESSAGE_URL:
+            break;
+
+        case YSM_MESSAGE_ADDED:        /* these msgs lack of data */
+        case YSM_MESSAGE_AUTHOK:
+        case YSM_MESSAGE_AUTHNOT:
+            datap = NULL;
+            break;
+
+        case YSM_MESSAGE_PAGER:
+            datap = msgData + 1;
+            break;
+
+        case YSM_MESSAGE_GREET:
+            /* only with slaves */
+            if (msg->sender.hnd >= 0)
+            {
+                /* we use m_data and not message here because these
+                 * messages had a blank LNTS before them. Tricky huh. */
+                ret = YSM_DC_IncomingMessageGREET(msg);
+            }
+            return ret;
+
+        case YSM_MESSAGE_FILE:
+            /* only with slaves */
+            if (msg->sender.hnd >= 0)
+            {
+                /* This is done in v7, but, clients such as TRILLIAN
+                 * who identify theirselves as v8 clients, still send
+                 * this. What a pain in the ass man, come on!  */
+
+                ret = YSM_DC_IncomingMessageFILE(msg);
+            }
+            return ret;
+
+        default:
+            printfOutput(VERBOSE_MOATA,
+                    "WARN Unknown msgType has been received.\n");
+
+            return 1;
+    }
+
+    displayMessage(msg);
+
+    return ret;
+}
+
+void YSM_ReceiveMessageType1(bsd_t bsd, msg_t *msg)
+{
+    uint16_t   dataLen = 0;
+    tlv_t      tlv;
+    bs_pos_t   startPos;
+    bs_pos_t   msgPos;
+    bs_pos_t   pos;
+    uint16_t   charsetNumber = 0;
+
+    DEBUG_PRINT("");
+
+    bsReadTlv(bsd, &tlv);
+
+    if (tlv.type != 0x2)
+        return;
+
+    dataLen = tlv.len;
+    hexDumpOutput(bsGetPtr(bsd), tlv.len);
+    startPos = bsTell(bsd);
+
+    /* to have a limit in case anything happens */
+    while (bsTell(bsd) - startPos < dataLen 
+           && bsReadTlv(bsd, &tlv) == SIZEOF_TLV_HEAD)
+    {
+        pos = bsTell(bsd);
+
+        switch (tlv.type)
+        {
+            case 0x0101:      /* Message TLV */
+                msg->len = tlv.len - 4;
+
+                /* here comes encoding information:
+                    0x0000 -> US-ASCII
+                    0x0002 -> UCS-2BE
+                 */
+
+                bsReadWord(bsd, &charsetNumber);
+                bsSeek(bsd, SIZEOF_WORD, BS_SEEK_CUR); /* charset subset */
+
+                if (charsetNumber == 0x2)
+                {
+                    /* its UTF-16 (UCS-2BE) */
+                    msg->flags |= MFLAGTYPE_UCS2BE;
+                }
+                msgPos = bsTell(bsd);
+                break;
+
+            default:
+                break;
+        }
+
+        bsSeek(bsd, pos + tlv.len, BS_SEEK_SET);
+    }
+
+    if (msg->ptr != NULL)
+    {
+        /* only normal messages come in type1 */
+        YSM_ReceiveMessageData(msg);
+        YSM_FREE(msg->ptr);
+    }
+}
+
+/* This function can be called from DC PEER_MSGs as well as from
+ * ReceiveMessageType2() since the main type2 message body is
+ * the same for both. If dc_flag is TRUE, it was called from DC.
+ */
+
+int32_t YSM_ReceiveMessageType2Common(
+    msg_t      *msg,
+    bsd_t       bsd,
+    int32_t     tsize,
+    uint8_t    *data,
+    uint16_t    r_status,
+    uint16_t   *msgSeq,
+    int8_t      dc_flag)
+{
+    int8_t      m_len[2], m_priority[2], *pguid = NULL;
+    msg_type_t  msgType = YSM_MESSAGE_UNDEF;
+    int16_t     m_status = 0;
+    int32_t     ret = TRUE;
+
+    DEBUG_PRINT("");
+
+    tsize += 2;    /* Some Length        */
+    readUint16LE(msgSeq, data + tsize);
+    tsize += 2;    /* SEQ2            */
+    tsize += 12;   /* Unknown         */
+
+    msgType = data[tsize];
+    tsize += 2;    /* Msg Type+flags    */
+    memcpy(&m_status, data + tsize, 2);
+    tsize += 2;    /* Status        */
+    memcpy(&m_priority, data + tsize, 2);
+    tsize += 2;    /* Priority        */
+    memcpy(&m_len, data + tsize, 2);
+    tsize += 2;    /* Msg Length        */
+
+    /* empty messages sent by icq 2002/2001 clients are ignored */
+    if (msg->len <= 0x1 && m_priority[0] == 0x02 && m_priority[1] == 0x00)
+    {
+        return ret;
+    }
+
+    /* after the message data, there might be a GUID identifying
+     * the type of encoding the sent message is in.
+     * if the message type is a MESSAGE, GUIDs come after
+     * 8 bytes of colors (fg(4) + bg(4))
+     */
+    pguid = data+tsize+msg->len;
+    if (msg->type == YSM_MESSAGE_NORMAL) pguid += 8;
+
+    if ((uint32_t)(*pguid) == 0x26    /* size of the UTF8 GUID */
+    && !memcmp(pguid+4, CAP_UTF8_GUID, sizeof(CAP_UTF8_GUID))) {
+        msg->flags |= MFLAGTYPE_UTF8;
+    }
+
+    if (dc_flag) /* dirty hack for ICQ 2003a, thanks samm at os2 dot ru */
+        msg->flags |= MFLAGTYPE_UTF8;
+
+    /* m_status in type2 messages depending on the message subtype
+     * will be the user'status or the message status.
+     */
+
+    ret = YSM_ReceiveMessageData(msg);
+
+    if (ret > 1)
+    {
+        if (!dc_flag)
+            sendAckType2(msg->sender.uin, msg->seq, msg->type, msg->id);
+        else
+            YSM_DC_MessageACK(msg->sender, msg->type);
+    }
+
+    return ret;
+}
+
+void YSM_ReceiveMessageType2(bsd_t bsd, msg_t *msg)
+{
+    int32_t    MsgTLV = 0;
+    int16_t    tmplen = 0, cmd = 0;
+    int8_t     foundtlv = FALSE, m_type[4];
+    uint16_t   msgSeq;
+    uint8_t    m_flags = 0;
+    tlv_bit_t  thetlv;
+
+    memset( &thetlv, '\0', sizeof(tlv_bit_t) );
+    memcpy( &thetlv, data+tsize, sizeof(tlv_bit_t));
+    MsgTLV = Chars_2_Wordb(thetlv.len);
+    MsgTLV += tsize;
+
+    /* Skip the first 0x5 TLV */
+    tsize += sizeof(tlv_bit_t);
+    memcpy( &cmd, data+tsize, 2 );
+    tsize += 2;        /* ACK TYPE */
+    /* 0x0000 -> Text Message    */
+    /* 0x0001 -> Abort Request    */
+    /* 0x0002 -> File ACK        */
+
+    switch (cmd)
+    {
+        case 0x0000:
+            msg->flags |= MFLAGTYPE_NORM;
+            break;
+
+        case 0x0001:
+            msg->flags |= MFLAGTYPE_END;
+            break;
+
+        case 0x0002:
+            msg->flags |= MFLAGTYPE_ACK;
+            break;
+
+        default:
+            printfOutput(VERBOSE_MOATA,
+                    "ReceiveMessageType2: unknown cmd(%d).\n",
+                    cmd);
+            return;
+    }
+
+    tsize += 8;        /* timestamp + random msg id */
+    tsize += 16;       /* capabilities */
+
+    /* to have a limit in case anything happends */
+    while (!foundtlv && tsize < MsgTLV)
+    {
+        memset( &thetlv, '\0', sizeof(tlv_bit_t) );
+        memcpy( &thetlv, data+tsize, sizeof(tlv_bit_t));
+        tsize += sizeof(tlv_bit_t);
+        tmplen = Chars_2_Wordb(thetlv.len);
+
+        switch (Chars_2_Wordb(thetlv.type))
+        {
+            case 0x2711:      /* Message C TLV */
+                tsize += 2;    /* len till SEQ1    */
+                tsize += 2;    /* TCP Version #    */
+                tsize += 16;    /* Capabilities        */
+                tsize += 3;    /* Unknown        */
+                memcpy( &m_type, data+tsize, 4 );
+                tsize += 4;    /* 0x00000000 -> Normal Msg
+                                  0x00000004 -> File OK/Req */
+
+                tsize += 2;    /* SEQ1            */
+                foundtlv=TRUE;
+                break;
+
+            case 0x3:
+                tsize += tmplen;
+                break;
+
+            case 0x5:
+                tsize += tmplen;
+                break;
+
+            case 0x4:
+                tsize += tmplen;
+                break;
+
+            default:
+                tsize += tmplen;
+                break;
+        }
+    }
+
+    /* No boy, get out now */
+    if (!foundtlv) return;
+
+    YSM_ReceiveMessageType2Common(
+            bsd,
+            msg,
+            r_status,
+            &msgSeq,
+            0x00);
+}
+
+void YSM_ReceiveMessageType4(bsd_t bsd, msg_t *msg)
+{
+    tlv_t       tlv5;
+    uin_t       yetAnotherUin;
+
+    DEBUG_PRINT("");
+
+    bsReadTlv(bsd, &tlv5);
+
+    if (tlv5.type != 0x5)
+        return;
+
+    bsReadDwordLE(bsd, &yetAnotherUin);
+
+    if (yetAnotherUin != msg->sender.uin)
+    {
+        DEBUG_PRINT("uins are not equal (%ld != %ld)", sender->uin, yetAnotherUin);
+    }
+
+    bsReadByte(bsd, (uint8_t *)&msg->type);
+    bsSeek(bsd, SIZEOF_BYTE, BS_SEEK_CUR);    /* Msg flags */
+    bsReadWordLE(bsd, &msg->len);
+
+    if ((msg->ptr = YSM_CALLOC(1, msg->len + 1)) != NULL)
+    {
+        bsRead(bsd, msg->ptr, msg->len);
+        YSM_ReceiveMessageData(msg);
+        YSM_FREE(msg->ptr);
+    }
+}
+
+void YSM_ReceiveMessage(flap_head_t *flap, bsd_t bsd)
+{
+    uint16_t     warnLevel;
+    uint16_t     tlvCount;
+    uint16_t     msgChannel;
+    uin_t        uin;
+    int8_t      *strUin = NULL;
+    int8_t       uinLen = 0;
+    tlv_t        tlv;
+    bs_pos_t     pos;
+    msg_t        msg;
+
+    DEBUG_PRINT("");
+    memset((void *)&msg, 0, sizeof(msg));
+
+    bsRead(bsd, msg.id, sizeof(msg.id));
+    bsReadWord(bsd, &msgChannel);
+    bsReadByte(bsd, &uinLen);
+
+    strUin = YSM_CALLOC(1, uinLen+1);
+    if (!strUin || uinLen+1 < 1) return;
+
+    bsRead(bsd, strUin, uinLen);
+    uin = atol(strUin);
+    YSM_FREE(strUin);
+
+    bsReadWord(bsd, &warnLevel);
+    bsReadWord(bsd, &tlvCount);
+
+    querySlaveByUin(uin, &msg.sender);
+
+    /* When there is no data, we just get a single TLV */
+    /* to avoid any problems, we analyze the packet right now */
+
+    if (tlvCount == 0)
+    {
+        /* weird it is..but it seems WWP messages sent through icq.com carry not TLVs..
+         * we'll make a sanity check anyway only allowing messages type 4..
+         */
+        if (msgChannel == 0x4)
+        {
+            YSM_ReceiveMessageType4(bsd, &msg);
+        }
+        return;
+    }
+
+    for (; tlvCount > 0 && bsReadTlv(bsd, &tlv) == SIZEOF_TLV_HEAD; tlvCount--)
+    {
+        pos = bsTell(bsd);
+
+        switch (tlv.type)
+        {
+            case 0x06:      /* senders status */
+                bsReadWord(bsd, &msg.statusFlags);
+                bsReadWord(bsd, &msg.status);
+                break;
+
+            case 0x03:      /* user login timestamp */
+            case 0x13:      /* no idea what this is, just yet */
+            default:
+                break;
+        }
+
+        bsSeek(bsd, pos + tlv.len, BS_SEEK_SET);
+    }
+
+    DEBUG_PRINT("uin = %ld", uin);
+
+    switch (msgChannel)
+    {
+        case 0x1:    /* Normal Msg. */
+            YSM_ReceiveMessageType1(bsd, &msg);
+            break;
+
+        case 0x2:    /* Complex Msg, yack! */
+            YSM_ReceiveMessageType2(bsd, &msg);
+            break;
+
+        case 0x4:    /* Utility Msg. */
+            YSM_ReceiveMessageType4(bsd, &msg);
+            break;
+
+        default:
+            printfOutput(VERBOSE_MOATA,
+                "INFO DEBUG Unknown type (0x%.2X) received\n",
+                msgChannel);
+            break;
+    }
+}
+
+void incomingPersonal(flap_head_t *head, bsd_t bsd)
+{
+    uint8_t   len = 0;
+    int32_t   remainLen = 0;
+    tlv_t     tlv;
+    bs_pos_t  nextTlvPos;
+
+    /* uin len */
+    bsReadByte(bsd, &len);
+    bsSeek(bsd, len, BS_SEEK_CUR);
+    bsSeek(bsd, SIZEOF_DWORD, BS_SEEK_CUR);
+
+    remainLen = head->len - SIZEOF_SNAC_HEAD;
+
+    while (remainLen > 0)
+    {
+        bsReadTlv(bsd, &tlv);
+        nextTlvPos = bsTell(bsd) + tlv.len;
+        remainLen -= tlv.len + SIZEOF_TLV_HEAD;
+
+        /* buf should point to the TLV type field. */
+        switch (tlv.type)
+        {
+            case 0x3:
+                if (tlv.len == 0x4)
+                {
+                    bsReadWord(bsd, (uint16_t *)&YSM_USER.timing.signOn);
+                }
+                break;
+
+            case 0xA:
+                /* get our external ip address */
+                bsReadDwordLE(bsd, &YSM_USER.d_con.rIP_ext);
+
+            default:
+                break;
+        }
+
+        bsSeek(bsd, nextTlvPos, BS_SEEK_SET);
+    }
+
+    YSM_USER.delta = YSM_USER.timing.signOn - time(NULL);
+    if (YSM_USER.delta < 0)
+        YSM_USER.delta = 0;
+}
+
+void YSM_IncomingMainInfo(
+    int8_t    *buf,
+    int32_t    tsize,
+    int8_t    *pnick,
+    int8_t    *pfirst,
+    int8_t    *plast,
+    int8_t    *pemail,
+    uint32_t   reqid,
+    uin_t      uin)
+{
+    int8_t     *data = NULL;
+    bool_t      local = FALSE;
+    int32_t     nlen = 0;
+    slave_hnd_t victim = {SLAVE_HND_FIND, uin};
+
+    if (buf == NULL)
+        return;
+
+    /* local is true if its ours */
+    local = (reqid == (YSM_USER.uin & 0xffffff7f));
+
+    /* first LNTS is NICK */
+    nlen = Chars_2_Word(buf+tsize);
+    tsize += 2;
+
+    data = YSM_CALLOC(1, nlen+1);
+    memcpy(data, buf+tsize, nlen);
+    DEBUG_PRINT("data: %s", data);
+
+    /* Update nicknames ? */
+    if (pnick && (local || g_cfg.updateNicks > 0))
+    {
+        /* using strcmp here, to update even low/big caps */
+        if (strlen(data) > 1 && strcmp(pnick, data))
+        {
+            if (parseSlave(data))
+            {
+                if (local)
+                {
+                    strncpy(pnick, data, MAX_NICK_LEN-1);
+                    pnick[MAX_NICK_LEN - 1] = '\0';
+                }
+                else
+                    setSlaveNick(&victim, data);
+            }
+        }
+    }
+
+#if 0
+    printfOutput(VERBOSE_BASE,
+        "\r%-15.15s" " : %-12.12s ",
+        "Nickname",     
+        YSM_CharsetConvertOutputString(&data, 1));
+#endif
+
+    YSM_FREE(data);
+
+    /* Next LNTS is.firstName */
+    tsize += nlen;
+
+    nlen = Chars_2_Word(buf+tsize);
+    tsize += 2;
+
+    data = YSM_CALLOC(1, nlen+1);
+    memcpy(data, buf+tsize, nlen);
+
+    if (pfirst)
+    {
+        strncpy( pfirst, data, MAX_NICK_LEN-1 );
+        pfirst[MAX_NICK_LEN - 1] = '\0';
+    }
+
+#if 0
+    printfOutput(VERBOSE_BASE,
+        "%-20.20s" " : %s\n",
+        "Firstname",
+        YSM_CharsetConvertOutputString(&data, 1));
+#endif
+
+    YSM_FREE(data);
+
+    tsize += nlen;
+
+    nlen = Chars_2_Word(buf+tsize);
+    tsize += 2;
+
+    data = ysm_calloc(1, nlen+1, __FILE__, __LINE__);
+    memcpy(data, buf+tsize, nlen);
+
+    if (plast)
+    {
+        strncpy(plast, data, MAX_NICK_LEN-1);
+        plast[MAX_NICK_LEN-1] = '\0';
+    }
+
+#if 0
+    printfOutput(VERBOSE_BASE,
+        "%-15.15s" " : %-12.12s ",
+        "Lastname",
+        YSM_CharsetConvertOutputString(&data, 1));
+#endif
+
+    YSM_FREE(data);
+
+    tsize += nlen;
+    nlen = Chars_2_Word(buf+tsize);
+    tsize += 2;
+
+    data = ysm_calloc(1, nlen+1, __FILE__, __LINE__);
+    memcpy(data, buf+tsize, nlen);
+
+    if (pemail) {
+        strncpy( pemail, data, MAX_NICK_LEN-1 );
+        pemail[MAX_NICK_LEN - 1] = '\0';
+    }
+
+#if 0
+    printfOutput(VERBOSE_BASE,
+        "%-20.20s" " : %s\n",
+        "E-mail",
+        YSM_CharsetConvertOutputString(&data, 1));
+#endif
+
+    YSM_FREE(data);
+
+    tsize += nlen;
+    nlen = Chars_2_Word(buf+tsize);
+    tsize += 2;
+
+    data = YSM_CALLOC(1, nlen+1);
+    memcpy(data, buf+tsize, nlen);
+
+#if 0
+    printfOutput(VERBOSE_BASE,
+        "\r%-15.15s" " : %-12.12s ",
+        "City",
+        YSM_CharsetConvertOutputString(&data, 1));
+#endif
+
+    YSM_FREE(data);
+
+    tsize += nlen;
+    nlen = Chars_2_Word(buf+tsize);
+    tsize += 2;
+    data = YSM_CALLOC(1, nlen+1);
+    memcpy(data, buf+tsize, nlen);
+
+#if 0
+    printfOutput(VERBOSE_BASE,
+        "%-20.20s" " : %s\n",
+        "State",
+        YSM_CharsetConvertOutputString(&data, 1));
+#endif
+
+    YSM_FREE(data);
+
+    tsize += nlen;
+    nlen = Chars_2_Word(buf+tsize);
+    tsize += 2;
+    data = YSM_CALLOC(1, nlen+1);
+    memcpy(data, buf+tsize, nlen);
+
+#if 0
+    printfOutput(VERBOSE_BASE,
+        "\r%-15.15s" " : %-12.12s ",
+        "Phone",
+        YSM_CharsetConvertOutputString(&data, 1));
+#endif
+
+    YSM_FREE(data);
+
+    tsize += nlen;
+    nlen = Chars_2_Word(buf+tsize);
+    tsize += 2;
+    data = YSM_CALLOC(1, nlen+1);
+    memcpy(data, buf+tsize, nlen);
+
+#if 0
+    printfOutput(VERBOSE_BASE,
+        "%-20.20s" " : %s\n",
+        "FAX",
+        YSM_CharsetConvertOutputString(&data, 1));
+#endif
+
+    YSM_FREE(data);
+
+    tsize += nlen;
+    nlen = Chars_2_Word(buf+tsize);
+    tsize += 2;
+    data = YSM_CALLOC(1, nlen+1);
+    memcpy(data, buf+tsize, nlen);
+
+#if 0
+    printfOutput(VERBOSE_BASE,
+        "\r%-15.15s" " : %-12.12s ",
+        "Street",
+        YSM_CharsetConvertOutputString(&data, 1));
+#endif
+
+    YSM_FREE(data);
+
+    tsize += nlen;
+    nlen = Chars_2_Word(buf+tsize);
+    tsize += 2;
+    data = YSM_CALLOC(1, nlen+1);
+    memcpy(data, buf+tsize, nlen);
+
+#if 0
+    printfOutput(VERBOSE_BASE,
+        "%-20.20s" " : %s\n",
+        "Cellular",
+        YSM_CharsetConvertOutputString(&data, 1));
+#endif
+
+    YSM_FREE(data);
+}
+
+void YSM_IncomingHPInfo(int8_t *buf, int32_t tsize)
+{
+    if (buf == NULL)
+        return;
+
+#if 0
+    printfOutput(VERBOSE_BASE,
+        "%-15.15s" " : %-12.u ",
+        "Age",
+        buf[tsize] );
+
+    if (buf[tsize+2] != 0)
+    {
+        printfOutput(VERBOSE_BASE,
+            "%-20.20s" " : %s\n",
+            "Sex",
+            (buf[tsize+2] == 0x02) ? "Male." : "Female.");
+    }
+#endif
+}
+
+void YSM_IncomingWorkInfo(int8_t *buf, int32_t tsize)
+{
+    uint8_t *data = NULL;
+    int32_t  nlen = 0;
+
+    if (buf == NULL)
+        return;
+
+    nlen = Chars_2_Word(buf+tsize);
+    tsize += 2;
+    data = YSM_CALLOC(1, nlen+1);
+    memcpy(data, buf+tsize, nlen);
+
+    printfOutput(VERBOSE_BASE,
+        "\r%-15.15s" " : %-12.12s ",
+        "City",
+        YSM_CharsetConvertOutputString(&data, 1));
+
+    YSM_FREE(data);
+
+    tsize += nlen;
+    nlen = Chars_2_Word(buf+tsize);
+    tsize += 2;
+    data = YSM_CALLOC(1, nlen+1);
+    memcpy(data, buf+tsize, nlen);
+
+    printfOutput(VERBOSE_BASE,
+        "%-20.20s" " : %s\n",
+        "State",
+        YSM_CharsetConvertOutputString(&data, 1));
+
+    YSM_FREE(data);
+}
+
+void YSM_IncomingAboutInfo(int8_t *buf, int32_t tsize)
+{
+    int8_t  *data = NULL;
+    int16_t  len = 0;
+
+    if (buf == NULL)
+        return;
+
+    len = Chars_2_Word(buf+tsize);
+    tsize += 2;
+
+    data = YSM_CALLOC(1, len+1);
+    memcpy(data, buf+tsize, len);
+
+#if 0
+    printfOutput(VERBOSE_BASE,
+        "\r\n%-15.15s" " : \n%s\n",
+        "About",
+        YSM_CharsetConvertOutputString(&data, 1));
+#endif
+
+    YSM_FREE(data);
+}
+
+void incomingInfo(char type, char *buf, int tsize, req_id_t reqId)
+{
+    slave_hnd_t  victim;
+    uint8_t     *pnick = NULL;
+    uint8_t     *pfirst = NULL;
+    uint8_t     *plast = NULL;
+    uint8_t     *pemail = NULL;
+    uin_t        uin;
+    uint8_t      nick[MAX_NICK_LEN];
+
+    /* Incoming is for ourselves? */
+    if (reqId == (YSM_USER.uin & 0xffffff7f))
+    {
+        pnick = &YSM_USER.info.nickName[0];
+        pfirst = &YSM_USER.info.firstName[0];
+        plast = &YSM_USER.info.lastName[0];
+        pemail = &YSM_USER.info.email[0];
+    }
+    else if (querySlaveByReqId(reqId, &victim) == 0)
+    {
+        getSlaveNick(&victim, nick, sizeof(nick));
+        pnick = nick;
+        uin = victim.uin;
+    }
+    else
+    {
+        // FIXME: ???
+    }
+
+    switch (type)
+    {
+        case INFO_MAIN:
+            YSM_IncomingMainInfo(buf,
+                    tsize,
+                    pnick,
+                    pfirst,
+                    plast,
+                    pemail,
+                    reqId,
+                    uin);
+            break;
+
+        case INFO_HP:
+            YSM_IncomingHPInfo(buf, tsize);
+            break;
+
+        case INFO_WORK:
+#if 0
+            /* we disabled work info since we decided
+             * it is a waste of screen space to display it
+             */
+            YSM_IncomingWorkInfo(buf, tsize);
+#endif
+            break;
+
+        case INFO_ABOUT:
+            YSM_IncomingAboutInfo(buf, tsize);
+            break;
+
+        default:
+            break;
+    }
+}
+
+void incomingSearch(char *buf, int tsize)
+{
+    char      *data = NULL;
+    uint16_t  dataLen = 0;
+    uin_t      ruin = 0;
+    int8_t    *ptr = buf + tsize;
+
+    ptr += 2;    /* skip record LEN */
+    memcpy(&ruin, ptr, 4);
+    ptr += 4;
+
+    READ_UINT16(&dataLen, ptr);
+    data = YSM_CALLOC(1, dataLen+1);
+    READ_STRING(data, ptr, dataLen);
+
+    printfOutput(VERBOSE_BASE, "INFO SEARCH %ld %s\n", ruin, data);
+
+    YSM_FREE(data);
+}
+
+
+void incomingMultiUse(flap_head_t *head, snac_head_t *snac, bsd_t bsd)
+{
+    uin_t      uin = 0;
+    uint16_t   dataLen = 0;
+    uint16_t   reqId;
+    uint16_t   rspType;
+    uint16_t   rspSubType;
+    int8_t     result;
+    int8_t     o_month = 0, o_day = 0, o_hour = 0, o_minutes = 0;
+    slave_t   *victim = NULL;
+    tlv_t      tlv;
+    int8_t    *ptr = buf;
+    msg_t      msg;
+
+    DEBUG_PRINT("");
+
+    /* its a TLV(1) at the very beggining, always. */
+    READ_TLV(&tlv, ptr);
+    READ_UINT16LE(&dataLen, ptr);
+
+    ptr += 4; /* skip my UIN */
+    READ_UINT16LE(&rspType, ptr);
+    READ_UINT16LE(&reqId, ptr);
+
+    switch (rspType)
+    {
+        /* Information request response */
+        case 0x07DA:
+            READ_UINT16LE(&rspSubType, ptr);
+            READ_UINT8(&result, ptr);
+            if (result != 0x32 && result != 0x14 && result != 0x1E)
+            {
+                switch (rspSubType)
+                {
+                    /* Incoming MAIN info */
+                    case 0xC8:
+                        incomingInfo(INFO_MAIN, ptr, 0, snac->reqId);
+                        break;
+
+                    /* incoming full info */
+                    case 0xDC:
+                        incomingInfo(INFO_HP, ptr, 0, snac->reqId);
+                        break;
+
+                    case 0xD2:
+                        incomingInfo(INFO_WORK, ptr, 0, snac->reqId);
+                        break;
+
+                    case 0xE6:
+                        incomingInfo(INFO_ABOUT, ptr, 0, snac->reqId);
+                        break;
+
+                    case 0xA4:
+                    case 0xAE:
+                        incomingSearch(ptr, 0);
+                        break;
+
+                    case 0x64:
+                        printfOutput(VERBOSE_BASE, "INFO " MSG_INFO_UPDATED "\n");
+                        break;
+
+                    case 0xAA:
+                        printfOutput(VERBOSE_BASE, "INFO Password changed.\n");
+                        break;
+
+                    default:
+                        break;
+                }
+            }
+            break;
+
+        /* Offline message response */
+        case 0x0041:
+            READ_UINT32LE(&uin, ptr);    /* uin LE */
+            ptr += 2;                    /* skip WORD (year) */
+            READ_UINT8(&o_month, ptr);   /* month */
+            READ_UINT8(&o_day, ptr);     /* day */
+            READ_UINT8(&o_hour, ptr);    /* hour */
+            READ_UINT8(&o_minutes, ptr); /* minutes */
+            READ_UINT8(&msg.type, ptr);   /* message type */
+            READ_UINT8(&msg.flags, ptr);   /* message flags */
+            READ_UINT16(&msg.len, ptr);   /* message string length */
+
+            querySlaveByUin(uin, &msg.sender);
+
+            printfOutput(VERBOSE_BASE,
+                "\n" MSG_NEW_OFFLINE "\n"
+                "[date: %.2d/%.2d time: %.2d:%.2d (GMT):\n",
+                o_day,
+                o_month,
+                o_hour,
+                o_minutes);
+
+            /* offline message */
+            YSM_ReceiveMessageData(&msg);
+            break;
+
+        /* end of offline msgs */
+        case 0x0042:
+            sendDeleteOfflineMsgsReq();
+            break;
+
+        default:
+            DEBUG_PRINT("unknown respond type 0x%X!", rspType);
+            break;
+    }
+}
+
 void incomingFlapSnacData(flap_head_t *head, bsd_t bsd)
 {
     snac_head_t snac;
+
+    static const uint8_t icqCloneIdent[] = {
+        0x00,0x01,0x00,0x03,0x00,0x02,0x00,0x01,
+        0x00,0x03,0x00,0x01,0x00,0x15,0x00,0x01,
+        0x00,0x04,0x00,0x01,0x00,0x06,0x00,0x01,
+        0x00,0x09,0x00,0x01,0x00,0x0A,0x00,0x01,
+    };
 
     bsReadSnacHead(bsd, &snac);
 
@@ -546,7 +2090,7 @@ void incomingFlapSnacData(flap_head_t *head, bsd_t bsd)
                     sendSnac(0x1, 0x17, 0x0,
                         icqCloneIdent,
                         sizeof(icqCloneIdent),
-                        Chars_2_Wordb(head->seq),
+                        head->seq,
                         0);
                     break;
 
@@ -579,7 +2123,7 @@ void incomingFlapSnacData(flap_head_t *head, bsd_t bsd)
                 case YSM_STATUS_CHANGE_ACK:
                     if (snac.reqId == 0xE000000 || snac.reqId == 0x000000E)
                     {
-                        YSM_IncomingPersonal(head, bsd);
+                        incomingPersonal(head, bsd);
                         sendCapabilities();
 
                         /* If we have no slaves we would */
@@ -620,7 +2164,7 @@ void incomingFlapSnacData(flap_head_t *head, bsd_t bsd)
                     break;
 
                 case YSM_CLIENT_ACK:
-                    YSM_Incoming_ClientAck(head, bsd);
+                    incomingClientAck(head, bsd);
                     break;
 
                 case YSM_HOST_ACK:    /* just a srv ack */
@@ -693,7 +2237,7 @@ void incomingFlapSnacData(flap_head_t *head, bsd_t bsd)
             switch (snac.subTypeId)
             {
                 case YSM_SRV_SEND_RSP:
-                    YSM_IncomingMultiUse(head, &snac, bsd);
+                    incomingMultiUse(head, &snac, bsd);
                     break;
 
                 default:
@@ -705,7 +2249,7 @@ void incomingFlapSnacData(flap_head_t *head, bsd_t bsd)
             switch (snac.subTypeId)
             {
                 case YSM_SRV_SEND_ROSTER:
-                    YSM_BuddyIncomingList(head, bsd);
+                    YSM_BuddyIncomingList(bsd);
                     YSM_SendContacts();
                     break;
 
@@ -738,15 +2282,15 @@ void incomingFlapCloseConnection(flap_head_t *head, bsd_t bsd)
     tlv_t         tlv;
     bs_pos_t      pos;
 
-    while (bsReadTlv(bsd, &tlv) == SIZEOF_TLV)
+    while (bsReadTlv(bsd, &tlv) == SIZEOF_TLV_HEAD)
     {
         pos = bsTell(bsd);
 
         switch (tlv.type)
         {
-            /* Check if someone else disconnected us        */
-            /* by logging in with our UIN #                 */
-            case 0x09:
+            /* Check if someone else disconnected us
+             * by logging in with our UIN # */
+            case 0x9:
                 printfOutput(VERBOSE_BASE, MSG_ERR_SAMEUIN, "\n");
                 printfOutput(VERBOSE_BASE,
                     "\n" MSG_ERR_DISCONNECTED "\n");
@@ -754,11 +2298,11 @@ void incomingFlapCloseConnection(flap_head_t *head, bsd_t bsd)
                 YSM_ERROR(ERROR_NETWORK, 0);
                 break;
 
-            case 0x01:
+            case 0x1:
                 /* skip our UIN */
             case 0x4:
                 /* skip the error description url */
-            case 0x8e:
+            case 0x8E:
                 /* reply from server */
                 break;
 
@@ -864,1012 +2408,6 @@ void incomingFlapCloseConnection(flap_head_t *head, bsd_t bsd)
     }
 }
 
-void YSM_BuddyChangeStatus(const snac_head_t *snac, bsd_t bsd)
-{
-    direct_connection_t    dcinfo;
-    uint16_t     flags = 0;
-    uint16_t     status = STATUS_OFFLINE;
-    uint32_t     fprint = 0;
-    uint8_t      uinLen = 0;
-    time_t        onsince = 0;
-    int8_t       *statusStr = NULL;
-    int8_t       *puin = NULL;
-    slave_t      *victim = NULL;
-
-    if (snac == NULL)
-        return;
-
-    bsReadByte(bsd, &uinLen);          /* UIN string length */
-    if (uinLen >= MAX_UIN_LEN) return;
-
-    puin = YSM_CALLOC(1, uinLen+1);
-    bsReadBuf(bsd, puin, uinLen);      /* UIN string */
-
-//    DEBUG_PRINT("uin: %s", puin);
-
-    victim = querySlave(SLAVE_UIN, NULL, atol(puin), 0);
-    if (victim == NULL)
-    {
-        DEBUG_PRINT(
-            "Received a status change for UIN %s which is not "
-            "in your list.\n", puin);
-
-        YSM_FREE(puin);
-        return;
-    }
-
-    memset(&dcinfo, 0, sizeof(dcinfo));
-
-    switch (snac->subTypeId)
-    {
-        case YSM_SRV_ONCOMING_BUD:
-            YSM_BuddyParseStatus(
-                    victim,
-                    bsd,
-                    &dcinfo,
-                    &fprint,
-                    &status,
-                    &flags,
-                    &onsince,
-                    &statusStr);
-            break;
-
-        case YSM_SRV_OFFGOING_BUD:
-            DEBUG_PRINT("slave %s went offline.", victim->info.nickName);
-            break;
-
-        default:
-            DEBUG_PRINT("Unknown subtype id");
-            YSM_FREE(puin);
-            return;
-    }
-
-    YSM_BuddyUpdateStatus(
-        victim,
-        &dcinfo,
-        status,
-        flags,
-        fprint,
-        onsince,
-        statusStr);
-
-    YSM_FREE(puin);
-}
-
-void YSM_ParseCapabilities(slave_t *victim, int8_t *caps, int32_t len)
-{
-    int32_t  x, y;
-    uint8_t cap_pre[3], capnum[3];
-
-    if (victim == NULL || caps == NULL || len <= 0)
-        return;
-
-    victim->caps = 0x00;
-
-    for (x = 0; x < len && ((len-x) >= 16); x += 16)
-    {
-        memcpy(&cap_pre[0], caps+x, 3);
-
-        if (!memcmp(cap_pre, CAP_PRECAP, 3))
-        {
-            snprintf(capnum, sizeof(capnum), "%c", *(caps+x+3));
-
-            if (!memcmp(capnum, CAP_SRVRELAY, 2))
-            {
-                victim->caps |= CAPFL_SRVRELAY;
-                printfOutput(VERBOSE_MOATA,
-                    "Found AIM Cap: SRVRELAY\n");
-            }
-            else if (!memcmp(capnum, CAP_ISICQ, 2))
-            {
-
-                victim->caps |= CAPFL_ISICQ;
-                printfOutput(VERBOSE_MOATA,
-                    "Found AIM Cap: ISICQ\n");
-            }
-            else if (!memcmp(capnum, CAP_UTF8, 2))
-            {
-                victim->caps |= CAPFL_UTF8;
-                printfOutput(VERBOSE_MOATA,
-                    "Found AIM Cap: UTF8\n");
-            }
-            else
-            {
-                printfOutput(VERBOSE_MOATA,
-                    "Unknown AIM capability found:"
-                    " \\x%.2X\n", capnum );
-            }
-            continue;
-        }
-        else if (!memcmp(cap_pre, CAP_PRERTF, 3))
-        {
-            snprintf(capnum, sizeof(capnum), "%c", *(caps+x+3));
-
-            if (!memcmp(capnum, CAP_RTF, 2))
-            {
-                victim->caps |= CAPFL_RTF;
-                printfOutput( VERBOSE_MOATA,
-                    "Found RTF Cap: RTF\n");
-            }
-            else
-            {
-                printfOutput( VERBOSE_MOATA,
-                    "Unknown RTF capability found:"
-                    " \\x%.2X\n", capnum );
-            }
-            continue;
-        }
-        else
-        {    /* might be Fingerprinting Capabilities */
-            if (!memcmp(caps+x, CAP_M2001, 16))
-            {
-                printfOutput(VERBOSE_MOATA, "Found fprint Cap: M2001\n");
-                victim->fprint = FINGERPRINT_M2000_CLIENT;
-            }
-            else if (!memcmp(caps+x, CAP_M2001_2, 16))
-            {
-                printfOutput(VERBOSE_MOATA, "Found fprint Cap: M2001_2\n");
-                victim->fprint = FINGERPRINT_M20012_CLIENT;
-            }
-            else if (!memcmp(caps+x, CAP_M2002, 16))
-            {
-                printfOutput(VERBOSE_MOATA, "Found fprint Cap: M2002\n");
-                victim->fprint = FINGERPRINT_M2002_CLIENT;
-            }
-            else if (!memcmp(caps+x, CAP_MLITE, 16))
-            {
-                printfOutput(VERBOSE_MOATA, "Found fprint Cap: ICQ LITE\n");
-                victim->fprint = FINGERPRINT_MICQLITE_CLIENT;
-            }
-            else if (!memcmp(caps+x, CAP_SIMICQ, 16))
-            {
-                printfOutput(VERBOSE_MOATA, "Found fprint Cap: SIMICQ\n");
-                victim->fprint = FINGERPRINT_SIMICQ_CLIENT;
-            }
-            else if (!memcmp(caps+x, CAP_MICQ, 16))
-            {
-                printfOutput(VERBOSE_MOATA, "Found fprint Cap: MICQ\n");
-                victim->fprint = FINGERPRINT_MICQ_CLIENT;
-            }
-            else if (!memcmp(caps+x, CAP_TRILL_NORM, 16))
-            {
-                printfOutput(VERBOSE_MOATA, "Found fprint Cap: TRILLIAN\n");
-                victim->fprint = FINGERPRINT_TRILLIAN_CLIENT;
-            }
-            else if (!memcmp(caps+x, CAP_TRILL_CRYPT, 16))
-            {
-                printfOutput(VERBOSE_MOATA, "Found fprint Cap: TRILLIAN CRYPT\n");
-                victim->fprint = FINGERPRINT_TRILLIAN_CLIENT;
-            }
-            else if (!memcmp(caps+x, CAP_LICQ, 16))
-            {
-                printfOutput(VERBOSE_MOATA, "Found fprint Cap: LICQ\n");
-                victim->fprint = FINGERPRINT_LICQ_CLIENT;
-            }
-            else
-            {
-                printfOutput(VERBOSE_MOATA, "Found an Unknown capability:\n");
-
-                for (y = 0; y < 16; y++)
-                    printfOutput( VERBOSE_MOATA,
-                        "\\x%.2x", *(caps+x+y));
-
-                printfOutput(VERBOSE_MOATA, "\n");
-            }
-        }
-    }
-
-    /* this is a patch for ICQ2Go who can't take UTF8 */
-    if (victim->fprint == FINGERPRINT_MICQLITE_CLIENT
-    && !(victim->caps & CAPFL_ISICQ))
-    {
-        victim->caps &= ~CAPFL_UTF8;
-        victim->fprint = FINGERPRINT_ICQ2GO_CLIENT;
-        printfOutput(VERBOSE_MOATA, "Found an ICQ2Go Client\n");
-    }
-}
-
-void YSM_BuddyParseStatus(
-    slave_t             *victim,     /* IN */
-    bsd_t                bsd,        /* IN */
-    direct_connection_t *dcinfo,     /* OUT */
-    uint32_t            *fprint,     /* OUT */
-    uint16_t            *status,     /* OUT */
-    uint16_t            *flags,      /* OUT */
-    time_t              *onsince,    /* OUT */
-    int8_t             **statusStr)  /* OUT */
-{
-    uint16_t   newStatus = 0;
-    uint16_t   newFlags = 0;
-    uint8_t    number;
-    uint16_t   type, len, encoding;
-    uint8_t    len8;
-    int8_t     notfound = TRUE, newfprint[4];
-    int8_t     rdcCookie[4];
-    tlv_t      tlv;
-    int8_t    *tlvPtr = NULL;
-    uint16_t   tlvCount;
-    string_t  *str;
-
-    if (victim == NULL || data == NULL)
-        return;
-
-    ptr += 2;            /* skip warning level */
-    READ_UINT16(&tlvCount, ptr);
-    tlvPtr = ptr;
-
-//    DEBUG_PRINT("tlvCount: %d", tlvCount);
-
-    for (; tlvCount > 0; tlvCount--)
-    {
-        READ_TLV(&tlv, tlvPtr);
-        ptr = tlvPtr;
-
-        switch (tlv.type)
-        {
-            case 0x000A:
-                if (tlv.len > 0)
-                {
-                    memcpy(&dcinfo->rIP_ext, ptr, 4);
-                }
-                break;
-
-            /* Direct Connection Info */
-            case 0x000C:
-                if (tlv.len > 0)
-                {
-                    /* Internal IP Address */
-                    memcpy(&dcinfo->rIP_int, ptr, 4);
-
-                    /* Port where client is listening */
-                    memcpy(&dcinfo->rPort, ptr+6, 2);
-
-                    /* Protocol Version */
-                    memcpy(&dcinfo->version, ptr+9, 2);
-
-                    /* DC Cookie */
-                    rdcCookie[0] = *(ptr+14);
-                    rdcCookie[1] = *(ptr+13);
-                    rdcCookie[2] = *(ptr+12);
-                    rdcCookie[3] = *(ptr+11);
-
-                    memcpy(&dcinfo->rCookie, rdcCookie, 4);
-
-                    /* Do fingerprinting. First check if theres the YSM
-                     * encryption identification, else look for common
-                     * YSM clients (old ones) */
-
-                    *fprint = Chars_2_DW(ptr+31);
-                    if (*fprint != FINGERPRINT_YSM_CLIENT_CRYPT)
-                    {
-                        newfprint[0] = *(ptr+26);
-                        newfprint[1] = *(ptr+25);
-                        newfprint[2] = *(ptr+24);
-                        newfprint[3] = *(ptr+23);
-
-                        *fprint = Chars_2_DW(newfprint);
-                    }
-                }
-                break;
-
-            /* Capabilities */
-            case 0x000D:
-                if (tlv.len > 0)
-                {
-                    YSM_ParseCapabilities(victim, ptr, tlv.len);
-                }
-                break;
-
-            case 0x0006:
-                notfound = FALSE;
-                if (tlv.len > 0)
-                {
-                    READ_UINT16(&newFlags, ptr);
-                    READ_UINT16(&newStatus, ptr);
-                }
-                break;
-
-            case 0x0003:
-                /* time_t */
-                if (tlv.len == 0x4)
-                {
-                    READ_UINT32((int32_t *)onsince, ptr);
-                    *onsince -= YSM_USER.delta;
-                }
-
-                /* just cheat and quit, we only care */
-                /* about the STATUS and online since */
-                /* by now. */
-                break;
-
-            /* user icon id & hash */
-            case 0x001D:
-                while (ptr - tlvPtr < tlv.len)
-                {
-                    READ_UINT16(&type, ptr);
-                    READ_UINT8(&number, ptr);
-                    READ_UINT8(&len8, ptr);
-
-                    if (type == 0x0002)
-                    {
-                        /* a status/available message */
-                        if (len8 >= 4)
-                        {
-                            READ_UINT16(&len, ptr);
-                            *statusStr = YSM_CALLOC(1, len+1);
-                            READ_STRING(*statusStr, ptr, len);
-                            READ_UINT16(&encoding, ptr);
-                            if (encoding == 0x0001)
-                            {
-                                /* we have an encoding */
-                                READ_UINT16(&len, ptr);
-//                                READ_STRING(&statusStr, ptr, len);
-                                ptr += len;
-                                *statusStr = NULL;
-                            }
-                            else
-                            {
-                                YSM_CharsetConvertString(
-                                    statusStr,
-                                    CHARSET_INCOMING,
-                                    MFLAGTYPE_UTF8,
-                                    TRUE);
-                            }
-                        }
-                    }
-                }
-                break;
-
-            default:
-                break;
-        }
-
-        tlvPtr += tlv.len;
-    }
-
-     /* This is really raro, at a beginning I believe i was */
-     /* actually receiving the ONLINE status change, but it */
-     /* now seems i'm not! Anyways, we know that if its an */
-     /* ONCOMING bud message and we dont find the status, */
-     /* its online, smart, huh? =) */
-
-    if (notfound)
-        *status = STATUS_ONLINE;
-    else
-        *status = newStatus;
-
-    *flags = newFlags;
-}
-
-
-void YSM_BuddyUpdateStatus(
-    slave_t             *victim,
-    direct_connection_t *dcinfo,
-    uint16_t            status,
-    uint16_t            flags,
-    uint32_t            fprint,
-    time_t               onsince,
-    int8_t              *statusStr)
-{
-    if (victim == NULL || dcinfo == NULL)
-        return;
-
-    victim->d_con.rIP_int    = dcinfo->rIP_int;
-    victim->d_con.rIP_ext    = dcinfo->rIP_ext;
-    victim->d_con.rPort      = htons(dcinfo->rPort);
-    victim->d_con.rCookie    = dcinfo->rCookie;
-    victim->d_con.version    = htons(dcinfo->version);
-
-    if (flags & STATUS_FLBIRTHDAY)
-    {
-        if (victim->budType.birthday != 0x2)
-            victim->budType.birthday = 0x1;
-    }
-    else
-        victim->budType.birthday = FALSE;
-
-    /* Fingerprint the remote client */
-    switch (fprint)
-    {
-        case FINGERPRINT_MIRANDA_CLIENT:
-        case FINGERPRINT_STRICQ_CLIENT:
-        case FINGERPRINT_MICQ_CLIENT:
-        case FINGERPRINT_LIB2K_CLIENT:
-        case FINGERPRINT_YSM_CLIENT:
-        case FINGERPRINT_YSM_CLIENT_CRYPT:
-        case FINGERPRINT_TRILLIAN_CLIENT:
-        case FINGERPRINT_MICQ2003A_CLIENT_1:
-        case FINGERPRINT_MICQ2003A_CLIENT_2:
-        case FINGERPRINT_MICQLITE_CLIENT:
-            victim->fprint = fprint;
-            break;
-
-        /* maybe it was detected inside YSM_ParseCapabilities */
-        /* but if its v8 lets say its an icq 2003 pro A */
-        default:
-            if (victim->d_con.version == 0x08)
-                victim->fprint = FINGERPRINT_MICQ2003A_CLIENT_1;
-            break;
-    }
-
-    if (victim->statusStr != NULL)
-        YSM_FREE(victim->statusStr);
-
-    victim->statusStr = statusStr;
-
-    /* clear slave fields if its going offline. */
-    if (status == STATUS_OFFLINE)
-    {
-        victim->caps   = 0;
-        victim->fprint = 0;
-    }
-
-    /* Slave Timestamps */
-    if (victim->status != status)
-    {
-        if (victim->status == STATUS_OFFLINE)
-        {
-            /* If it's the first time we see this
-             * slave, don't update the status change.
-             */
-
-            if (victim->timing.signOn == 0)
-                victim->timing.statusChange = 0;
-            else
-                victim->timing.statusChange = onsince;
-
-            victim->timing.signOn = onsince;
-        }
-        else
-        {
-            victim->timing.statusChange = time(NULL);
-        }
-    }
-
-    /* is the slave in our ignore list? don't bother us with their
-     * status changes, we dont care, we might really hate that slave */
-
-    if (victim->budType.ignoreId)
-    {
-        victim->status = status;
-        return;
-    }
-
-    /* Fix for a known bug where the server keeps re-sending us */
-    /* the status of each slave even though its the very same */
-    /* unchanged */
-    if (victim->status == status) return;
-
-    /* are we in CHAT MODE ? we dont print messages which don't belong
-     * to our chat session!. */
-    if (g_state.promptFlags & FL_CHATM)
-    {
-        if (victim == NULL || !(victim->flags & FL_CHAT))
-            return;
-    }
-
-    /* Is this slave's Birthday? */
-    if (victim->budType.birthday == 0x1)
-    {
-        printfOutput(VERBOSE_BASE,
-            "INFO BIRTHDAY %ld %s\n",
-            victim->uin,
-            victim->info.nickName);
-
-        /* only inform once this way */
-        victim->budType.birthday = 0x2;
-    }
-
-    /* Okie, now print the status change line */
-    printfOutput(VERBOSE_STCHANGE,
-        "INFO STATUS %ld %s %s\n",
-        victim->uin,
-        victim->info.nickName,
-        strStatus(status));
-
-    victim->status = status;
-}
-
-/*
- * The return value of this function should tell its caller if its
- * required to send an ACK, since certain m_types dont require ACKS.
- * ret = 0 -> something happened, error type normal (DC handles this)
- * ret < 0 -> something happened, error type critical (DC handles this)
- * ret = 1 -> everything went ok, dont send an ACK.
- * ret > 1 -> everything went ok, send an ACK.
- */
-
-static int32_t YSM_ReceiveMessageData(
-    slave_t       *sender,
-    msg_type_t     msgType,
-    uint8_t        msgFlags,
-    const uint8_t *msgData,
-    int16_t        msgLen)
-{
-    int8_t   *datap = NULL, *preason = NULL;
-    int32_t   i = 0, c = 0, ret = 2;
-
-    DEBUG_PRINT("from %dl, len: %d", sender->uin, msgLen);
-
-    /* Are we in Antisocial mode? */
-    if (victim == NULL && g_cfg.antisocial && msgType != YSM_MESSAGE_AUTH)
-        return 0;
-
-    sender->timing.lastMessage = time(NULL);
-
-    switch (msgType)
-    {
-        case YSM_MESSAGE_NORMAL:
-            g_state.lastRead = sender->uin;
-            datap = msgData;
-            break;
-
-        case YSM_MESSAGE_AUTH:
-            for (i = 0; i < msgLen; i++)
-            {
-                if ((uint8_t)message[i] == 0xfe) c++;
-
-                /* on the 5th 0xfe we have the reason msg */
-                if (c == 5) {
-                    preason = strchr(message + i, 0xfe);
-                    if (preason != NULL)
-                        preason++;
-                    else
-                        preason = "No Reason";
-
-                    /* Break out of the for loop! */
-                    break;
-                }
-            }
-
-            datap = preason;
-            break;
-
-        case YSM_MESSAGE_CONTACTS:
-        case YSM_MESSAGE_URL:
-            datap = msgData;
-            break;
-
-        case YSM_MESSAGE_ADDED:        /* these msgs lack of data */
-        case YSM_MESSAGE_AUTHOK:
-        case YSM_MESSAGE_AUTHNOT:
-            datap = NULL;
-            break;
-
-        case YSM_MESSAGE_PAGER:
-            datap = msgData + 1;
-            break;
-
-        case YSM_MESSAGE_GREET:
-            /* only with slaves */
-            if (victim != NULL)
-            {
-               /* we use m_data and not message here because these
-                * messages had a blank LNTS before them. Tricky huh. */
-                ret = YSM_DC_IncomingMessageGREET( victim,
-                            msgType,
-                            msgFlags,
-                            m_data,
-                            msgLen,
-                            status);
-            }
-            return ret;
-
-        case YSM_MESSAGE_FILE:
-            /* only with slaves */
-            if (victim != NULL)
-            {
-               /* This is done in v7, but, clients such as TRILLIAN
-                * who identify theirselves as v8 clients, still send
-                * this. What a pain in the ass man, come on!.
-                */
-                ret = YSM_DC_IncomingMessageFILE(victim,
-                    msgType,
-                    msgFlags,
-                    m_data,
-                    msgLen,
-                    status);
-            }
-            return ret;
-
-        default:
-            printfOutput(VERBOSE_MOATA,
-                "YSM_ReceiveMessageData: Unknown msgType received.\n");
-
-            return 1;
-    }
-
-    YSM_DisplayMsg(
-        sender,
-        msgType,
-        msgLen,
-        datap,
-        msgFlags);
-
-    return ret;
-}
-
-void YSM_ReceiveMessageType1(bsd_t bsd, slave_t *sender)
-{
-    int8_t    *msgPtr = NULL;
-    uint16_t   msgLen = 0;
-    uint8_t    msgFlags = 0;
-    uint16_t   dataLen = 0;
-    tlv_t      tlv;
-    bs_pos_t   startPos;
-    bs_pos_t   msgPos;
-    bs_pos_t   pos;
-    uint8_t    charsetNumber = 0;
-
-    DEBUG_PRINT("");
-
-    bsReadTlv(bsd, &tlv);
-
-    if (tlv.type != 2)
-        return;
-
-    dataLen = tlv.len;
-    hexDumpOutput(bsGetPtr(bsd), tlv.len);
-    startPos = bsTell(bsd);
-
-    /* to have a limit in case anything happens */
-    while (bsTell(bsd) - startPos < dataLen 
-           && bsReadTlv(bsd, &tlv) == SIZEOF_TLV)
-    {
-        pos = bsTell(bsd);
-
-        switch (tlv.type)
-        {
-            case 0x0101:      /* Message TLV */
-                msgLen = tlv.len - 4;
-
-                /* here comes encoding information:
-                    0x0000 -> US-ASCII
-                    0x0002 -> UCS-2BE
-                 */
-
-                bsReadWord(bsd, &charsetNumber);
-                bsSeek(bsd, SIZEOF_WORD, BS_SEEK_CUR); /* charset subset */
-
-                if (charsetNumber == 0x2)
-                {
-                    /* its UTF-16 (UCS-2BE) */
-                    msgFlags |= MFLAGTYPE_UCS2BE;
-                }
-                msgPos = bsTell(bsd);
-                break;
-
-            default:
-                break;
-        }
-
-        bsSeek(bsd, pos + tlv.len, BS_SEEK_SET);
-    }
-
-    if (msgPtr != 0)
-    {
-        /* only normal messages come in type1 */
-        YSM_ReceiveMessageData(bsd, sender, 0x01, msgFlags, msgLen, msgPtr);
-    }
-}
-
-/* This function can be called from DC PEER_MSGs as well as from
- * ReceiveMessageType2() since the main type2 message body is
- * the same for both. If dc_flag is TRUE, it was called from DC.
- */
-
-int32_t YSM_ReceiveMessageType2Common(
-    slave_t    *victim,
-    int32_t     tsize,
-    uint8_t   *data,
-    uin_t       uin,
-    uint16_t   r_status,
-    int8_t     *m_id,
-    uint8_t    m_flags,
-    uint16_t  *msgSeq,
-    int8_t      dc_flag)
-{
-    int8_t      m_len[2], m_priority[2], *pguid = NULL;
-    msg_type_t  msgType = YSM_MESSAGE_UNDEF;
-    int16_t     m_status = 0;
-    int32_t     ret = TRUE;
-
-    DEBUG_PRINT("");
-
-    tsize += 2;    /* Some Length        */
-    readUint16LE(msgSeq, data + tsize);
-    tsize += 2;    /* SEQ2            */
-    tsize += 12;   /* Unknown         */
-
-    msgType = data[tsize];
-    tsize += 2;    /* Msg Type+flags    */
-    memcpy(&m_status, data + tsize, 2);
-    tsize += 2;    /* Status        */
-    memcpy(&m_priority, data + tsize, 2);
-    tsize += 2;    /* Priority        */
-    memcpy(&m_len, data + tsize, 2);
-    tsize += 2;    /* Msg Length        */
-
-    /* empty messages sent by icq 2002/2001 clients are ignored */
-    if ((Chars_2_Word(m_len) <= 0x1)
-    && m_priority[0] == 0x02  && m_priority[1] == 0x00)
-    {
-        return ret;
-    }
-
-    /* after the message data, there might be a GUID identifying
-     * the type of encoding the sent message is in.
-     * if the message type is a MESSAGE, GUIDs come after
-     * 8 bytes of colors (fg(4) + bg(4))
-     */
-    pguid = data+tsize+Chars_2_Word(m_len);
-    if (msgType == YSM_MESSAGE_NORMAL) pguid += 8;
-
-    if ((uint32_t)(*pguid) == 0x26    /* size of the UTF8 GUID */
-    && !memcmp(pguid+4, CAP_UTF8_GUID, sizeof(CAP_UTF8_GUID))) {
-        m_flags |= MFLAGTYPE_UTF8;
-    }
-
-    if (dc_flag) /* dirty hack for ICQ 2003a, thanks samm at os2 dot ru */
-        m_flags |= MFLAGTYPE_UTF8;
-
-    /* m_status in type2 messages depending on the message subtype
-     * will be the user'status or the message status.
-     */
-
-    ret = YSM_ReceiveMessageData(victim,
-        uin,
-        m_status,
-        msgType,
-        m_flags,
-        Chars_2_Word(m_len),
-        data+tsize);
-
-    if (ret > 1)
-    {
-        if (!dc_flag)
-            sendAckType2(uin, *msgSeq, msgType, m_id);
-        else
-            YSM_DC_MessageACK(victim, msgType);
-    }
-
-    return ret;
-}
-
-void YSM_ReceiveMessageType2(
-    bsd_t     bsd,
-    uin_t     uin,
-    uint16_t  status,
-    uint8_t  *msgId)
-{
-    int32_t    MsgTLV = 0;
-    int16_t    tmplen = 0, cmd = 0;
-    int8_t     foundtlv = FALSE, m_type[4];
-    uint16_t  msgSeq;
-    uint8_t   m_flags = 0;
-    tlv_bit_t  thetlv;
-
-    memset( &thetlv, '\0', sizeof(tlv_bit_t) );
-    memcpy( &thetlv, data+tsize, sizeof(tlv_bit_t));
-    MsgTLV = Chars_2_Wordb(thetlv.len);
-    MsgTLV += tsize;
-
-    /* Skip the first 0x5 TLV */
-    tsize += sizeof(tlv_bit_t);
-    memcpy( &cmd, data+tsize, 2 );
-    tsize += 2;        /* ACK TYPE */
-                /* 0x0000 -> Text Message    */
-                /* 0x0001 -> Abort Request    */
-                /* 0x0002 -> File ACK        */
-
-    switch (cmd)
-    {
-        case 0x0000:
-            m_flags |= MFLAGTYPE_NORM;
-            break;
-
-        case 0x0001:
-            m_flags |= MFLAGTYPE_END;
-            break;
-
-        case 0x0002:
-            m_flags |= MFLAGTYPE_ACK;
-            break;
-
-        default:
-            printfOutput( VERBOSE_MOATA,
-                "ReceiveMessageType2: unknown cmd(%d).\n",
-                 cmd );
-            return;
-    }
-
-    tsize += 8;        /* timestamp + random msg id */
-    tsize += 16;        /* capabilities */
-
-    /* to have a limit in case anything happends */
-    while (!foundtlv && tsize < MsgTLV)
-    {
-        memset( &thetlv, '\0', sizeof(tlv_bit_t) );
-        memcpy( &thetlv, data+tsize, sizeof(tlv_bit_t));
-                tsize += sizeof(tlv_bit_t);
-                tmplen = Chars_2_Wordb(thetlv.len);
-
-        switch (Chars_2_Wordb(thetlv.type))
-        {
-            case 0x2711:      /* Message C TLV */
-                tsize += 2;    /* len till SEQ1    */
-                tsize += 2;    /* TCP Version #    */
-                tsize += 16;    /* Capabilities        */
-                tsize += 3;    /* Unknown        */
-                memcpy( &m_type, data+tsize, 4 );
-                tsize += 4;    /* 0x00000000 -> Normal Msg
-                           0x00000004 -> File OK/Req */
-
-                tsize += 2;    /* SEQ1            */
-                foundtlv=TRUE;
-                break;
-
-            case 0x3:
-                tsize += tmplen;
-                break;
-
-            case 0x5:
-                tsize += tmplen;
-                break;
-
-            case 0x4:
-                tsize += tmplen;
-                break;
-
-            default:
-                tsize += tmplen;
-                break;
-        }
-    }
-
-    /* No boy, get out now */
-    if (!foundtlv) return;
-
-    YSM_ReceiveMessageType2Common(
-        bsd,
-        uin,
-        r_status,
-        msgId,
-        m_flags,
-        &msgSeq,
-        0x00);
-}
-
-void YSM_ReceiveMessageType4(bsd_t bsd, slave_t *sender)
-{
-    uint16_t    msgLen;
-    msg_type_t  msgType;
-    tlv_t       tlv5;
-    uin_t       yetAnotherUin;
-
-    DEBUG_PRINT("");
-
-    bsReadTlv(bsd, &tlv5);
-
-    if (tlv5.type != 0x5)
-        return;
-
-    bsReadDwordLE(bsd, &yetAnotherUin);
-
-    if (yetAnotherUin != sender->uin)
-    {
-        DEBUG_PRINT("uins have not equal (%ld != %ld)", sender->uin, yetAnotherUin);
-    }
-
-    bsReadByte(bsd, &msgType);
-    bsSeek(bsd, SIZEOF_BYTE, BS_SEEK_CUR);    /* Msg flags */
-    bsReadWordLE(bsd, &msgLen);
-
-    YSM_ReceiveMessageData(bsd, sender, msgType, 0x00, msgLen, ptr);
-}
-
-void YSM_ReceiveMessage(flap_head_t *flap, bsd_t bsd)
-{
-    uint16_t  warnLevel;
-    uint16_t  tlvCount;
-    uint16_t  msgChannel;
-    uint16_t  statusFlags;
-    uint16_t  status;
-    uint8_t   msgId[8];
-    uin_t     uin;
-    int8_t   *strUin = NULL;
-    int8_t    uinLen = 0;
-    tlv_t     tlv;
-    bs_pos_t  pos;
-    slave_t   slave;
-    slave_t  *sender;
-
-    DEBUG_PRINT("");
-
-    bsRead(bsd, msgId, sizeof(msgId));
-    bsReadWord(bsd, &msgChannel);
-    bsReadByte(bsd, &uinLen);
-
-    strUin = YSM_CALLOC(1, uinLen+1);
-    if (!strUin || uinLen+1 < 1) return;
-
-    bsRead(bsd, strUin, uinLen);
-    uin = atol(strUin);
-    YSM_FREE(strUin);
-
-    bsReadWord(bsd, &warnLevel);
-    bsReadWord(bsd, &tlvCount);
-
-    /* When there is no data, we just get a single TLV */
-    /* to avoid any problems, we analyze the packet right now */
-
-    if (tlvCount == 0)
-    {
-        /* weird it is..but it seems WWP messages sent through icq.com carry not TLVs..
-         * we'll make a sanity check anyway only allowing messages type 4..
-         */
-        if (msgChannel == 0x4)
-        {
-            YSM_ReceiveMessageType4(bsd, uin, status);
-        }
-        return;
-    }
-
-    for (; tlvCount > 0 && bsReadTlv(bsd, &tlv) == SIZEOF_TLV; tlvCount--)
-    {
-        pos = bsTell(bsd);
-
-        switch (tlv.type)
-        {
-            case 0x06:      /* senders status */
-                bsReadWord(bsd, &statusFlags);
-                bsReadWord(bsd, &status);
-                break;
-
-            case 0x03:      /* user login timestamp */
-            case 0x13:      /* no idea what this is, just yet */
-            default:
-                break;
-        }
-
-        bsSeek(bsd, pos + tlv.len, BS_SEEK_SET);
-    }
-
-    if ((sender = querySlave(SLAVE_UIN, 0, uin, 0)) == NULL)
-    {
-        /* initialize not a slave */
-        sender = &slave;
-        memset(slave, 0, sizeof(slave));
-        strncpy(slave.info.nickName, NOT_A_SLAVE, sizeof(slave.info.nickName));
-        slave.uin = uin;
-        slave.status = status;
-    }
-
-
-    DEBUG_PRINT("uin = %ld", uin);
-
-    switch (msgChannel)
-    {
-        case 0x01:    /* Normal Msg. */
-            YSM_ReceiveMessageType1(bsd, sender);
-            break;
-
-        case 0x02:    /* Complex Msg, yack! */
-            YSM_ReceiveMessageType2(bsd, sender, msgId);
-            break;
-
-        case 0x04:    /* Utility Msg. */
-            YSM_ReceiveMessageType4(bsd, sender);
-            break;
-
-        default:
-            printfOutput(VERBOSE_MOATA,
-                "INFO DEBUG Unknown type (0x%.2X) received.\n",
-                msgChannel);
-            break;
-    }
-}
-
 void sendAckType2(
     uin_t       uin,
     uint16_t    msgSeq,
@@ -1971,17 +2509,13 @@ int32_t YSM_LoginSequence(uin_t uin, int8_t *password)
     YSM_FREE(data);
 
     /* ok we sent the first SNAC, we have to receive 17, 07
-     * as a valid response
-     */
+     * as a valid response */
 
     memset(&head, 0, sizeof(head));
 
-    r = YSM_READ(YSM_USER.network.rSocket,
-            &head,
-            FLAP_HEAD_SIZE,
-            0);
+    r = YSM_READ(YSM_USER.network.rSocket, &head, SIZEOF_FLAP_HEAD, 0);
 
-    if (r < 1 || r != FLAP_HEAD_SIZE) return -1;
+    if (r < 1 || r != SIZEOF_FLAP_HEAD) return -1;
 
     buf = YSM_CALLOC(1, Chars_2_Wordb(head.dlen)+1);
 
@@ -2019,17 +2553,11 @@ void YSM_Init_LoginA(uin_t uin, uint8_t *password)
     memset(&head, '\0', sizeof(head));
     memset(buf, '\0', 4);
 
-    r = YSM_READ(YSM_USER.network.rSocket,
-            &head,
-            FLAP_HEAD_SIZE,
-            1);
+    r = YSM_READ(YSM_USER.network.rSocket, &head, SIZEOF_FLAP_HEAD, 1);
 
-    if (r < FLAP_HEAD_SIZE) return;
+    if (r < SIZEOF_FLAP_HEAD) return;
 
-    r = YSM_READ(YSM_USER.network.rSocket,
-            &buf,
-            sizeof(buf),
-            1);
+    r = YSM_READ(YSM_USER.network.rSocket, &buf, sizeof(buf), 1);
 
     if (r < (int32_t)sizeof(buf)) return;
 
@@ -2266,16 +2794,178 @@ int32_t YSM_ChangeStatus(uint16_t status)
     return status;
 }
 
-int32_t sendMessage2Client(
-    slave_t   *victim,
+void bsAppendMessageHead(
+    bsd_t      bsd,
     uin_t      uin,
     int16_t    msgFormat,
-    int32_t    msgType,
-    int8_t    *msgData,
-    int32_t    msgLen,
-    uint8_t    msgFlags,
-    uint8_t    sendFlags,
-    uint32_t   reqId)
+    uint32_t  msgTime,
+    uint32_t  msgId)
+{
+    bsAppendDword(bsd, msgTime);                /* mtimestamp */
+    bsAppendDword(bsd, msgId);                  /* mID */
+    bsAppendWord(bsd, msgFormat);               /* msg sending type */
+    bsAppendPrintfString08(bsd, "%ld", uin);    /* uin string08 */
+}
+
+void bsAppendMessageBodyType1(
+    bsd_t        bsd,
+    slave_hnd_t *victim,
+    int8_t      *msgData,
+    int32_t      msgLen)
+{
+    bs_pos_t  tlv2;
+    bs_pos_t  tlv257;
+    sl_caps_t caps = 0;
+
+    getSlaveCapabilities(victim, &caps);
+
+    tlv2 = bsAppendTlv(bsd, 0x02, 0, NULL);
+
+    /* 0x05 frag id (array of req. capabilities) */
+    /* 0x01 fragment version */
+    bsAppendTlv(bsd, 0x0501, 1, NULL);
+    bsAppendByte(bsd, 0x01);       /* byte array of req. capab. (1 - text) */
+
+    /* 0x01 fragment id (text message) */
+    /* 0x01 fragment version */
+    tlv257 = bsAppendTlv(bsd, 0x0101, 0, NULL);
+    if (caps & CAPFL_UTF8)
+        bsAppendWord(bsd, ICBM__IM_SECTION_ENCODINGS_UNICODE); /* encoding */
+    else
+        bsAppendWord(bsd, ICBM__IM_SECTION_ENCODINGS_ASCII);   /* encoding */
+    bsAppendWord(bsd, 0x0);                                    /* language */
+    bsAppend(bsd, msgData, msgLen);
+
+    bsUpdateTlvLen(bsd, tlv257);
+    bsUpdateTlvLen(bsd, tlv2);
+}
+
+void bsAppendMessageBodyType2(
+    bsd_t        bsd,
+    slave_hnd_t *victim,
+    int8_t      *msgData,
+    int32_t      msgLen,
+    int32_t      msgType,
+    uint32_t     msgTime,
+    uint32_t     msgId,
+    uint8_t      msgFlags,
+    uint8_t      sendFlags)
+{
+    bs_pos_t    tlv5;
+    bs_pos_t    tlv2711;
+    sl_status_t status;
+
+    tlv5 = bsAppendTlv(bsd, 0x05, 0, NULL); /* TVL 0x05: rendezvous msg data */
+    bsAppendWord(bsd, 0x00);           /* ack type 0 - normal msg */
+    bsAppendDword(bsd, msgTime);       /* copy of head timestamp */
+    bsAppendDword(bsd, msgId);         /* copy of head mID */
+
+    /* FIXME: this is aweful. since the scan commands uses a 'specially'
+     * crafted message in order to reveal someones real status..and we
+     * really dont want to add another parameter nor function for it.
+     * we have to code the following aweful comparisons against msgFlags
+     * being 0x19 (used only in scan requests). sorry :)
+     * Oh, btw, the problem is that we cant send capabilities during scan.
+     * If msgFlags are 0x19, we set them to 0x03 afterwards so it works.
+     */
+
+    /* capability -> 16 bytes */
+    if (msgFlags != 0x19)
+    {
+        bsAppend(bsd, CAP_PRECAP, sizeof(CAP_PRECAP)-1);
+        bsAppend(bsd, CAP_SRVRELAY, sizeof(CAP_SRVRELAY)-1);
+        bsAppend(bsd, CAP_POSCAP, sizeof(CAP_POSCAP)-1);
+    }
+    else
+    {
+        bsAppend(bsd, "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0", 16); /* empty capability */
+    }
+    
+    bsAppendTlv(bsd, 0x0A, 2, NULL);        /* TLV 0x0A: Acktype2 */
+    bsAppendWord(bsd, 0x01);
+    bsAppendTlv(bsd, 0x0F, 0, NULL);        /* TLV 0x0F: unknown and empty */
+
+    tlv2711 = bsAppendTlv(bsd, 0x2711, 0, NULL); /* TLV 0x2711: ext. data */
+
+    bsAppendWordLE(bsd, 0x1B);                 /* length till sequence # */
+    bsAppendWordLE(bsd, YSM_PROTOCOL_VERSION); /* TCP protocol version */
+    bsAppend(bsd, "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0", 16); /* empty capability */
+    bsAppendWord(bsd, 0x00);                /* unknown */
+    bsAppendByte(bsd, 0x03);
+    bsAppendDword(bsd, 0x00);               /* msg global type */
+    bsAppendWordLE(bsd, 0x00);              /* sequence # */
+    bsAppendWordLE(bsd, 0x0E);              /* unknown length */
+    bsAppendWordLE(bsd, 0x00);              /* sequence # */
+    bsAppend(bsd, "\0\0\0\0\0\0\0\0\0\0\0\0", 12); /* unknown */
+
+    /*** scan fix, read above ****/
+    if (msgFlags == 0x19) msgFlags = 0x03;
+
+    bsAppendByte(bsd, msgType);             /* msgType */
+    bsAppendByte(bsd, msgFlags);
+    bsAppendWordLE(bsd, 0x0000);            /* status code */
+
+    getSlaveStatus(victim, &status);
+
+    if (status == STATUS_DND)
+        bsAppendWordLE(bsd, 0x04);
+    else
+        bsAppendWordLE(bsd, 0x21);          /* priority */
+
+    bsAppendWordLE(bsd, msgLen + 1);        /* message stringz length */
+    bsAppend(bsd, msgData, msgLen);         /* message string */
+    bsAppendByte(bsd, 0x00);                /* null-terminator */
+
+    if (sendFlags & MFLAGTYPE_NORM)         /* do we have to insert colors? */
+    {
+        bsAppendDwordLE(bsd, 0x00000000);   /* text color (rgbn) */
+        bsAppendDwordLE(bsd, 0xFFFFFF00);   /* background color (rgbn) */
+    }
+
+    /* do we have to insert a GUID? */
+    if (sendFlags & MFLAGTYPE_RTF)
+    {
+        bsAppendDword(bsd, sizeof(CAP_RTF_GUID)-1);
+        bsAppend(bsd, CAP_RTF_GUID, sizeof(CAP_RTF_GUID)-1);
+    }
+    else if (sendFlags & MFLAGTYPE_UTF8)
+    {
+        bsAppendDword(bsd, sizeof(CAP_UTF8_GUID)-1);
+        bsAppend(bsd, CAP_UTF8_GUID, sizeof(CAP_UTF8_GUID)-1);
+    }
+
+    bsUpdateTlvLen(bsd, tlv2711);
+    bsUpdateTlvLen(bsd, tlv5);
+}
+
+void bsAppendMessageBodyType4(
+    bsd_t     bsd,
+    int8_t   *msgData,
+    int32_t   msgLen,
+    int32_t   msgType,
+    uint8_t   msgFlags)
+{
+    bs_pos_t  tlv5;
+
+    tlv5 = bsAppendTlv(bsd, 0x05, 0, NULL); /* TLV 0x05: message data */
+    bsAppendDwordLE(bsd, YSM_USER.uin);     /* sender uin */
+    bsAppendByte(bsd, msgType);             /* message type */
+    bsAppendByte(bsd, msgFlags);            /* message flags */
+    bsAppendByte(bsd, msgLen + 1);          /* message stringz len */
+    bsAppend(bsd, msgData, msgLen);         /* message string */
+    bsAppendByte(bsd, 0x00);                /* null-terminator */
+    bsUpdateTlvLen(bsd, tlv5);
+}
+
+int32_t sendMessage2Client(
+    slave_hnd_t *victim,
+    int16_t      msgFormat,
+    msg_type_t   msgType,
+    int8_t      *msgData,
+    int32_t      msgLen,
+    uint8_t      msgFlags,
+    uint8_t      sendFlags,
+    req_id_t     reqId)
 {
     uint32_t   msgTime = 0;
     uint32_t   msgId = 0;
@@ -2286,7 +2976,7 @@ int32_t sendMessage2Client(
 
     bsd = initBs();
 
-    bsAppendMessageHead(bsd, uin, msgFormat, msgTime, msgId);
+    bsAppendMessageHead(bsd, victim->uin, msgFormat, msgTime, msgId);
 
     switch (msgFormat)
     {
@@ -2346,163 +3036,6 @@ int32_t sendMessage2Client(
     return 0;
 }
 
-void bsAppendMessageHead(
-    bsd_t      bsd,
-    uin_t      uin,
-    int16_t    msgFormat,
-    uint32_t  msgTime,
-    uint32_t  msgId)
-{
-    bsAppendDword(bsd, msgTime);                /* mtimestamp */
-    bsAppendDword(bsd, msgId);                  /* mID */
-    bsAppendWord(bsd, msgFormat);               /* msg sending type */
-    bsAppendPrintfString08(bsd, "%ld", uin);    /* uin string08 */
-}
-
-void bsAppendMessageBodyType1(
-    bsd_t    bsd,
-    slave_t *victim,
-    int8_t  *msgData,
-    int32_t  msgLen)
-{
-    bs_pos_t tlv2;
-    bs_pos_t tlv257;
-
-    tlv2 = bsAppendTlv(bsd, 0x02, 0, NULL);
-
-    /* 0x05 frag id (array of req. capabilities) */
-    /* 0x01 fragment version */
-    bsAppendTlv(bsd, 0x0501, 1, NULL);
-    bsAppendByte(bsd, 0x01);       /* byte array of req. capab. (1 - text) */
-
-    /* 0x01 fragment id (text message) */
-    /* 0x01 fragment version */
-    tlv257 = bsAppendTlv(bsd, 0x0101, 0, NULL);
-    if (victim && victim->caps & CAPFL_UTF8)
-        bsAppendWord(bsd, ICBM__IM_SECTION_ENCODINGS_UNICODE); /* encoding */
-    else
-        bsAppendWord(bsd, ICBM__IM_SECTION_ENCODINGS_ASCII);   /* encoding */
-    bsAppendWord(bsd, 0x0);                                    /* language */
-    bsAppend(bsd, msgData, msgLen);
-
-    bsUpdateTlvLen(bsd, tlv257);
-    bsUpdateTlvLen(bsd, tlv2);
-}
-
-void bsAppendMessageBodyType2(
-    bsd_t        bsd,
-    slave_t     *victim,
-    int8_t      *msgData,
-    int32_t      msgLen,
-    int32_t      msgType,
-    uint32_t    msgTime,
-    uint32_t    msgId,
-    uint8_t     msgFlags,
-    uint8_t     sendFlags)
-{
-    bs_pos_t tlv5;
-    bs_pos_t tlv2711;
-
-    tlv5 = bsAppendTlv(bsd, 0x05, 0, NULL); /* TVL 0x05: rendezvous msg data */
-    bsAppendWord(bsd, 0x00);           /* ack type 0 - normal msg */
-    bsAppendDword(bsd, msgTime);       /* copy of head timestamp */
-    bsAppendDword(bsd, msgId);         /* copy of head mID */
-
-    /* FIXME: this is aweful. since the scan commands uses a 'specially'
-     * crafted message in order to reveal someones real status..and we
-     * really dont want to add another parameter nor function for it.
-     * we have to code the following aweful comparisons against msgFlags
-     * being 0x19 (used only in scan requests). sorry :)
-     * Oh, btw, the problem is that we cant send capabilities during scan.
-     * If msgFlags are 0x19, we set them to 0x03 afterwards so it works.
-     */
-
-    /* capability -> 16 bytes */
-    if (msgFlags != 0x19)
-    {
-        bsAppend(bsd, CAP_PRECAP, sizeof(CAP_PRECAP)-1);
-        bsAppend(bsd, CAP_SRVRELAY, sizeof(CAP_SRVRELAY)-1);
-        bsAppend(bsd, CAP_POSCAP, sizeof(CAP_POSCAP)-1);
-    }
-    else
-    {
-        bsAppend(bsd, "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0", 16); /* empty capability */
-    }
-    
-    bsAppendTlv(bsd, 0x0A, 2, NULL);        /* TLV 0x0A: Acktype2 */
-    bsAppendWord(bsd, 0x01);
-    bsAppendTlv(bsd, 0x0F, 0, NULL);        /* TLV 0x0F: unknown and empty */
-
-    tlv2711 = bsAppendTlv(bsd, 0x2711, 0, NULL); /* TLV 0x2711: ext. data */
-
-    bsAppendWordLE(bsd, 0x1B);                 /* length till sequence # */
-    bsAppendWordLE(bsd, YSM_PROTOCOL_VERSION); /* TCP protocol version */
-    bsAppend(bsd, "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0", 16); /* empty capability */
-    bsAppendWord(bsd, 0x00);                /* unknown */
-    bsAppendByte(bsd, 0x03);
-    bsAppendDword(bsd, 0x00);               /* msg global type */
-    bsAppendWordLE(bsd, 0x00);              /* sequence # */
-    bsAppendWordLE(bsd, 0x0E);              /* unknown length */
-    bsAppendWordLE(bsd, 0x00);              /* sequence # */
-    bsAppend(bsd, "\0\0\0\0\0\0\0\0\0\0\0\0", 12); /* unknown */
-
-    /*** scan fix, read above ****/
-    if (msgFlags == 0x19) msgFlags = 0x03;
-
-    bsAppendByte(bsd, msgType);             /* msgType */
-    bsAppendByte(bsd, msgFlags);
-    bsAppendWordLE(bsd, 0x0000);            /* status code */
-
-    if (victim->status == STATUS_DND)
-        bsAppendWordLE(bsd, 0x04);
-    else
-        bsAppendWordLE(bsd, 0x21);          /* priority */
-
-    bsAppendWordLE(bsd, msgLen + 1);        /* message stringz length */
-    bsAppend(bsd, msgData, msgLen);      /* message string */
-    bsAppendByte(bsd, 0x00);                /* null-terminator */
-
-    if (sendFlags & MFLAGTYPE_NORM)         /* do we have to insert colors? */
-    {
-        bsAppendDwordLE(bsd, 0x00000000);   /* text color (rgbn) */
-        bsAppendDwordLE(bsd, 0xFFFFFF00);   /* background color (rgbn) */
-    }
-
-    /* do we have to insert a GUID? */
-    if (sendFlags & MFLAGTYPE_RTF)
-    {
-        bsAppendDword(bsd, sizeof(CAP_RTF_GUID)-1);
-        bsAppend(bsd, CAP_RTF_GUID, sizeof(CAP_RTF_GUID)-1);
-    }
-    else if (sendFlags & MFLAGTYPE_UTF8)
-    {
-        bsAppendDword(bsd, sizeof(CAP_UTF8_GUID)-1);
-        bsAppend(bsd, CAP_UTF8_GUID, sizeof(CAP_UTF8_GUID)-1);
-    }
-
-    bsUpdateTlvLen(bsd, tlv2711);
-    bsUpdateTlvLen(bsd, tlv5);
-}
-
-void bsAppendMessageBodyType4(
-    bsd_t     bsd,
-    int8_t   *msgData,
-    int32_t   msgLen,
-    int32_t   msgType,
-    uint8_t  msgFlags)
-{
-    bs_pos_t  tlv5;
-
-    tlv5 = bsAppendTlv(bsd, 0x05, 0, NULL); /* TLV 0x05: message data */
-    bsAppendDwordLE(bsd, YSM_USER.uin);     /* sender uin */
-    bsAppendByte(bsd, msgType);             /* message type */
-    bsAppendByte(bsd, msgFlags);            /* message flags */
-    bsAppendByte(bsd, msgLen + 1);          /* message stringz len */
-    bsAppend(bsd, msgData, msgLen);      /* message string */
-    bsAppendByte(bsd, 0x00);                /* null-terminator */
-    bsUpdateTlvLen(bsd, tlv5);
-}
-
 void forwardMessage(uin_t uin, char *inMsg)
 {
     int8_t outMsg[MAX_DATA_LEN];
@@ -2536,15 +3069,14 @@ void sendAuthReq(uin_t uin, uint8_t *nick, uint8_t *message)
     freeBs(bsd);
 }
 
-void sendAuthRsp(uin_t uin)
+void sendAuthRsp(slave_hnd_t *victim)
 {
-    bsd_t     bsd;
-    string_t *nick;
+    bsd_t   bsd;
+    uint8_t nick[MAX_NICK_LEN];
 
     bsd = initBs();
-    nick = initString();
 
-    bsAppendPrintfString08(bsd, "%ld", uin); /* uin string08 */
+    bsAppendPrintfString08(bsd, "%ld", victim->uin); /* uin string08 */
     bsAppendByte(bsd, 0x01);                 /* flag: 1-accept, 2-decline */
     bsAppendDword(bsd, 0x00);                /* empty reason string16 */
     bsAppendDword(bsd, 0x00);                /* Extra Flags (Usually 0x0000) */
@@ -2554,24 +3086,23 @@ void sendAuthRsp(uin_t uin)
         bsGetLen(bsd),
         g_sinfo.seqnum++, 0);
 
-    getSlaveNick(uin, nick);
+    getSlaveNick(victim, nick, sizeof(nick));
 
-    printfOutput(VERBOSE_BASE, "OUT AUTH_RSP %ld %s\n", uin, getString(nick));
+    printfOutput(VERBOSE_BASE, "OUT AUTH_RSP %ld %s\n", victim->uin, nick);
 
-    freeString(nick);
     freeBs(bsd);
 }
 
 void YSM_SendContacts(void)
 {
-    slave_t  *slave = NULL;
-    bsd_t     bsd;
+    slave_hnd_t slave = {SLAVE_HND_START, 0};
+    bsd_t       bsd;
 
     bsd = initBs();
     
-    while (slave = getNextSlave(slave))
+    while (getNextSlave(&slave) == 0)
     {
-        bsAppendPrintfString08(bsd, "%ld", (int)slave->uin);
+        bsAppendPrintfString08(bsd, "%ld", (int)slave.uin);
     }
 
     sendSnac(YSM_BUDDY_LIST_SNAC, YSM_CLI_ADD_BUDDY, 0x0,
@@ -2601,168 +3132,10 @@ void sendRemoveContactReq(uin_t uin)
     freeBs(bsd);
 }
 
-
-/* If a buddy is stored in the server, change his/her            */
-/* type to our Ignore list so they don't fuck with us no M0re y0!    */
-void YSM_BuddyIgnore(slave_t *buddy, int flag)
-{
-    if (flag)    /* Add to Ignore list */
-    {
-        buddy->budType.ignoreId = YSM_BuddyAddItem(buddy,
-            YSM_BUDDY_GROUPNAME,
-            0x0,
-            0x0,
-            YSM_BUDDY_SLAVE_IGN,
-            0, 0, CLI_SSI_ADD);
-    }
-    else        /* Remove from the Ignore list */
-    {
-        YSM_BuddyAddItem(buddy,
-            YSM_BUDDY_GROUPNAME,
-            0x0,
-            buddy->budType.ignoreId,
-            YSM_BUDDY_SLAVE_IGN,
-            0, 0, CLI_SSI_REMOVE);
-
-        /* Reset the Ignore Flag */
-        buddy->budType.ignoreId = 0;
-    }
-
-    YSM_BuddyRequestFinished();
-}
-
-
-/* If a buddy is stored in the server, change his/her    */
-/* type to our block/invisible list so they wont see us  */
-void YSM_BuddyInvisible(slave_t *buddy, int flag)
-{
-    if (flag)    /* Add to invisible list */
-    {
-        buddy->budType.invisibleId = YSM_BuddyAddItem(
-            buddy,
-            YSM_BUDDY_GROUPNAME,
-            0x0,
-            0x0,
-            YSM_BUDDY_SLAVE_INV,
-            0, 0, CLI_SSI_ADD);
-    }
-    else        /* Remove from the invisible list */
-    {
-        YSM_BuddyAddItem(buddy,
-            YSM_BUDDY_GROUPNAME,
-            0x0,
-            buddy->budType.invisibleId,
-            YSM_BUDDY_SLAVE_INV,
-            0, 0, CLI_SSI_REMOVE);
-
-        /* Reset the Invisible Flag */
-        buddy->budType.invisibleId = 0;
-    }
-
-    YSM_BuddyRequestFinished();
-}
-
-
-/* If a buddy is stored in the server, change his/her    */
-/* type to our Allow/Visible list so they see us when we drink     */
-/* the magic potion */
-void YSM_BuddyVisible(slave_t *buddy, int flag)
-{
-    if (flag)    /* Add to the Visible list */
-    {
-        buddy->budType.visibleId = YSM_BuddyAddItem( buddy,
-            YSM_BUDDY_GROUPNAME,
-            0x0,
-            0x0,
-            YSM_BUDDY_SLAVE_VIS,
-            0, 0, CLI_SSI_ADD);
-    }
-    else        /* Remove from the Visible list */
-    {
-        YSM_BuddyAddItem(buddy,
-            YSM_BUDDY_GROUPNAME,
-            0x0,
-            buddy->budType.visibleId,
-            YSM_BUDDY_SLAVE_VIS,
-            0, 0, CLI_SSI_REMOVE);
-
-        /* Reset the Visible Flag */
-        buddy->budType.visibleId = 0;
-
-
-    }
-
-    YSM_BuddyRequestFinished();
-}
-
-static void buddyAddSlave(
-    uint8_t  *nick,
-    uin_t     uin,
-    uint16_t  budId,
-    uint16_t  grpId,
-    uint16_t  type)
-{
-    slave_t *new = NULL;
-
-//    DEBUG_PRINT("%s (#%ld)", nick, uin);
-
-    new = addSlaveToList(nick, uin, FL_DOWNLOADED, NULL, budId, grpId, type);
-
-    if (new != NULL)
-        addSlaveToDisk(new);
-}
-
-
-/* BuddyDelSlave - removes a slave from the server-side contact list.
- */
-
-void YSM_BuddyDelSlave(uin_t uin)
-{
-    string_t               *nick;
-    buddy_special_status_t  budType;
-
-    if (uin == NOT_A_SLAVE)
-        return;
-
-    slaveGetNick(uin, nick);
-    slaveGetSpecialStatus(uin, &budType);
-
-    printfOutput(VERBOSE_MOATA,
-        "INFO REMOVE_SRV %dl %s with budid: %x "
-        "and groupd id: %x\n",
-        uin,
-        getString(nick),
-        budType.budId,
-        budType.grpId);
-
-    YSM_BuddyAddItem(contact,
-        YSM_BUDDY_GROUPNAME,
-        budType.grpId,
-        budType.budId,
-        YSM_BUDDY_SLAVE,
-        0,               /* cmd */
-        0,               /* auth */
-        CLI_SSI_REMOVE); /* remove! */
-
-    freeString(nick);
-}
-
 void YSM_BuddyRequestModify(void)
 {
     sendSnac(YSM_ICQV8FUNC_SNAC, CLI_SSI_EDIT_BEGIN, 0x0,
              NULL, 0, g_sinfo.seqnum++, 0x11);
-}
-
-void YSM_BuddyRequestFinished(void)
-{
-    sendSnac(YSM_ICQV8FUNC_SNAC, CLI_SSI_EDIT_END, 0x0,
-             NULL, 0, g_sinfo.seqnum++, 0x12);
-}
-
-void YSM_BuddyAck(void)
-{
-    sendSnac(YSM_ICQV8FUNC_SNAC, CLI_SSI_ACTIVATE, 0x0,
-             NULL, 0, g_sinfo.seqnum++, 0);
 }
 
 /* This function goes through the list of slaves that have */
@@ -2771,13 +3144,15 @@ void YSM_BuddyAck(void)
 
 static int YSM_BuddyGenNewID(void)
 {
-    int32_t  newId = 0;
-    slave_t *slave = NULL;
+    int32_t                newId = 0;
+    slave_hnd_t            slave = {SLAVE_HND_START, 0};
+    buddy_special_status_t bss;
 
-    while (slave = getNextSlave(slave))
+    while (getNextSlave(&slave) == 0)
     {
-         if (slave->budType.budId > newId)
-             newId = slave->budType.budId;
+        getSlaveSpecialStatus(&slave, &bss);
+        if (bss.budId > newId)
+             newId = bss.budId;
     }
 
     newId++;
@@ -2809,22 +3184,23 @@ static int YSM_BuddyGenNewID(void)
  */
 
 int32_t YSM_BuddyAddItem(
-    slave_t    *victim,
-    uint8_t    *grpName,
-    uint16_t    grpId,
-    uint16_t    bID,
-    uint32_t    type,
-    uint8_t     cmd,
-    uint8_t     authAwait,
-    uint8_t     subTypeId)
+    slave_hnd_t *victim,
+    uint8_t     *grpName,
+    uint16_t     grpId,
+    uint16_t     bID,
+    uint32_t     type,
+    uint8_t      cmd,
+    uint8_t      authAwait,
+    uint8_t      subTypeId)
 {
-    uint8_t     sUIN[MAX_UIN_LEN+1];
-    uint8_t    *name = NULL;
-    int32_t    *dataListAmount = NULL, buddyId = 0;
-    uint32_t    reqId;
-    bsd_t       bsd;
-    bsd_t       dataList;
-    bs_pos_t    addlDataLen;
+    uint8_t      sUIN[MAX_UIN_LEN+1];
+    uint8_t     *name = NULL;
+    int32_t     *dataListAmount = NULL, buddyId = 0;
+    uint32_t     reqId;
+    bsd_t        bsd;
+    bsd_t        dataList;
+    bs_pos_t     addlDataLen;
+    buddy_special_status_t bss;
 
     if (victim == NULL || grpName == NULL)
         return -1;
@@ -2855,7 +3231,7 @@ int32_t YSM_BuddyAddItem(
     }
 
     /* We are creating this buddy for the first time, don't
-     * generate a new random ID for already created ids  */
+     * generate a new random ID for already created ids */
     if (type != YSM_BUDDY_GROUP)
     {
         /* bID is a param to this function
@@ -2974,6 +3350,173 @@ int32_t YSM_BuddyAddItem(
     return buddyId;
 }
 
+
+/* If a buddy is stored in the server, change his/her            */
+/* type to our Ignore list so they don't fuck with us no M0re y0!    */
+void YSM_BuddyIgnore(slave_hnd_t *victim, int flag)
+{
+    buddy_special_status_t bss;
+
+    getSlaveSpecialStatus(victim, &bss);
+
+    if (flag)    /* Add to Ignore list */
+    {
+        bss.ignoreId = YSM_BuddyAddItem(victim,
+            YSM_BUDDY_GROUPNAME,
+            0x0,
+            0x0,
+            YSM_BUDDY_SLAVE_IGN,
+            0, 0, CLI_SSI_ADD);
+    }
+    else        /* Remove from the Ignore list */
+    {
+        YSM_BuddyAddItem(victim,
+            YSM_BUDDY_GROUPNAME,
+            0x0,
+            bss.ignoreId,
+            YSM_BUDDY_SLAVE_IGN,
+            0, 0, CLI_SSI_REMOVE);
+
+        /* Reset the Ignore Flag */
+        bss.ignoreId = 0;
+    }
+
+    setSlaveSpecialStatus(victim, &bss);
+    YSM_BuddyRequestFinished();
+}
+
+
+/* If a buddy is stored in the server, change his/her    */
+/* type to our block/invisible list so they wont see us  */
+void YSM_BuddyInvisible(slave_hnd_t *victim, int flag)
+{
+    buddy_special_status_t bss;
+
+    getSlaveSpecialStatus(victim, &bss);
+
+    if (flag)    /* Add to invisible list */
+    {
+        bss.invisibleId = YSM_BuddyAddItem(
+            victim,
+            YSM_BUDDY_GROUPNAME,
+            0x0,
+            0x0,
+            YSM_BUDDY_SLAVE_INV,
+            0, 0, CLI_SSI_ADD);
+    }
+    else        /* Remove from the invisible list */
+    {
+        YSM_BuddyAddItem(victim,
+            YSM_BUDDY_GROUPNAME,
+            0x0,
+            bss.invisibleId,
+            YSM_BUDDY_SLAVE_INV,
+            0, 0, CLI_SSI_REMOVE);
+
+        /* Reset the Invisible Flag */
+        bss.invisibleId = 0;
+    }
+
+    setSlaveSpecialStatus(victim, &bss);
+    YSM_BuddyRequestFinished();
+}
+
+
+/* If a buddy is stored in the server, change his/her    */
+/* type to our Allow/Visible list so they see us when we drink     */
+/* the magic potion */
+void YSM_BuddyVisible(slave_hnd_t *victim, int flag)
+{
+    buddy_special_status_t bss;
+
+    getSlaveSpecialStatus(victim, &bss);
+
+    if (flag)    /* Add to the Visible list */
+    {
+        bss.visibleId = YSM_BuddyAddItem(victim,
+            YSM_BUDDY_GROUPNAME,
+            0x0,
+            0x0,
+            YSM_BUDDY_SLAVE_VIS,
+            0, 0, CLI_SSI_ADD);
+    }
+    else        /* Remove from the Visible list */
+    {
+        YSM_BuddyAddItem(victim,
+            YSM_BUDDY_GROUPNAME,
+            0x0,
+            bss.visibleId,
+            YSM_BUDDY_SLAVE_VIS,
+            0, 0, CLI_SSI_REMOVE);
+
+        /* Reset the Visible Flag */
+        bss.visibleId = 0;
+    }
+
+    setSlaveSpecialStatus(victim, &bss);
+    YSM_BuddyRequestFinished();
+}
+
+static void buddyAddSlave(
+    uint8_t  *nick,
+    uin_t     uin,
+    uint16_t  budId,
+    uint16_t  grpId,
+    uint16_t  type)
+{
+    slave_hnd_t new;
+
+//    DEBUG_PRINT("%s (#%ld)", nick, uin);
+
+    if (addSlaveToList(nick, uin, FL_DOWNLOADED, NULL,
+                       budId, grpId, type, &new) == 0)
+    {
+        addSlaveToDisk(&new);
+    }
+}
+
+
+/* BuddyDelSlave - removes a slave from the server-side contact list.
+ */
+
+void YSM_BuddyDelSlave(slave_hnd_t *victim)
+{
+    uint8_t                 nick[MAX_NICK_LEN];
+    buddy_special_status_t  bss;
+
+    if (victim == NULL)
+        return;
+
+    getSlaveNick(victim, nick, sizeof(nick));
+    getSlaveSpecialStatus(victim, &bss);
+
+    printfOutput(VERBOSE_MOATA,
+        "INFO REMOVE_SRV %dl %s with budid: %x "
+        "and groupd id: %x\n",
+        victim->uin, nick, bss.budId, bss.grpId);
+
+    YSM_BuddyAddItem(victim,
+        YSM_BUDDY_GROUPNAME,
+        bss.grpId,
+        bss.budId,
+        YSM_BUDDY_SLAVE,
+        0,               /* cmd */
+        0,               /* auth */
+        CLI_SSI_REMOVE); /* remove! */
+}
+
+void YSM_BuddyRequestFinished(void)
+{
+    sendSnac(YSM_ICQV8FUNC_SNAC, CLI_SSI_EDIT_END, 0x0,
+             NULL, 0, g_sinfo.seqnum++, 0x12);
+}
+
+void YSM_BuddyAck(void)
+{
+    sendSnac(YSM_ICQV8FUNC_SNAC, CLI_SSI_ACTIVATE, 0x0,
+             NULL, 0, g_sinfo.seqnum++, 0);
+}
+
 static void YSM_BuddyCreateGroup(void)
 {
     /* We initialized the Amount variable to -1, if the group existed while
@@ -2998,16 +3541,19 @@ static void YSM_BuddyCreateGroup(void)
     }
 }
 
-void YSM_BuddyUploadList(slave_t *refugee)
+void YSM_BuddyUploadList(slave_hnd_t *refugee)
 {
-    slave_t *slave = NULL;
-    int      count = 0;
+    slave_hnd_t  slave = {SLAVE_HND_START, 0};
+    int          count = 0;
+    sl_flags_t   flags;
 
     YSM_BuddyCreateGroup();
 
     if (refugee != NULL)
     {
-        if (!IS_DOWNLOADED(refugee))
+        getSlaveFlags(refugee, &flags);
+
+        if (!IS_DOWNLOADED(flags))
         {
             YSM_BuddyAddItem(refugee,
                 YSM_BUDDY_GROUPNAME,
@@ -3025,15 +3571,17 @@ void YSM_BuddyUploadList(slave_t *refugee)
         return;
     }
 
-    while (slave = getNextSlave(slave))
+    while (getNextSlave(&slave) == 0)
     {
         if (count >= MAX_SAVE_COUNT)
             break;
 
-        if (!IS_DOWNLOADED(slave))
+        getSlaveFlags(&slave, &flags);
+
+        if (!IS_DOWNLOADED(flags))
         {
             YSM_BuddyAddItem(
-                slave,
+                &slave,
                 YSM_BUDDY_GROUPNAME,
                 YSM_BUDDY_GROUPID,
                 0x0,
@@ -3065,7 +3613,7 @@ void buddyReadSlave(char *buf)
 {
     uint16_t  uinLen = 0, xtralen = 0;
     int8_t   *uin = NULL;
-    int8_t   *nick = NULL;
+    uint8_t  *nick = NULL;
     uint16_t  budId, grpId, budType;
     tlv_t     tlv;
 
@@ -3118,7 +3666,7 @@ void buddyReadSlave(char *buf)
     if (nick != NULL)
     {
         YSM_CharsetConvertString(&nick, CHARSET_INCOMING, MFLAGTYPE_UTF8, TRUE);
-        if (YSM_ParseSlave(nick) == 0)
+        if (parseSlave(nick) == 0)
         {
             YSM_FREE(nick);
         }
@@ -3144,10 +3692,13 @@ void buddyReadSlave(char *buf)
 
 void YSM_BuddyIncomingChange(snac_head_t *snac, bsd_t bsd)
 {
-    slave_t   *slave = NULL;
-    uint16_t   incomingReq;
+    slave_hnd_t  slave = {SLAVE_HND_START, 0};
+    uint16_t     incomingReq;
+    sl_flags_t   flags;
+    req_id_t     reqId;
+    uint8_t      nick[MAX_NICK_LEN];
 
-    if (getNextSlave(slave) == NULL)
+    if (getSlavesListLen() == 0)
         return;
 
     bsReadWord(bsd, &incomingReq);
@@ -3173,13 +3724,19 @@ void YSM_BuddyIncomingChange(snac_head_t *snac, bsd_t bsd)
         return;
     }
 
-    while (slave = getNextSlave(slave))
+    while (getNextSlave(&slave) == 0)
     {
-        if (snac->reqId == slave->reqId)
+        getSlaveReqId(&slave, &reqId);
+
+        if (snac->reqId == reqId)
     	{
+            getSlaveFlags(&slave, &flags);
+
             /* If its the Group added ack, just break */
-            if (IS_DOWNLOADED(slave))
+            if (IS_DOWNLOADED(flags))
                 break;
+
+            getSlaveNick(&slave, nick, sizeof(nick));
 
             switch (incomingReq)
     		{
@@ -3191,10 +3748,9 @@ void YSM_BuddyIncomingChange(snac_head_t *snac, bsd_t bsd)
                         "\n" MSG_BUDDY_SAVING1 "%s"
                         MSG_BUDDY_SAVING2 "%d"
                         MSG_BUDDY_SAVING3,
-                        slave->info.nickName,
-                        slave->uin);
+                        nick, slave.uin);
 
-                    YSM_BuddyAddItem(slave,
+                    YSM_BuddyAddItem(&slave,
                         YSM_BUDDY_GROUPNAME,
                         YSM_BUDDY_GROUPID,
                         0x0, /* new */
@@ -3205,7 +3761,7 @@ void YSM_BuddyIncomingChange(snac_head_t *snac, bsd_t bsd)
                        know who required auth and who did not */
 
                     printfOutput(VERBOSE_BASE, "INFO SLAVE_SAVED\n");
-                    slave->flags |= FL_DOWNLOADED;
+                    flags |= FL_DOWNLOADED;
                     break;
 
                 case YSM_SRV_BUDDY_AUTH:
@@ -3218,23 +3774,22 @@ void YSM_BuddyIncomingChange(snac_head_t *snac, bsd_t bsd)
                         "\n" MSG_BUDDY_SAVING1 "%s"
                         MSG_BUDDY_SAVING2 "%d"
                         MSG_BUDDY_SAVING3,
-                        slave->info.nickName,
-                        slave->uin);
+                        nick, slave.uin);
 
                     printfOutput(VERBOSE_BASE,
                         MSG_BUDDY_SAVINGAUTH "\n" 
                         MSG_BUDDY_SAVINGAUTH2
                         MSG_BUDDY_SAVINGAUTH3 "\n");
 
-                    slave->flags |= FL_DOWNLOADED;
-                    slave->flags |= FL_AUTHREQ;
+                    flags |= FL_DOWNLOADED;
+                    flags |= FL_AUTHREQ;
                     break;
 
                 case YSM_SRV_BUDDY_ERRADD:
                     printfOutput(VERBOSE_BASE,
                         "ERR SLAVE_SAVE Maybe adding a disabled account?\n");
 
-                    slave->flags |= FL_DOWNLOADED;
+                    flags |= FL_DOWNLOADED;
                     break;
 
                 /* Shouldn't happend. Take same action as if
@@ -3252,7 +3807,7 @@ void YSM_BuddyIncomingChange(snac_head_t *snac, bsd_t bsd)
                     */
                     printfOutput(VERBOSE_MOATA, "INFO Dijo WARNING\n");
 
-                    YSM_BuddyAddItem(slave,
+                    YSM_BuddyAddItem(&slave,
                         YSM_BUDDY_GROUPNAME,
                         YSM_BUDDY_GROUPID,
                         0x0, /* new */
@@ -3260,6 +3815,8 @@ void YSM_BuddyIncomingChange(snac_head_t *snac, bsd_t bsd)
                         0, 0, CLI_SSI_ADD);
                     break;
             }
+
+            setSlaveFlags(&slave, flags);
 
             /* Let it know it can close the contact list */
             YSM_BuddyRequestFinished();
@@ -3272,17 +3829,16 @@ void YSM_BuddyIncomingList(bsd_t bsd)
     uint16_t   groupId, dataLen, itemId, itemType, itemsCount;
     int8_t    *itemName;
     int8_t    *itemStartPtr;
-    int8_t    *ptr = buf;
     int32_t    len2 = 0, GrpSlaves = 0, y = 0;
     int32_t    r = 0, maxdlen = 0, g_amount = 0;
     tlv_t      tlv;
 
     DEBUG_PRINT("");
 
-    ptr++; /* SSI protocol version (!?) */
+    bsSeek(bsd, SIZEOF_BYTE, BS_SEEK_CUR); /* SSI protocol version (!?) */
 
     /* Amount of modifications by now (We need this for future mods) */
-    READ_UINT16(&itemsCount, ptr);
+    bsReadWord(bsd, &itemsCount);
 
     /* For future changes, we mark our next change already */
     g_sinfo.blentries = itemsCount + 1;
@@ -3438,540 +3994,6 @@ void YSM_BuddyIncomingList(bsd_t bsd)
         "INFO d[O_o]b %d %s\n", g_amount, MSG_DOWNLOADED_SLAVES);
 
     YSM_BuddyAck();
-}
-
-void YSM_IncomingMultiUse(flap_head_bit_t *head, snac_head_t *snac, char *buf)
-{
-    uin_t      uin = 0;
-    uint16_t   dataLen = 0;
-    uint16_t   reqId;
-    uint16_t   rspType;
-    uint16_t   rspSubType;
-    int8_t     result;
-    uint8_t    msgType = 0;
-    int8_t     m_flags;
-    int8_t     o_month = 0, o_day = 0, o_hour = 0, o_minutes = 0;
-    uint16_t   msgLen;
-    slave_t   *victim = NULL;
-    tlv_t      tlv;
-    int8_t    *ptr = buf;
-
-    DEBUG_PRINT("");
-
-    /* its a TLV(1) at the very beggining, always. */
-    READ_TLV(&tlv, ptr);
-    READ_UINT16LE(&dataLen, ptr);
-
-    ptr += 4; /* skip my UIN */
-    READ_UINT16LE(&rspType, ptr);
-    READ_UINT16LE(&reqId, ptr);
-
-    switch (rspType)
-    {
-        /* Information request response */
-        case 0x07DA:
-            READ_UINT16LE(&rspSubType, ptr);
-            READ_UINT8(&result, ptr);
-            if (result != 0x32 && result != 0x14 && result != 0x1E)
-            {
-                switch (rspSubType)
-                {
-                    /* Incoming MAIN info */
-                    case 0xC8:
-                        YSM_IncomingInfo(INFO_MAIN, ptr, 0, snac->reqId);
-                        break;
-
-                    /* incoming full info */
-                    case 0xDC:
-                        YSM_IncomingInfo(INFO_HP, ptr, 0, snac->reqId);
-                        break;
-
-                    case 0xD2:
-                        YSM_IncomingInfo(INFO_WORK, ptr, 0, snac->reqId);
-                        break;
-
-                    case 0xE6:
-                        YSM_IncomingInfo(INFO_ABOUT, ptr, 0, snac->reqId);
-                        break;
-
-                    case 0xA4:
-                    case 0xAE:
-                        YSM_IncomingSearch(ptr, 0);
-                        break;
-
-                    case 0x64:
-                        printfOutput(VERBOSE_BASE, "INFO " MSG_INFO_UPDATED "\n");
-                        break;
-
-                    case 0xAA:
-                        printfOutput(VERBOSE_BASE, "INFO Password changed.\n");
-                        break;
-
-                    default:
-                        break;
-                }
-            }
-            break;
-
-        /* Offline message response */
-        case 0x0041:
-            READ_UINT32LE(&uin, ptr);    /* uin LE */
-            ptr += 2;                    /* skip WORD (year) */
-            READ_UINT8(&o_month, ptr);   /* month */
-            READ_UINT8(&o_day, ptr);     /* day */
-            READ_UINT8(&o_hour, ptr);    /* hour */
-            READ_UINT8(&o_minutes, ptr); /* minutes */
-            READ_UINT8(&msgType, ptr);   /* message type */
-            READ_UINT8(&m_flags, ptr);   /* message flags */
-            READ_UINT16(&msgLen, ptr);   /* message string length */
-
-            victim = querySlave(SLAVE_UIN, NULL, uin, 0);
-
-            printfOutput(VERBOSE_BASE,
-                "\n" MSG_NEW_OFFLINE "\n"
-                "[date: %.2d/%.2d time: %.2d:%.2d (GMT):\n",
-                o_day,
-                o_month,
-                o_hour,
-                o_minutes);
-
-            /* offline message */
-            YSM_ReceiveMessageData(victim, uin, 0, msgType, 0x00, msgLen, ptr);
-            break;
-
-        /* end of offline msgs */
-        case 0x0042:
-            sendDeleteOfflineMsgsReq();
-            break;
-
-        default:
-            DEBUG_PRINT("unknown respond type 0x%X!", rspType);
-            break;
-    }
-}
-
-void YSM_IncomingSearch(char *buf, int tsize)
-{
-    char      *data = NULL;
-    uint16_t  dataLen = 0;
-    uin_t      ruin = 0;
-    int8_t    *ptr = buf + tsize;
-
-    ptr += 2;    /* skip record LEN */
-    memcpy(&ruin, ptr, 4);
-    ptr += 4;
-
-    READ_UINT16(&dataLen, ptr);
-    data = YSM_CALLOC(1, dataLen+1);
-    READ_STRING(data, ptr, dataLen);
-
-    printfOutput(VERBOSE_BASE, "INFO SEARCH %ld %s\n", ruin, data);
-
-    YSM_FREE(data);
-}
-
-
-void YSM_IncomingPersonal(flap_head_bit_t *head, int8_t *buf)
-{
-    int32_t    x = 0, len = 0;
-    int8_t    *aux = NULL;
-
-    /* uin len */
-    len = buf[0];
-    x++;
-
-    x += len;
-    x += 4;
-
-    while (x < (Chars_2_Wordb(head->dlen) - SNAC_HEAD_SIZE))
-    {
-        /* buf should point to the TLV type field. */
-        switch (Chars_2_Wordb( buf+x ))
-        {
-            case 0x3:
-                len = Chars_2_Wordb(buf+x+2);
-                /* time_t */
-                if (len == 0x4)    {
-                    aux = (int8_t *)&YSM_USER.timing.signOn;
-                    aux[0] = buf[x+7];
-                    aux[1] = buf[x+6];
-                    aux[2] = buf[x+5];
-                    aux[3] = buf[x+4];
-                }
-
-                 /* just cheat and quit */
-                x = Chars_2_Wordb( head->dlen ) - SNAC_HEAD_SIZE;
-                break;
-
-            case 0x0a:
-                /* get our external ip address */
-                memcpy( &YSM_USER.d_con.rIP_ext, buf+x+4, 4 );
-            default:
-                /* buf + 2 should contain the TLV len data field. */
-                x += Chars_2_Wordb( buf+x+2 );
-                x += sizeof(tlv_bit_t);
-                break;
-        }
-    }
-
-    YSM_USER.delta = YSM_USER.timing.signOn - time(NULL);
-    if (YSM_USER.delta < 0)
-        YSM_USER.delta = 0;
-}
-
-void YSM_IncomingInfo(char type, char *buf, int tsize, unsigned int reqid)
-{
-    slave_t *victim;
-    char    *pnick = NULL, *pfirst = NULL, *plast = NULL, *pemail = NULL;
-    uin_t   *puin = NULL;
-
-    /* Incoming is for ourselves? */
-    if (reqid == (YSM_USER.uin & 0xffffff7f))
-    {
-        pnick = &YSM_USER.info.nickName[0];
-        pfirst = &YSM_USER.info.firstName[0];
-        plast = &YSM_USER.info.lastName[0];
-        pemail = &YSM_USER.info.email[0];
-    }
-    else
-    {
-        victim = querySlave(SLAVE_REQID, NULL, 0, reqid);
-
-        if (victim)
-        {
-            pnick = &victim->info.nickName[0];
-            puin = &victim->uin;
-        }
-    }
-
-    switch (type)
-    {
-        case INFO_MAIN:
-            YSM_IncomingMainInfo(buf,
-                    tsize,
-                    pnick,
-                    pfirst,
-                    plast,
-                    pemail,
-                    reqid,
-                    puin);
-            break;
-
-        case INFO_HP:
-            YSM_IncomingHPInfo(buf, tsize);
-            break;
-
-        case INFO_WORK:
-#if 0
-            /* we disabled work info since we decided
-             * it is a waste of screen space to display it
-             */
-            YSM_IncomingWorkInfo(buf, tsize);
-#endif
-            break;
-
-        case INFO_ABOUT:
-            YSM_IncomingAboutInfo(buf, tsize);
-            break;
-
-        default:
-            break;
-    }
-}
-
-void YSM_IncomingMainInfo(
-    int8_t    *buf,
-    int32_t    tsize,
-    int8_t    *pnick,
-    int8_t    *pfirst,
-    int8_t    *plast,
-    int8_t    *pemail,
-    uint32_t   reqid,
-    uin_t     *puin)
-{
-    int8_t    *data = NULL;
-    bool_t     local = FALSE;
-    int32_t    nlen = 0;
-
-    if (buf == NULL)
-        return;
-
-    /* local is true if its ours */
-    local = (reqid == (YSM_USER.uin & 0xffffff7f));
-
-    /* first LNTS is NICK */
-    nlen = Chars_2_Word(buf+tsize);
-    tsize += 2;
-
-    data = YSM_CALLOC(1, nlen+1);
-    memcpy(data, buf+tsize, nlen);
-    DEBUG_PRINT("data: %s", data);
-
-    /* Update nicknames ? */
-    if (pnick && (local || g_cfg.updateNicks > 0))
-    {
-        /* using strcmp here, to update even low/big caps */
-        if (strlen(data) > 1 && strcmp(pnick, data))
-        {
-            if (YSM_ParseSlave(data))
-            {
-                if (local)
-                {
-                    strncpy(pnick, data, MAX_NICK_LEN-1);
-                    pnick[MAX_NICK_LEN - 1] = '\0';
-                }
-                else
-                    updateSlave(UPDATE_NICK, data, *puin);
-            }
-        }
-    }
-
-#if 0
-    printfOutput(VERBOSE_BASE,
-        "\r%-15.15s" " : %-12.12s ",
-        "Nickname",     
-        YSM_CharsetConvertOutputString(&data, 1));
-#endif
-
-    YSM_FREE(data);
-
-    /* Next LNTS is.firstName */
-    tsize += nlen;
-
-    nlen = Chars_2_Word(buf+tsize);
-    tsize += 2;
-
-    data = YSM_CALLOC(1, nlen+1);
-    memcpy(data, buf+tsize, nlen);
-
-    if (pfirst)
-    {
-        strncpy( pfirst, data, MAX_NICK_LEN-1 );
-        pfirst[MAX_NICK_LEN - 1] = '\0';
-    }
-
-#if 0
-    printfOutput(VERBOSE_BASE,
-        "%-20.20s" " : %s\n",
-        "Firstname",
-        YSM_CharsetConvertOutputString(&data, 1));
-#endif
-
-    YSM_FREE(data);
-
-    tsize += nlen;
-
-    nlen = Chars_2_Word(buf+tsize);
-    tsize += 2;
-
-    data = ysm_calloc(1, nlen+1, __FILE__, __LINE__);
-    memcpy(data, buf+tsize, nlen);
-
-    if (plast)
-    {
-        strncpy(plast, data, MAX_NICK_LEN-1);
-        plast[MAX_NICK_LEN-1] = '\0';
-    }
-
-#if 0
-    printfOutput(VERBOSE_BASE,
-        "%-15.15s" " : %-12.12s ",
-        "Lastname",
-        YSM_CharsetConvertOutputString(&data, 1));
-#endif
-
-    YSM_FREE(data);
-
-    tsize += nlen;
-    nlen = Chars_2_Word(buf+tsize);
-    tsize += 2;
-
-    data = ysm_calloc(1, nlen+1, __FILE__, __LINE__);
-    memcpy(data, buf+tsize, nlen);
-
-    if (pemail) {
-        strncpy( pemail, data, MAX_NICK_LEN-1 );
-        pemail[MAX_NICK_LEN - 1] = '\0';
-    }
-
-#if 0
-    printfOutput(VERBOSE_BASE,
-        "%-20.20s" " : %s\n",
-        "E-mail",
-        YSM_CharsetConvertOutputString(&data, 1));
-#endif
-
-    YSM_FREE(data);
-
-    tsize += nlen;
-    nlen = Chars_2_Word(buf+tsize);
-    tsize += 2;
-
-    data = YSM_CALLOC(1, nlen+1);
-    memcpy(data, buf+tsize, nlen);
-
-#if 0
-    printfOutput(VERBOSE_BASE,
-        "\r%-15.15s" " : %-12.12s ",
-        "City",
-        YSM_CharsetConvertOutputString(&data, 1));
-#endif
-
-    YSM_FREE(data);
-
-    tsize += nlen;
-    nlen = Chars_2_Word(buf+tsize);
-    tsize += 2;
-    data = YSM_CALLOC(1, nlen+1);
-    memcpy(data, buf+tsize, nlen);
-
-#if 0
-    printfOutput(VERBOSE_BASE,
-        "%-20.20s" " : %s\n",
-        "State",
-        YSM_CharsetConvertOutputString(&data, 1));
-#endif
-
-    YSM_FREE(data);
-
-    tsize += nlen;
-    nlen = Chars_2_Word(buf+tsize);
-    tsize += 2;
-    data = YSM_CALLOC(1, nlen+1);
-    memcpy(data, buf+tsize, nlen);
-
-#if 0
-    printfOutput(VERBOSE_BASE,
-        "\r%-15.15s" " : %-12.12s ",
-        "Phone",
-        YSM_CharsetConvertOutputString(&data, 1));
-#endif
-
-    YSM_FREE(data);
-
-    tsize += nlen;
-    nlen = Chars_2_Word(buf+tsize);
-    tsize += 2;
-    data = YSM_CALLOC(1, nlen+1);
-    memcpy(data, buf+tsize, nlen);
-
-#if 0
-    printfOutput(VERBOSE_BASE,
-        "%-20.20s" " : %s\n",
-        "FAX",
-        YSM_CharsetConvertOutputString(&data, 1));
-#endif
-
-    YSM_FREE(data);
-
-    tsize += nlen;
-    nlen = Chars_2_Word(buf+tsize);
-    tsize += 2;
-    data = YSM_CALLOC(1, nlen+1);
-    memcpy(data, buf+tsize, nlen);
-
-#if 0
-    printfOutput(VERBOSE_BASE,
-        "\r%-15.15s" " : %-12.12s ",
-        "Street",
-        YSM_CharsetConvertOutputString(&data, 1));
-#endif
-
-    YSM_FREE(data);
-
-    tsize += nlen;
-    nlen = Chars_2_Word(buf+tsize);
-    tsize += 2;
-    data = YSM_CALLOC(1, nlen+1);
-    memcpy(data, buf+tsize, nlen);
-
-#if 0
-    printfOutput(VERBOSE_BASE,
-        "%-20.20s" " : %s\n",
-        "Cellular",
-        YSM_CharsetConvertOutputString(&data, 1));
-#endif
-
-    YSM_FREE(data);
-}
-
-void YSM_IncomingHPInfo(int8_t *buf, int32_t tsize)
-{
-    if (buf == NULL)
-        return;
-
-#if 0
-    printfOutput(VERBOSE_BASE,
-        "%-15.15s" " : %-12.u ",
-        "Age",
-        buf[tsize] );
-
-    if (buf[tsize+2] != 0)
-    {
-        printfOutput(VERBOSE_BASE,
-            "%-20.20s" " : %s\n",
-            "Sex",
-            (buf[tsize+2] == 0x02) ? "Male." : "Female.");
-    }
-#endif
-}
-
-void YSM_IncomingWorkInfo(int8_t *buf, int32_t tsize)
-{
-    int8_t  *data = NULL;
-    int32_t  nlen = 0;
-
-    if (buf == NULL)
-        return;
-
-    nlen = Chars_2_Word(buf+tsize);
-    tsize += 2;
-    data = YSM_CALLOC(1, nlen+1);
-    memcpy(data, buf+tsize, nlen);
-
-    printfOutput(VERBOSE_BASE,
-        "\r%-15.15s" " : %-12.12s ",
-        "City",
-        YSM_CharsetConvertOutputString(&data, 1));
-
-    YSM_FREE(data);
-
-    tsize += nlen;
-    nlen = Chars_2_Word(buf+tsize);
-    tsize += 2;
-    data = YSM_CALLOC(1, nlen+1);
-    memcpy(data, buf+tsize, nlen);
-
-    printfOutput(VERBOSE_BASE,
-        "%-20.20s" " : %s\n",
-        "State",
-        YSM_CharsetConvertOutputString(&data, 1));
-
-    YSM_FREE(data);
-}
-
-void YSM_IncomingAboutInfo(int8_t *buf, int32_t tsize)
-{
-    int8_t  *data = NULL;
-    int16_t  len = 0;
-
-    if (buf == NULL)
-        return;
-
-    len = Chars_2_Word(buf+tsize);
-    tsize += 2;
-
-    data = YSM_CALLOC(1, len+1);
-    memcpy(data, buf+tsize, len);
-
-#if 0
-    printfOutput(VERBOSE_BASE,
-        "\r\n%-15.15s" " : \n%s\n",
-        "About",
-        YSM_CharsetConvertOutputString(&data, 1));
-#endif
-
-    YSM_FREE(data);
 }
 
 static const uint8_t icq2003avstring[] =
@@ -4189,14 +4211,17 @@ void YSM_RequestRates(void)
         NULL, 0, g_sinfo.seqnum++, 0);
 }
 
-void YSM_RequestAutoMessage(slave_t *victim)
+void YSM_RequestAutoMessage(slave_hnd_t *victim)
 {
-    int8_t mtype = 0;
-    int8_t data[2];
+    int8_t      mtype = 0;
+    int8_t      data[2];
+    sl_status_t status = 0;
 
     if (victim == NULL) return;
 
-    switch (victim->status)
+    getSlaveStatus(victim, &status);
+
+    switch (status)
     {
         case STATUS_AWAY:
             mtype = YSM_MESSAGE_GETAWAY;
@@ -4221,7 +4246,6 @@ void YSM_RequestAutoMessage(slave_t *victim)
     data[1] = 0x00;
 
     sendMessage2Client(victim,
-        victim->uin,
         0x02,
         mtype,
         data,
@@ -4376,10 +4400,11 @@ void sendKeepAlive(void)
  * and amount is in string, examples are : '1', "20", etc :)
  */
 
-void YSM_SendContact(slave_t *victim, char *datalist, char *am)
+void YSM_SendContact(slave_hnd_t *victim, char *datalist, char *am)
 {
     char *smashed_slices_of_rotten_meat;
     int buf_len = 0, tsize = 0;
+    direct_connection_t dc;
 
     buf_len = strlen(am) + 1 + strlen(datalist);
 
@@ -4393,7 +4418,9 @@ void YSM_SendContact(slave_t *victim, char *datalist, char *am)
     memcpy(smashed_slices_of_rotten_meat+tsize, datalist, strlen(datalist));
     tsize += strlen(datalist);
 
-    if (victim->d_con.flags & DC_CONNECTED)
+    getSlaveDC(victim, &dc);
+
+    if (dc.flags & DC_CONNECTED)
     {
         YSM_DC_Message(victim,
             &smashed_slices_of_rotten_meat[0],
@@ -4403,7 +4430,6 @@ void YSM_SendContact(slave_t *victim, char *datalist, char *am)
     else
     {
         sendMessage2Client(victim,
-            victim->uin,
             0x04,
             YSM_MESSAGE_CONTACTS,
             smashed_slices_of_rotten_meat,
@@ -4416,10 +4442,11 @@ void YSM_SendContact(slave_t *victim, char *datalist, char *am)
     YSM_FREE(smashed_slices_of_rotten_meat);
 }
 
-void YSM_SendUrl(slave_t *victim, int8_t *url, int8_t *desc)
+void YSM_SendUrl(slave_hnd_t *victim, int8_t *url, int8_t *desc)
 {
     int8_t  *data = NULL;
     int32_t  size = 0;
+    direct_connection_t dc;
 
     size = strlen(url) + strlen(desc) + 3;
     data = YSM_CALLOC(1, size);
@@ -4433,17 +4460,15 @@ void YSM_SendUrl(slave_t *victim, int8_t *url, int8_t *desc)
     size += strlen(url) + 1;
     data[size] = (char)0xFE;
 
-    if (victim->d_con.flags & DC_CONNECTED)
+    getSlaveDC(victim, &dc);
+
+    if (dc.flags & DC_CONNECTED)
     {
-        YSM_DC_Message(victim,
-            data,
-            size,
-            YSM_MESSAGE_URL);
+        YSM_DC_Message(victim, data, size, YSM_MESSAGE_URL);
     }
     else
     {
         sendMessage2Client(victim,
-            victim->uin,
             0x04,
             YSM_MESSAGE_URL,
             data,
@@ -4456,9 +4481,9 @@ void YSM_SendUrl(slave_t *victim, int8_t *url, int8_t *desc)
     YSM_FREE(data);
 }
 
-void YSM_SendRTF(slave_t *victim)
+void YSM_SendRTF(slave_hnd_t *victim)
 {
-    int8_t rtfmessage[] =
+    static int8_t rtfmessage[] =
         "{\\rtf1\\ansi\\ansicpg1252\\deff0\\deflang1033{\\fonttbl{\\f0"
         "\\fnil\\fcharset0 Times New Roman;}}\r\n"
         "{\\colortbl ;\\red0\\green0\\blue0;}\r\n"
@@ -4466,12 +4491,10 @@ void YSM_SendRTF(slave_t *victim)
         "}\r\n";
     uint8_t flags = 0;
 
-    flags |= MFLAGTYPE_NORM;
-    flags |= MFLAGTYPE_RTF;
+    flags |= MFLAGTYPE_NORM | MFLAGTYPE_RTF;
 
     sendMessage2Client(
         victim,
-        victim->uin,
         0x02,
         YSM_MESSAGE_NORMAL,
         rtfmessage,
@@ -4481,119 +4504,51 @@ void YSM_SendRTF(slave_t *victim)
         0x06000c00);
 }
 
-void YSM_Incoming_ClientAck(flap_head_t *flap, bsd_t bsd)
-{
-    uint8_t   *autotext = NULL;
-    uint8_t   *mType = NULL;
-    uint32_t   pos = 0, ulen = 0;
-    uint16_t   txtlen = 0;
-    uint16_t   type;
-
-    bsSeek(bsd, 8, BS_SEEK_CUR);
-    bsReadWord(bsd, &type);
-
-    if (type != 0x02)
-    {
-        /* this should be a type 2 ACK */
-        return;
-    }
-
-    /* here comes a BSTR with the UIN */
-    ulen = buf[pos];
-    if (ulen > MAX_UIN_LEN)
-    {
-        /* someone is fcking with us? */
-        return;
-    }
-
-    pos += (ulen + 1);
-    pos += 2;
-
-    if (buf[pos] != 0x1b && buf[pos] != 0x00)
-    {
-        /* this should be the len of a sub chunk.
-         * we only allow either 1b or 0.
-         */
-        return;
-    }
-
-    ulen = buf[pos];
-    pos += 2;
-    pos += ulen;
-
-    pos += 4;
-    pos += 12;
-
-    /* we only care about 'auto message' replies */
-    mType = buf+pos;
-    if (*mType != 0xe8
-        && *mType != 0xe9
-        && *mType != 0xea
-        && *mType != 0xeb
-        && *mType != 0xec) {
-
-        return;
-    }
-
-    pos += 2;
-    pos += 2;
-    pos += 2;
-
-    txtlen = Chars_2_Wordb(&buf[pos]);
-    pos += 2;
-    if (txtlen > 0x00)
-    {
-        /* there is an automessage text! */
-        autotext = ysm_calloc(1, txtlen + 1, __FILE__, __LINE__);
-        memcpy(autotext, buf+pos, txtlen);
-
-        printfOutput(VERBOSE_BASE,
-            "\r\n%-15.15s" " : \n%s\n",
-            "Auto message",
-            YSM_CharsetConvertOutputString(&autotext, 1));
-
-        YSM_FREE(autotext);
-    }
-}
-
 /* Can either be call from 4,1 or 4,c, check inside */
 
 void incomingScanRsp(snac_head_t *snac)
 {
-    slave_t *slave = NULL;
+    slave_hnd_t slave = {SLAVE_HND_START, 0};
+    req_id_t    reqId;
+    sl_flags_t  flags;
+    uint8_t     nick[MAX_NICK_LEN];
 
-    while (slave = getNextSlave(slave))
+    while (getNextSlave(&slave) == 0)
     {
-        if (snac->reqId == slave->reqId)
+        getSlaveReqId(&slave, &reqId);
+
+        if (snac->reqId == reqId)
         {
             g_sinfo.scanqueue--;
+            getSlaveFlags(&slave, &flags);
 
             /* check if the user is waiting in a scan */
-            if (slave->flags & FL_SCANNED)
+            if (flags & FL_SCANNED)
             {
+                getSlaveNick(&slave, nick, sizeof(nick));
+
                 if (snac->subTypeId == 0x01)
                 {
                     printfOutput(VERBOSE_BASE, "INFO SCAN %ld %s CONNECTED\n",
-                        slave->uin,
-                        slave->info.nickName);
+                            slave.uin, nick);
                 }
                 else if (snac->subTypeId == 0x0C)
                 {
                     printfOutput(VERBOSE_BASE, "INFO SCAN %ld %s NOT_CONNECTED\n",
-                        slave->uin,
-                        slave->info.nickName);
+                            slave.uin, nick);
                 }
-                slave->flags ^= FL_SCANNED;
+                flags ^= FL_SCANNED;
+                setSlaveFlags(&slave, flags);
             }
             break;
         }
     }
 }
 
-static void YSM_Scan_Slave(slave_t *slave)
+static void YSM_Scan_Slave(slave_hnd_t *slave)
 {
     int8_t  dead_slave_skull[3];
-    int32_t buf_len = 0, tsize = 0, reqid = 0;
+    int32_t buf_len = 0, tsize = 0, reqId = 0;
 
     buf_len = sizeof(dead_slave_skull);
     memset(dead_slave_skull, 0, buf_len);
@@ -4602,20 +4557,19 @@ static void YSM_Scan_Slave(slave_t *slave)
     dead_slave_skull[1] = 0x01;
     tsize += 3; /* last byte 0 */
 
-    reqid = rand() & 0xffffff7f;
+    reqId = rand() & 0xffffff7f;
     /* We hard-code E8 since its the same, Get AWAY automsg */
     sendMessage2Client(
         slave,
-        slave->uin,
         0x02,
         0xE8,
         dead_slave_skull,
         tsize,
         0x19,
         0x00,
-        reqid);
+        reqId);
 
-    slave->reqId = reqid;
+    setSlaveReqId(slave, reqId);
 }
 
 /*
@@ -4624,7 +4578,7 @@ static void YSM_Scan_Slave(slave_t *slave)
  * Any simmilarity with reality is just pure coincidence.
  **/
 
-void YSM_War_Kill(slave_t *victim)
+void YSM_War_Kill(slave_hnd_t *victim)
 {
     char *smelling_poison, *kill_uin = "66666666666", *kill_nick = "YSM__d0ll";
     int buf_len = 0, tsize = 0;
@@ -4652,19 +4606,24 @@ void YSM_War_Kill(slave_t *victim)
 /* Thanks to an anonymous liquidk for the required info =) */
 /* You are credited as a heroe. heh.               */
 
-void YSM_War_Scan(slave_t *victim)
+void YSM_War_Scan(slave_hnd_t *victim)
 {
-    slave_t *slave = NULL;
-    int32_t  count = 0;
+    slave_hnd_t slave = {SLAVE_HND_START, 0};
+    sl_flags_t  flags = 0;
+    uint8_t     nick[MAX_NICK_LEN];
+    int32_t     count = 0;
 
     printfOutput(VERBOSE_BASE, "Please wait...\n");
     if (victim != NULL)
     {
-        if (!(victim->flags & FL_SCANNED))
+        getSlaveFlags(victim, &flags);
+
+        if (!(flags & FL_SCANNED))
         {
             g_sinfo.scanqueue++;
             YSM_Scan_Slave(victim);
-            victim->flags |= FL_SCANNED;
+            flags |= FL_SCANNED;
+            setSlaveFlags(victim, flags);
         }
         else
         {
@@ -4679,18 +4638,20 @@ void YSM_War_Scan(slave_t *victim)
     /* scanning a whole list is a huge problem, only works now */
     /* for a specified slave.                */
 
-    while (slave = getNextSlave(slave))
+    while (getNextSlave(&slave) == 0)
     {
         if (count >= MAX_SCAN_COUNT)
             break;
 
-        if (!(slave->flags & FL_SCANNED))
-        {
-            printfOutput(VERBOSE_BASE, "INFO Scanning %s..\n",
-                 slave->info.nickName);
+        getSlaveFlags(&slave, &flags);
 
-            YSM_Scan_Slave(slave);
-            slave->flags |= FL_SCANNED;
+        if (!(flags & FL_SCANNED))
+        {
+            getSlaveNick(&slave, nick, sizeof(nick));
+            printfOutput(VERBOSE_BASE, "INFO Scanning %s..\n", nick);
+            YSM_Scan_Slave(&slave);
+            flags |= FL_SCANNED;
+            setSlaveFlags(&slave, flags);
             count++;
         }
     }
@@ -4710,80 +4671,4 @@ void YSM_War_Scan(slave_t *victim)
         printfOutput(VERBOSE_BASE,
             "-- done with ALL SLAVES. (yo'r welcome).\n" );
     }
-}
-
-/* end of Punishment functions */
-
-int8_t *readSnac(snac_head_t *snac, const int8_t *buf)
-{
-    const int8_t *ptr = buf;
-
-    READ_UINT16(&(snac->familyId), ptr);
-    READ_UINT16(&(snac->subTypeId), ptr);
-    READ_UINT16(&(snac->flags), ptr);
-    READ_UINT32(&(snac->reqId), ptr);
-
-    return buf + SNAC_HEAD_SIZE;
-}
-
-int8_t *readTLV(tlv_t *tlv, const int8_t *buf)
-{
-    tlv->type = Chars_2_Wordb(buf);
-    tlv->len = Chars_2_Wordb(buf+2);
-
-    return buf + 4;
-}
-
-int8_t *readUint8(uint8_t *uint8, const int8_t *buf)
-{
-    *uint8 = (uint8_t)*buf;
-
-    return buf + 1;
-}
-
-int8_t *readUint16(uint16_t *uint16, const int8_t *buf)
-{
-    *uint16 = Chars_2_Wordb(buf);
-
-    return buf + 2;
-}
-
-int8_t *readInt16(int16_t *int16, const int8_t *buf)
-{
-    *int16 = (int16_t) Chars_2_Wordb(buf);
-
-    return buf + 2;
-}
-
-int8_t *readUint16LE(uint16_t *uint16, const uint8_t *buf)
-{
-    *uint16 = buf[0] + (buf[1] << 8);
-
-    return buf + 2;
-}
-
-int8_t *readUint32(uint32_t *uint32, const int8_t *buf)
-{
-    *uint32 = Chars_2_DWb(buf);
-
-    return buf + 2;
-}
-
-int8_t *readUint32LE(uint32_t *uint32, const uint8_t *buf)
-{
-    *uint32 =
-        buf[0] +
-        (buf[1] << 8) + 
-        (buf[2] << 16) + 
-        (buf[3] << 24);
-
-    return buf + 2;
-}
-
-int8_t *readString(int8_t *str, const int8_t *buf, int16_t len)
-{
-    memcpy(str, buf, len);
-    str[len] = '\0';
-
-    return buf + len;
 }

@@ -148,8 +148,14 @@ typedef enum {
 #define ERROR_CRITICAL    2
 #define ERROR_CRITICAL_M  "There has been a CRITICAL ERROR. duck!\n"
 
-typedef int32_t uin_t;
-typedef int8_t  bool_t;
+typedef int32_t  uin_t;
+typedef int8_t   bool_t;
+typedef uint16_t sl_status_t;
+typedef uint8_t  sl_flags_t;
+typedef uint8_t  sl_caps_t;
+typedef uint32_t sl_fprint_t;
+typedef uint32_t req_id_t;
+
 
 typedef struct
 {
@@ -295,7 +301,7 @@ typedef struct
 #define FL_DOWNLOADED    0x10
 #define FL_AUTHREQ       0x20
 
-#define IS_DOWNLOADED(x) ((x)->flags & FL_DOWNLOADED)
+#define IS_DOWNLOADED(x) ((x) & FL_DOWNLOADED)
 
 typedef struct {
     uint8_t   verbose;

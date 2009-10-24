@@ -15,7 +15,7 @@ void    ysm_free(void *what, char *file, int line);
 
 int     YSM_READ(int32_t sock, void *buf, int read_len, char priority);
 size_t  YSM_READ_LN(int32_t sock, int8_t *obuf, size_t maxsize);
-int     bsAppendReadLoop(bsd_t bsd, int32_t sock, size_t count, uint8_t priority)
+int     bsAppendReadLoop(bsd_t bsd, int32_t sock, size_t count, uint8_t priority);
 int     writeBs(int32_t sock, bsd_t bsd);
 int     YSM_WRITE(int32_t sock, void *data, int32_t data_len);
 int32_t YSM_WRITE_DC(uin_t uin, int32_t sock, void *data, int32_t data_len);

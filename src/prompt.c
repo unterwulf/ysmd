@@ -25,16 +25,22 @@ extern void cmdCHAT(uint16_t argc, int8_t **argv);
 
 void sendMessage(uin_t uin, int8_t *data, bool_t verbose)
 {
-    int32_t      dataLen = 0;
-    uint8_t      flags = 0;
+    int32_t       dataLen = 0;
+    sl_flags_t    flags = 0;
     keyInstance  *crypt_key = NULL;
-    slave_t      *victim;
+    slave_hnd_t   victim;
+    sl_caps_t     caps = 0;
+    sl_status_t   status = STATUS_UNKNOWN;
     int8_t       *dataPtr = data;
     int8_t       *newDataPtr = NULL;
+    uint8_t       nick[MAX_NICK_LEN];
 
-    victim = querySlave(SLAVE_UIN, NULL, uin, 0);
+    querySlaveByUin(uin, &victim);
+    getSlaveCapabilities(&victim, &caps);
+    getSlaveStatus(&victim, &status);
+    getSlaveNick(&victim, &nick, sizeof(nick));
 
-    if (victim != NULL && (victim->caps & CAPFL_UTF8))
+    if (caps & CAPFL_UTF8)
         flags |= MFLAGTYPE_UTF8;
 
     /* Charset Convertion Time! */
@@ -59,30 +65,21 @@ void sendMessage(uin_t uin, int8_t *data, bool_t verbose)
     flags |= MFLAGTYPE_NORM;
 
     sendMessage2Client(victim,
-        victim->uin,
-        (victim != NULL && victim->caps & CAPFL_SRVRELAY) ? 0x02 : 0x01,
-        YSM_MESSAGE_NORMAL,
-        dataPtr,
-        dataLen,
-        0x00,
-        flags,
-        rand() & 0xffffff7f);
+            victim.uin,
+            (caps & CAPFL_SRVRELAY) ? 0x02 : 0x01,
+            YSM_MESSAGE_NORMAL,
+            dataPtr,
+            dataLen,
+            0x00,
+            flags,
+            rand() & 0xffffff7f);
 
     if (verbose)
     {
-        if (victim != NULL)
-        {
-            printfOutput(VERBOSE_BASE,
+        printfOutput(VERBOSE_BASE,
                 "OUT MSG %ld %s %s %s\n",
-                victim->uin,
-                victim->info.nickName,
-                strStatus(victim->status),
+                victim.uin, nick, strStatus(status),
                 (crypt_key != NULL ? "CRYPT" : ""));
-        }
-        else
-        {
-            printfOutput(VERBOSE_BASE, "OUT MSG %ld\n", uin);
-        }
     }
 
     /* what do we need to free? */
@@ -260,7 +257,8 @@ void YSM_DoCommand(char *cmd)
 
 void YSM_DoChatCommand(int8_t *cmd)
 {
-    slave_t *victim = NULL; 
+    slave_hnd_t victim = {-1, 0}; 
+    uint8_t     flags = 0;
 
     if (cmd == NULL || cmd[0] == '\0') return;
 
@@ -273,17 +271,18 @@ void YSM_DoChatCommand(int8_t *cmd)
 
     /* loop through the slaves list and send the message only to
      * those who have the FL_CHAT marked */
-    while (victim = getNextSlave(victim))
+    while (getNextSlave(&victim) >= 0)
     {
-        if (victim->flags & FL_CHAT)
+        getSlaveFlags(&victim, &flags);
+        if (flags & FL_CHAT)
         {
-            sendMessage(victim->uin, cmd, FALSE);
+            sendMessage(victim.uin, cmd, FALSE);
         }
     }
 }
 
 static void YSM_PreIncoming(
-    slave_t      *contact,
+    slave_hnd_t  *contact,
     msg_type_t    msgType,
     int32_t      *msgLen,
     uint8_t     **msgData,
@@ -364,23 +363,20 @@ static void YSM_PostIncoming(
     }
 }
 
-void YSM_DisplayMsg(
-    slave_t     *sender,
-    msg_type_t   msgType,
-    int32_t      msgLen,
-    uint8_t     *msgData,
-    uint8_t      msgFlags)
+void displayMessage(msg_t *msg)
 {
     char         *aux = NULL, *auxb = NULL;
     keyInstance  *crypt_key = NULL;
     int           x = 0;
     uint8_t      *old_msgData = NULL;
     int           free_msgData = 0;
+    uint8_t       nick[MAX_NICK_LEN];
 
     if (sender == NULL)
         return;
     
-    DEBUG_PRINT("from %ld (%s)", sender->uin, sender->info.nickName);
+    getSlaveNick(sender, &nick, sizeof(nick));
+    DEBUG_PRINT("from %ld (%s)", sender->uin, nick);
 
     old_msgData = msgData;
     YSM_PreIncoming(sender, msgType, &msgLen, &msgData, msgFlags, &crypt_key);
@@ -399,8 +395,7 @@ void YSM_DisplayMsg(
         case YSM_MESSAGE_NORMAL:
             printfOutput(VERBOSE_BASE,
                 "IN MSG %ld %s %s\n%s\n",
-                sender->uin,
-                sender->info.nickName,
+                sender->uin, nick,
                 (crypt_key != NULL ? "CRYPT" : ""),
                 msgData);
             break;
@@ -439,10 +434,7 @@ void YSM_DisplayMsg(
                 "[as parameter to trigger your browser with the last\n"
                 "[received URL.\n",
                 MSG_INCOMING_URL,
-                sender->info.nickName,
-                sender->uin,
-                aux,
-                auxb);
+                nick, sender->uin, aux, auxb);
 
             break;
 
@@ -455,8 +447,7 @@ void YSM_DisplayMsg(
             printfOutput( VERBOSE_BASE,
                 "\n\rIncoming CONTACTS from: "
                 "%s [ICQ# %d].\n",
-                sender->info.nickName,
-                sender->uin);
+                nick, sender->uin);
 
             strtok(msgData, " ");    /* amount */
             x = 0;
@@ -485,17 +476,14 @@ void YSM_DisplayMsg(
                 "(Slave: %s).\nThe following Message arrived with the"
                 " request: %s\n",
                 MSG_INCOMING_AUTHR,
-                sender->uin,
-                sender->info.nickName,
-                msgData);
+                sender->uin, nick, msgData);
             break;
 
         case YSM_MESSAGE_ADDED:
             printfOutput( VERBOSE_BASE,
                 "\r%s ICQ #%d just added You to the list."
                 " (Slave: %s).\n", MSG_WARN_ADDED,
-                sender->uin,
-                sender->info.nickName);
+                sender->uin, nick);
             break;
 
         case YSM_MESSAGE_AUTHOK:

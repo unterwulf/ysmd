@@ -425,7 +425,7 @@ uint8_t *encode64(const uint8_t *str)
  * (check YSM_CharsetConvertString below)
  */
 
-int8_t * YSM_CharsetConvertOutputString(int8_t **stringp, int8_t fl_dofree)
+uint8_t *YSM_CharsetConvertOutputString(uint8_t **stringp, int8_t fl_dofree)
 {
     if (YSM_CharsetConvertString(stringp, CHARSET_INCOMING, 0, fl_dofree) <= 0)
     {
@@ -441,10 +441,10 @@ int8_t * YSM_CharsetConvertOutputString(int8_t **stringp, int8_t fl_dofree)
  */
 
 int32_t YSM_CharsetConvertString(
-    int8_t    **stringp,      /* buffer */
-    int8_t      direction,    /* incoming/outgoing */
-    uint8_t    flags,        /* buffer flags */
-    int8_t      fl_dofree )   /* free original buffer */
+    uint8_t    **stringp,      /* buffer */
+    int8_t       direction,    /* incoming/outgoing */
+    uint8_t      flags,        /* buffer flags */
+    int8_t       fl_dofree )   /* free original buffer */
 {
     int32_t    stringlength = 0;
     int32_t    retval = 0;

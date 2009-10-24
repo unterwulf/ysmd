@@ -91,16 +91,16 @@ static void cycleThread(void)
 
 static void dcThread(void)
 {
-    uin_t      slave = NOT_A_SLAVE;
-    string_t  *nick;
+    slave_hnd_t  slave;
+    uint8_t      nick[MAX_NICK_LEN];
 
     initDC();
 
     while (!g_state.reasonToSuicide)
     {
-        slave = YSM_DC_Wait4Client();
+        slave.uin = YSM_DC_Wait4Client();
 
-        if (slave == NOT_A_SLAVE)
+        if (querySlaveByUin(slave.uin, &slave) != 0)
         {
             printfOutput(VERBOSE_DCON,
                 "Incoming DC request failed. "
@@ -108,11 +108,9 @@ static void dcThread(void)
         }
         else
         {
-            getSlaveNick(uin, nick);
+            getSlaveNick(&slave, &nick, sizeof(nick));
             printfOutput(VERBOSE_DCON, "IN DC_REQ %ld %s\n",
-                uin,
-                getString(nick));
-            freeString(nick);
+                slave.uin, nick);
         }
     }
 }

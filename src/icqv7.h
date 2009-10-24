@@ -1,9 +1,6 @@
 #ifndef _ICQV7_H_
 #define _ICQV7_H_
 
-#define FLAP_HEAD_SIZE 6     /* unaligned FLAP header size */
-#define SNAC_HEAD_SIZE 10    /* unaligned SNAC header size */
-
 #define YSM_PROTOCOL_VERSION    0x08
 
 /* Definicion de los tipos de Mensaje */
@@ -33,15 +30,17 @@
 
 /* Capabilities */
 
+#define SIZEOF_CAP    16
+
 #define CAP_PRECAP    "\x09\x46\x13"
 #define CAP_PRERTF    "\x97\xb1\x27"
 #define CAP_POSCAP    "\x4c\x7f\x11\xd1\x82\x22\x44\x45\x53\x54\x00\x00"
 #define CAP_POSRTF    "\x24\x3c\x43\x34\xad\x22\xd6\xab\xf7\x3f\x14\x92"
 
-#define CAP_SRVRELAY  "\x49"
-#define CAP_ISICQ     "\x44"
-#define CAP_UTF8      "\x4e"
-#define CAP_RTF       "\x51"
+#define CAP_SRVRELAY  CAP_PRECAP "\x49" CAP_POSCAP
+#define CAP_ISICQ     CAP_PRECAP "\x44" CAP_POSCAP
+#define CAP_UTF8      CAP_PRECAP "\x4e" CAP_POSCAP
+#define CAP_RTF       CAP_PRECAP "\x51" CAP_POSCAP
 
 #define CAP_UTF8_GUID "{0946134E-4C7F-11D1-8222-444553540000}"
 #define CAP_RTF_GUID  "{97B12751-243C-4334-AD22-D6ABF73F1492}"

@@ -18,15 +18,15 @@ int32_t YSM_Charset(
     int8_t   **buf_to,
     uint8_t    m_flags);
 
-int8_t * YSM_CharsetConvertOutputString(
-    int8_t **stringp,
-    int8_t   fl_dofree);
+uint8_t * YSM_CharsetConvertOutputString(
+    uint8_t **stringp,
+    int8_t    fl_dofree);
 
 int32_t YSM_CharsetConvertString(
-    int8_t **stringp,
-    int8_t   direction,
-    uint8_t  flags,
-    int8_t   fl_dofree);
+    uint8_t **stringp,
+    int8_t    direction,
+    uint8_t   flags,
+    int8_t    fl_dofree);
 
 uint8_t *encode64(const uint8_t *str);
 

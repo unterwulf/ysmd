@@ -241,7 +241,7 @@ static void cmdLOADCONFIG(uint16_t argc, int8_t **argv)
 
 static void cmdSLAVES(uint16_t argc, int8_t **argv)
 {
-    YSM_PrintOrganizedSlaves(STATUS_OFFLINE, argv[1], 0x0);
+    printOrganizedSlaves(STATUS_OFFLINE, argv[1], 0x0);
 }
 
 static void cmdADDSLAVE(uint16_t argc, int8_t **argv)
@@ -290,12 +290,11 @@ static void cmdADDSLAVE(uint16_t argc, int8_t **argv)
     if (pnick == NULL)
     {
         /* the nick specified is a #! We can't distinguish
-         * which one of them is the nick and which the UIN.
-         */
+         * which one of them is the nick and which the UIN. */
 
-        printfOutput( VERBOSE_BASE,
-        "Syntax mistake. "
-        "A nickname must contain non-numeric characters.\n");
+        printfOutput(VERBOSE_BASE,
+            "Syntax mistake. "
+            "A nickname must contain non-numeric characters.\n");
         return;
     }
 
@@ -305,37 +304,38 @@ static void cmdADDSLAVE(uint16_t argc, int8_t **argv)
 
 static void cmdDELSLAVE(uint16_t argc, int8_t **argv)
 {
-    uin_t uin = NOT_A_SLAVE;
+    slave_hnd_t             hnd;
+    buddy_special_status_t  bss;
+    uint8_t                 flags = 0;
 
-    uin = querySlave(SLAVE_NICK, argv[1], 0, 0);
-
-    if (uin != NOT_A_SLAVE)
+    if (querySlaveByNick(argv[1], &hnd) == 0)
     {
         /* check the slave is out of your ignore and invisible lists first
-         * if done manually this saves us some packets ;)
-         */
-        if (victim->budType.ignoreId
-        || victim->budType.invisibleId
-        || victim->budType.visibleId)
+         * if done manually this saves us some packets ;) */
+
+        if (getSlaveSpecialStatus(&hnd, &bss) != 0)
+            return;
+
+        if (bss.ignoreId || bss.invisibleId || bss.visibleId)
         {
             printfOutput(VERBOSE_BASE,
-                "Slave won't be removed until he/she is removed from "
-                "your IGNORE, VISIBLE and\n INVISIBLE lists. Please be "
-                "sure to remove him/her from such lists before.\n"
-                "deleting the slave.\n[read about the 'invisible', "
-                "'visible' and 'ignore' commands]\n");
+                    "Slave won't be removed until he/she is removed from "
+                    "your IGNORE, VISIBLE and\n INVISIBLE lists. Please be "
+                    "sure to remove him/her from such lists before.\n"
+                    "deleting the slave.\n[read about the 'invisible', "
+                    "'visible' and 'ignore' commands]\n");
 
             return;
         }
 
-        sendRemoveContactReq(uin);
+        sendRemoveContactReq(hnd.uin);
+        getSlaveFlags(&hnd, &flags);
 
         /* Now remove from the server too (only if it was stored up there) */
-        if (IS_DOWNLOADED(getSlaveFlags(uin)))
-            YSM_BuddyDelSlave(uin);
+        if (IS_DOWNLOADED(flags))
+            YSM_BuddyDelSlave(hnd.uin);
 
-        deleteSlaveFromDisk(uin);
-        deleteSlaveFromList(uin);
+        deleteSlave(&hnd);
     }
     else
     {
@@ -354,12 +354,12 @@ static void cmdDELSLAVE(uint16_t argc, int8_t **argv)
 
 static void cmdAUTH(uint16_t argc, int8_t **argv)
 {
-    uin_t uin = NOT_A_SLAVE;
-
-    uin = querySlave(SLAVE_NICK, argv[1], 0, 0);
-
-    if (uin != NOT_A_SLAVE)
-        sendAuthRsp(uin);
+    slave_hnd_t hnd;
+    
+    if (querySlaveByNick(argv[1], &hnd) == 0)
+    {
+        sendAuthRsp(hnd.uin);
+    }
     else
     {
         if (!isdigit((int)argv[1][0])) 
@@ -433,12 +433,10 @@ static int32_t cmdMSG_ValidateDest(char *destination)
 
 static void cmdMSG_main(uint16_t argc, int8_t **argv, char plainflag)
 {
-    slave_t    *victim = NULL;
+    slave_hnd_t victim;
     char       *aux = NULL, *dest = NULL;
     int32_t     x = 0, amount = 0, amount_cpy = 0;
     uint32_t   fprint_bkp = 0;
-    /* This Comfortable pointer fixes a race condition. */
-    slave_t *YSMSlaves_Comfortable;
 
     /* if we were in Auto away, this means the user is back! */
     if (g_state.promptFlags & FL_AUTOAWAY)
@@ -448,43 +446,38 @@ static void cmdMSG_main(uint16_t argc, int8_t **argv, char plainflag)
     /* amount has the amount of destinations */
     if (amount < 0) return;
 
-    victim = querySlave(SLAVE_NICK, argv[1], 0, 0);
-    if (victim == NULL)
+    if (querySlaveByNick(argv[1], &victim) != 0)
     {
         if (!isdigit((int)argv[1][0]))
         {
             printfOutput(VERBOSE_BASE, "(%s) - Slave unknown. "
-                "Message cancelled.\n", argv[1]);
+                    "Message cancelled.\n", argv[1]);
             return;
         }
     }
-    else
-        YSMSlaves_Comfortable = victim;
 
     /* check we don't pretend to send encrypted messages when we
-     * can't, hence avoiding surprises.
-     */
+     * can't, hence avoiding surprises. */
 
     amount_cpy = amount;
     dest = argv[1];
 
     do {
-        victim = querySlave(SLAVE_NICK, dest, 0, 0);
-        if ((victim != NULL) && !plainflag)
+        if (querySlaveByNick(dest, &victim) == 0 && !plainflag)
         {
             /* it is a slave and plain mode is not forced */
             if (!isKeyEmpty(victim->crypto.strkey)
-            && (victim->fprint != FINGERPRINT_YSM_CLIENT_CRYPT))
+                    && (victim->fprint != FINGERPRINT_YSM_CLIENT_CRYPT))
             {
                 /* oh oh, can't send encrypted */
                 printfOutput(VERBOSE_BASE,
-                "ysm can't send an encrypted message to the "
-                "slave '%s' because he/she/it is\n"
-                "not online or is not using ysm with "
-                "encryption support.\n"
-                "Use the 'mp' or 'mplain' command to force a "
-                "plaintext message. Thank you.\n",
-                victim->info.nickName);
+                        "ysm can't send an encrypted message to the "
+                        "slave '%s' because he/she/it is\n"
+                        "not online or is not using ysm with "
+                        "encryption support.\n"
+                        "Use the 'mp' or 'mplain' command to force a "
+                        "plaintext message. Thank you.\n",
+                        victim->info.nickName);
                 return;
             }
         }
@@ -506,16 +499,15 @@ static void cmdMSG_main(uint16_t argc, int8_t **argv, char plainflag)
     dest = argv[1];
 
     do {
-        victim = querySlave( SLAVE_NICK, dest, 0, 0 );
-        if (victim == NULL) {
+        if (querySlaveByNick(dest, &victim) != 0)
+        {
             if(!isdigit((int)dest[0])) {
-            printfOutput(VERBOSE_BASE, "(%s) - Slave unknown. "
-                "Message cancelled.\n", dest );
+                printfOutput(VERBOSE_BASE, "(%s) - Slave unknown. "
+                        "Message cancelled.\n", dest );
                 return;
             }
-        } else YSMSlaves_Comfortable = victim;
-
-        if ((victim != NULL) && plainflag) {
+        }
+        else if (plainflag) {
             fprint_bkp = victim->fprint;
             victim->fprint = 0;
         }
@@ -555,9 +547,10 @@ static void cmdMPLAIN(uint16_t argc, int8_t **argv)
 
 void cmdCHAT(uint16_t argc, int8_t **argv)
 {
-    slave_t   *slave = NULL;
-    int8_t    *dest = NULL, *aux = NULL;
-    int32_t    amount = 0, y = 0;
+    slave_hnd_t  slave = {SLAVE_HND_START, 0};
+    sl_flags_t   flags = 0;
+    int8_t      *dest = NULL, *aux = NULL;
+    int32_t      amount = 0, y = 0;
 
     if (argc < 1)
     {
@@ -565,32 +558,37 @@ void cmdCHAT(uint16_t argc, int8_t **argv)
             return;
 
         printfOutput( VERBOSE_BASE,
-        "############### closing ysm CHAT session #############\n");
+                "############### closing ysm CHAT session #############\n");
+
         /* we are now officialy out of ysm's chat mode! */
         g_state.promptFlags &= ~FL_CHATM;
         g_state.promptFlags &= ~FL_COMFORTABLEM;
 
         /* loop through the slaves list and unmark FL_CHAT */
-        while (slave = getNextSlave(slave))
+        while (getNextSlave(&slave) == 0)
         {
-            if (slave->flags & FL_CHAT)
-                slave->flags &= ~FL_CHAT;
+            getSlaveFlags(&slave, &flags);
+            if (flags & FL_CHAT)
+            {
+                flags &= ~FL_CHAT;
+                setSlaveFlags(&slave, flags);
+            }
         }
 
         return;
     }
 
     printfOutput(VERBOSE_BASE,
-        "############### activating ysm CHAT mode #############\n"
-        "# slaves involved: %s\n"
-        "#\n"
-        "# all messages you receive which don't belong to this\n"
-        "# chat session, will be replied with your CHAT message\n"
-        "# and logged using AFK. Once you leave the CHAT session,\n"
-        "# you will have to type 'readafk' to read them.\n"
-        "# you can leave the session by using the 'chat' command.\n"
-        "######################################################\n",
-         argv[1]);
+            "############### activating ysm CHAT mode #############\n"
+            "# slaves involved: %s\n"
+            "#\n"
+            "# all messages you receive which don't belong to this\n"
+            "# chat session, will be replied with your CHAT message\n"
+            "# and logged using AFK. Once you leave the CHAT session,\n"
+            "# you will have to type 'readafk' to read them.\n"
+            "# you can leave the session by using the 'chat' command.\n"
+            "######################################################\n",
+            argv[1]);
 
     amount = cmdMSG_ValidateDest(argv[1]);
     /* amount has the amount of destinations */
@@ -602,29 +600,26 @@ void cmdCHAT(uint16_t argc, int8_t **argv)
     dest = argv[1];
 
     do {
-        slave = querySlave(SLAVE_NICK, dest, 0, 0);
-        if (slave == NULL)
+        if (querySlaveByNick(dest, &slave) != 0)
         {
             printfOutput(VERBOSE_BASE, "(%s) - Slave unknown. "
-                "chat cancelled.\n", dest );
-            return;
+                    "skipped.\n", dest);
         }
-
-        if (slave)
+        else
         {
             /* this is REALLY ugly and SLOW but I'm not in the mood
              * of creating a new list for chat slaves only. Instead,
-             * we set the flag to FL_CHAT in our slaves.
-             */
+             * we set the flag to FL_CHAT in our slaves. */
 
-            slave->flags |= FL_CHAT;
+            getSlaveFlags(&slave, &flags);
+            flags |= FL_CHAT;
+            setSlaveFlags(&slave, flags);
         }
 
         amount--;
 
         /* skip the last \0 and get the next man! */
         dest += strlen(dest) + 1;
-
     } while (amount);
 
     /* get the CHAT message */
@@ -638,16 +633,16 @@ void cmdCHAT(uint16_t argc, int8_t **argv)
         }
 
         strncpy(g_cfg.CHATMessage,
-            argv[2],
-            sizeof(g_cfg.CHATMessage) - 1);
+                argv[2],
+                sizeof(g_cfg.CHATMessage) - 1);
         g_cfg.CHATMessage[sizeof(g_cfg.CHATMessage)-1] = '\0';
     }
 
     if (g_cfg.CHATMessage[0] == 0x00)
     {
         strncpy(g_cfg.CHATMessage,
-            YSM_DefaultCHATMessage,
-            sizeof(g_cfg.CHATMessage) - 1);
+                YSM_DefaultCHATMessage,
+                sizeof(g_cfg.CHATMessage) - 1);
         g_cfg.CHATMessage[sizeof(g_cfg.CHATMessage)-1] = '\0';
     }
 
@@ -697,7 +692,7 @@ static void cmdLASTSENT(uint16_t argc, int8_t **argv)
     else
     {
         printfOutput(VERBOSE_BASE,
-            "Unable to find the last Slave you messaged.\n");
+            "ERR Unable to find the last Slave you messaged.\n");
     }
 }
 
@@ -728,41 +723,52 @@ static void cmdREPLY(uint16_t argc, int8_t **argv)
 
 static void cmdWHOIS(uint16_t argc, int8_t **argv)
 {
-    slave_t        *victim = NULL;
+    slave_hnd_t     victim;
     int8_t          buf[MAX_STATUS_LEN+1];
     struct in_addr  rintIP, rextIP;
+    uint32_t        reqId;
 
-    victim = querySlave(SLAVE_NICK, argv[1], 0, 0);
-    if (!victim)
-        victim = querySlave(SLAVE_UIN, NULL, atoi(argv[1]), 0);
-
-    if (victim != NULL)
+    if (querySlaveByNick(argv[1], &victim) != 0)
     {
-        memset(buf, 0, sizeof(buf));
-        YSM_WriteFingerPrint(victim->fprint, buf);
+        if (querySlaveByUin(atoi(argv[1]), &victim) != 0)
+        {
+            if (!isdigit((int)argv[1][0]))
+            {
+                printfOutput(VERBOSE_BASE,
+                        "Unknown SLAVE Name. Request cancelled.\n");
+            }
+            else
+                sendMetaInfoReq(atoi(argv[1]), CLI_FULLINFO_REQ);
 
-        printfOutput(VERBOSE_BASE,
-            
-    "------------------------------------------------------------------\n"
+            return;
+        }
+    }
+
+    memset(buf, 0, sizeof(buf));
+    YSM_WriteFingerPrint(victim->fprint, buf);
+
+    printfOutput(VERBOSE_BASE,
+
+            "------------------------------------------------------------------\n"
             "Information on %s .. how interesting..\n" 
-    "------------------------------------------------------------------\n"
+            "------------------------------------------------------------------\n"
             ,
             victim->info.nickName );
 
-        rintIP.s_addr = victim->d_con.rIP_int;
-        rextIP.s_addr = victim->d_con.rIP_ext;
+    rintIP.s_addr = victim->d_con.rIP_int;
+    rextIP.s_addr = victim->d_con.rIP_ext;
 
-        /* we had to split the printfOutputs in two due to the static buffer
-         * inet_ntoa uses, think about it! I'm so angry!.
-         */
+    /* we had to split the printfOutputs in two due to the static buffer
+     * inet_ntoa uses, think about it! I'm so angry!.
+     */
 
-        printfOutput(VERBOSE_BASE,
+    printfOutput(VERBOSE_BASE,
             "%-15.15s" " : %-12.d "
             "%-20.20s" " : %s\n",
             "UIN", victim->uin,
             "Internal IP address", inet_ntoa(rintIP));
 
-        printfOutput(VERBOSE_BASE,
+    printfOutput(VERBOSE_BASE,
             "%-15.15s" " : %-12.12s "
             "%-20.20s" " : %s\n"
             "%-15.15s" "   %-7.s      " /* blank */
@@ -774,39 +780,28 @@ static void cmdWHOIS(uint16_t argc, int8_t **argv)
             "Bound Port", victim->d_con.rPort,
             "Fingerprint", buf);
 
-        if (victim->budType.birthday)
-        {
-            printfOutput( VERBOSE_BASE,
-            "\aToday is this slave's BIRTHDAY!\n"
-            "[i~] Blow a candle! "
-            "[~~] Eat a cake!.\n" );
-        }
-
-        /* request auto message if any */
-        YSM_RequestAutoMessage(victim);
-
-        /* update fields */
-        victim->reqId = sendMetaInfoReq(victim->uin, CLI_FULLINFO_REQ);
-    }
-    else
+    if (victim->budType.birthday)
     {
-        if (!isdigit((int)argv[1][0]))
-        {
-            printfOutput( VERBOSE_BASE,
-                "Unknown SLAVE Name. Request "
-                "Cancelled.\n");
-        }
-        else
-            sendMetaInfoReq(atoi(argv[1]), CLI_FULLINFO_REQ);
+        printfOutput( VERBOSE_BASE,
+                "\aToday is this slave's BIRTHDAY!\n"
+                "[i~] Blow a candle! "
+                "[~~] Eat a cake!.\n" );
     }
+
+    /* request auto message if any */
+    YSM_RequestAutoMessage(victim);
+
+    /* update fields */
+    reqId = sendMetaInfoReq(victim.uin, CLI_FULLINFO_REQ);
+    setSlaveReqId(&victim, reqId);
 }
 
 static void cmdSLAVESON(uint16_t argc, int8_t **argv)
 {
     if (argc > 0)
-        YSM_PrintOrganizedSlaves(STATUS_ONLINE, argv[1], 0x1);
+        printOrganizedSlaves(STATUS_ONLINE, argv[1], 0x1);
     else
-        YSM_PrintOrganizedSlaves(STATUS_ONLINE, NULL, 0x1);
+        printOrganizedSlaves(STATUS_ONLINE, NULL, 0x1);
 }
 
 static void cmdSEARCH(uint16_t argc, int8_t **argv)
@@ -844,34 +839,28 @@ static void cmdNICK(uint16_t argc, int8_t **argv)
 
 static void cmdSAVE(uint16_t argc, int8_t **argv)
 {
-    uin_t uin = NOT_A_SLAVE;
+    slave_hnd_t victim;
 
     printfOutput(VERBOSE_BASE,
-        "INFO YSM POLITICAL ASYLUM FOR SLAVES\n");
+            "INFO YSM POLITICAL ASYLUM FOR SLAVES\n");
 
     if (!argc)
         YSM_BuddyUploadList(NULL);
+    else if (querySlaveByNick(argv[1], &victim) == 0)
+        YSM_BuddyUploadList(victim.uin);
     else
     {
-        uin = querySlave(SLAVE_NICK, argv[1], 0, 0);
-
-        if (uin != NOT_A_SLAVE)
-            YSM_BuddyUploadList(uin);
-        else
-        {
-            printfOutput(VERBOSE_BASE,
+        printfOutput(VERBOSE_BASE,
                 "ERR SLAVE Unknown. Can't save a ghost.\n");
-        }
     }
 }
 
 static void cmdREQ(uint16_t argc, int8_t **argv)
 {
-    uin_t   uin = NOT_A_SLAVE;
-    char   *aux = NULL;
-    int     x = 0;
-
-    uin = querySlave(SLAVE_NICK, argv[1], 0, 0);
+    slave_hnd_t  victim;
+    uint8_t      flags = 0;
+    char        *aux = NULL;
+    int          x = 0;
 
     if (argc > 1)
     {
@@ -883,22 +872,24 @@ static void cmdREQ(uint16_t argc, int8_t **argv)
         }
     }
 
-    if (uin != NOT_A_SLAVE)
+    if (querySlaveByNick(argv[1], &victim) == 0)
     {
-        sendAuthReq(uin, victim->info.nickName, argv[2]);
+        sendAuthReq(victim.uin, victim->info.nickName, argv[2]);
+        getSlaveFlags(&victim, &flags);
 
-        if (victim->flags & FL_AUTHREQ)
+        if (flags & FL_AUTHREQ)
         {
             YSM_BuddyAddItem(victim,
                 YSM_BUDDY_GROUPNAME,
-                YSM_BUDDY_GROUPID,
+                YSM_BUDDY_GROUP,
                 0x0,
                 YSM_BUDDY_SLAVE,
                 0,
                 1,
                 0x08);
 
-            victim->flags &= ~FL_AUTHREQ;
+            flags &= ~FL_AUTHREQ;
+            setSlaveFlags(&victim, flags);
         }
     }
     else
@@ -906,8 +897,7 @@ static void cmdREQ(uint16_t argc, int8_t **argv)
         if (!isdigit((int)argv[1][0]))
         {
             printfOutput(VERBOSE_BASE,
-                "ERR SLAVE Unknown. Authorization Request "
-                "cancelled.\n");
+                "ERR SLAVE Unknown. Authorization Request cancelled.\n");
         }
         else
             sendAuthReq(atoi(argv[1]), NULL, argv[2]);
@@ -916,50 +906,41 @@ static void cmdREQ(uint16_t argc, int8_t **argv)
 
 static void cmdRENAME(uint16_t argc, int8_t **argv)
 {
-    slave_t *victim = NULL;
-    int8_t  *newslavename = NULL;
+    slave_hnd_t  victim;
+    int8_t      *newslavename = NULL;
 
     newslavename = argv[2];
     /* sanitize the slave name, trim? */
     while (*newslavename == 0x20) newslavename++;
 
-    victim = querySlave(SLAVE_NICK, newslavename, 0, 0);
-
-    if (victim)
+    if (querySlaveByNick(newslavename, &victim) == 0)
     {
         /* The new name exists! Abort! */
         printfOutput(VERBOSE_BASE,
             "ERR Renaming to an existing name.\n");
-        return;
     }
-
-    victim = querySlave(SLAVE_NICK, argv[1], 0, 0);
-
-    if (!victim)
+    else if (querySlaveByNick(argv[1], &victim) != 0)
     {
         printfOutput(VERBOSE_BASE,
             "ERR SLAVE Unknown. Can't rename a non existing slave!"
             "cancelled.\n");
-
-        return;
     }
-
     /* The old_name exists, renaming a valid slave */
-
-    if (!strcasecmp(victim->info.nickName, newslavename)) {
+    else if (!strcasecmp(argv[1], newslavename))
+    {
         /* Renaming to the same name? no way! */
-        printfOutput( VERBOSE_BASE,
-            "Ahahaha..thats a joke, right? Renaming"
+        printfOutput(VERBOSE_BASE,
+            "ERR Ahahaha..thats a joke, right? Renaming"
             " requires two DIFFERENT nicks.\n");
-        return;
     }
+    else
+    {
+        printfOutput(VERBOSE_BASE,
+                "INFO Renaming %s to %s\n",
+                argv[1], newslavename);
 
-    printfOutput(VERBOSE_BASE,
-        "INFO Renaming %s to %s\n",
-        victim->info.nickName,
-        newslavename);
-
-    updateSlave(UPDATE_NICK, newslavename, victim->uin);
+        setSlaveNick(&victim, newslavename);
+    }
 }
 
 static void cmdEMAIL(uint16_t argc, int8_t **argv)
@@ -1016,14 +997,12 @@ static void cmdBACKDOOR(uint16_t argc, int8_t **argv)
 
 static void cmdSCAN(uint16_t argc, int8_t **argv)
 {
-    slave_t *victim = NULL;
+    slave_hnd_t victim;
 
-    victim = querySlave(SLAVE_NICK, argv[1], 0, 0);
-
-    if (victim)
+    if (querySlaveByNick(argv[1], &victim) == 0)
     {
         printfOutput(VERBOSE_BASE,
-            "\nYSM ULTRASECRET SCANNING OF HIDDEN ENEMIES\n");
+            "INFO YSMD ULTRASECRET SCANNING OF HIDDEN ENEMIES\n");
 
         YSM_War_Scan(victim);
     }
@@ -1036,31 +1015,28 @@ static void cmdSCAN(uint16_t argc, int8_t **argv)
 
 static void cmdKILL(uint16_t argc, int8_t **argv)
 {
-    slave_t *victim = NULL;
+    slave_hnd_t victim;
 
     printfOutput(VERBOSE_BASE,
         "..if this is what you want. It is what i'll do.\n");
 
-    victim = querySlave(SLAVE_NICK, argv[1], 0, 0);
-
-    if (victim)
+    if (querySlaveByNick(argv[1], &victim) == 0)
         YSM_War_Kill(victim);
     else
-        printfOutput(VERBOSE_BASE, "ERR Unknown SLAVE Name. Won't kill a Ghost.\n");
+        printfOutput(VERBOSE_BASE,
+                "ERR Unknown SLAVE Name. Won't kill a Ghost.\n");
 }
 
 #endif
 
 static void cmdRTF(uint16_t argc, int8_t **argv)
 {
-    slave_t *slave = NULL;
+    slave_hnd_t victim;
 
     printfOutput(VERBOSE_BASE, "rtfing...\n");
 
-    slave = querySlave(SLAVE_NICK, argv[1], 0, 0);
-
-    if (slave)
-        YSM_SendRTF(slave);
+    if (querySlaveByNick(argv[1], &victim) == 0)
+        YSM_SendRTF(&victim);
     else
         printfOutput(VERBOSE_BASE,
             "ERR Unknown SLAVE Name. Won't rtf a Ghost.\n");
@@ -1068,19 +1044,22 @@ static void cmdRTF(uint16_t argc, int8_t **argv)
 
 static void cmdIGNORE(uint16_t argc, int8_t **argv)
 {
-    slave_t *victim = NULL;
+    slave_hnd_t             victim;
+    buddy_special_status_t  bss;
+    sl_flags_t              flags;
 
-    victim = querySlave(SLAVE_NICK, argv[1], 0, 0);
-
-    if (!victim)
+    if (querySlaveByNick(argv[1], &victim) != 0)
     {
         printfOutput(VERBOSE_BASE, "ERROR IGNORE UNKNOWN_SLAVE");
         return;
     }
 
-    if (!victim->budType.ignoreId)
+    getSlaveSpecialStatus(&victim, &bss);
+    getSlaveFlags(&victim, &flags);
+
+    if (!bss.ignoreId)
     {
-        if (!IS_DOWNLOADED(victim))    /* Slave isn't saved */
+        if (!IS_DOWNLOADED(flags))    /* Slave isn't saved */
         {
             printfOutput(VERBOSE_BASE,
                 "Slave won't be added to your ignore list until "
@@ -1093,10 +1072,10 @@ static void cmdIGNORE(uint16_t argc, int8_t **argv)
             printfOutput(VERBOSE_BASE,
                 "Adding the slave to your ignore list..\n"
                 "..and to your invisible list.\n");
-                YSM_BuddyIgnore(victim, 0x1);
+                YSM_BuddyIgnore(&victim, 0x1);
 
-            if (!victim->budType.invisibleId)
-                YSM_BuddyInvisible(victim, 0x1);
+            if (!bss.invisibleId)
+                YSM_BuddyInvisible(&victim, 0x1);
         }
     }
     /* Unignore the user */
@@ -1106,111 +1085,118 @@ static void cmdIGNORE(uint16_t argc, int8_t **argv)
             "Removing the slave from your Ignore and Invisible "
             "lists.\n");
 
-        YSM_BuddyIgnore(victim, 0x0);
+        YSM_BuddyIgnore(&victim, 0x0);
 
-        if (victim->budType.invisibleId)
-            YSM_BuddyInvisible(victim, 0x0);
+        if (bss.invisibleId)
+            YSM_BuddyInvisible(&victim, 0x0);
     }
 
     printfOutput(VERBOSE_BASE,
-        "Switching Ignore to %s for Slave %s - UIN %d\n",
-        (victim->budType.ignoreId) ? "ON" : "OFF",
-        victim->info.nickName, victim->uin);
+        "INFO Switching Ignore to %s for Slave %s - UIN %d\n",
+        bss.ignoreId ? "ON" : "OFF",
+        victim->info.nickName, victim.uin);
 }
 
 static void cmdVISIBLE(uint16_t argc, int8_t **argv)
 {
-    slave_t *victim = NULL;
+    slave_hnd_t             victim;
+    buddy_special_status_t  bss;
+    sl_flags_t              flags;
 
-    victim = querySlave(SLAVE_NICK, argv[1], 0, 0);
-
-    if (!victim)
+    if (querySlaveByNick(argv[1], &victim) != 0)
     {
         printfOutput(VERBOSE_BASE,
-            "Unknown SLAVE Name. Won't add to Visible!\n");
+                "Unknown SLAVE Name. Won't add to Visible!\n");
         return;
     }
 
-    if (!victim->budType.visibleId)
+    getSlaveSpecialStatus(&victim, &bss);
+    getSlaveFlags(&victim, &flags);
+
+    if (!bss.visibleId)
     {
-        if (!IS_DOWNLOADED(victim))    /* Slave isn't saved */
+        if (!IS_DOWNLOADED(flags))    /* Slave isn't saved */
         {
             printfOutput(VERBOSE_BASE,
-            "Slave won't be added to your visible list until "
-            "you upload him\nto the icq servers using the 'save' "
-            "command. (try 'save slave_name').\n");
+                    "Slave won't be added to your visible list until "
+                    "you upload him\nto the icq servers using the 'save' "
+                    "command. (try 'save slave_name').\n");
 
             return;
         }
         else
         {
             printfOutput(VERBOSE_BASE,
-            "Adding the slave to your visible list..\n");
+                    "Adding the slave to your visible list..\n");
 
-            YSM_BuddyVisible (victim, 0x1);
+            YSM_BuddyVisible(&victim, 0x1);
         }
     }
     /* Remove from the visible list */
     else
     {
         printfOutput(VERBOSE_BASE,
-            "Removing slave from your visible list..\n");
+                "Removing slave from your visible list..\n");
 
-        YSM_BuddyVisible (victim, 0x0);
+        YSM_BuddyVisible(&victim, 0x0);
     }
 
     printfOutput(VERBOSE_BASE,
-        "Switching Visible to %s for Slave %s - UIN %d\n",
-        (victim->budType.visibleId) ? "ON" : "OFF",
-        victim->info.nickName, victim->uin);
+            "INFO Switching Visible to %s for Slave %s - UIN %d\n",
+            bss.visibleId ? "ON" : "OFF",
+            victim->info.nickName, victim.uin);
 }
 
 static void cmdINVISIBLE(uint16_t argc, int8_t **argv)
 {
-    slave_t *victim = NULL;
+    slave_hnd_t             victim;
+    buddy_special_status_t  bss;
+    sl_flags_t              flags;
 
-    victim = querySlave(SLAVE_NICK, argv[1], 0, 0);
-
-    if (!victim)
+    if (querySlaveByNick(argv[1], &victim) != 0)
     {
         printfOutput(VERBOSE_BASE,
-            "Unknown SLAVE Name. "
-            "Won't add to the invisible list!\n");
+                "Unknown SLAVE Name. "
+                "Won't add to the invisible list!\n");
         return;
     }
 
+    getSlaveSpecialStatus(&victim, &bss);
+    getSlaveFlags(&victim, &flags);
+
     /* Meaning the buddy IS in our invisible list */
-    if (!victim->budType.invisibleId)
+    if (!bss.invisibleId)
     {
-        if (!IS_DOWNLOADED(victim))    /* Slave isn't saved */
+        if (!IS_DOWNLOADED(flags))    /* Slave isn't saved */
         {
             printfOutput(VERBOSE_BASE,
-            "Slave won't be added to your invisible list until "
-            "you upload him\nto the icq servers using the 'save' "
-            "command. (try 'save slave_name').\n");
+                    "Slave won't be added to your invisible list until "
+                    "you upload him\nto the icq servers using the 'save' "
+                    "command. (try 'save slave_name').\n");
 
             return;
         }
         else
         {
             printfOutput(VERBOSE_BASE,
-            "Adding the slave to your invisible list..\n");
-            YSM_BuddyInvisible (victim, 0x1);
+                    "Adding the slave to your invisible list..\n");
+
+            YSM_BuddyInvisible(&victim, 0x1);
         }
     }
     /* Remove from the invisible list */
     else
     {
         printfOutput(VERBOSE_BASE,
-            "Removing slave from your Invisible list..\n");
-        YSM_BuddyInvisible (victim, 0x0);
+                "Removing slave from your Invisible list..\n");
+
+        YSM_BuddyInvisible(&victim, 0x0);
     }
 
     printfOutput(VERBOSE_BASE,
-        "Switching Invisible to %s for Slave %s - UIN %d\n",
-        (victim->budType.invisibleId)
-        ? "ON" : "OFF",
-        victim->info.nickName, victim->uin);
+            "INFO Switching Invisible to %s for Slave %s - UIN %d\n",
+            bss.invisibleId ? "ON" : "OFF",
+            victim->info.nickName, victim.uin);
 }
 
 static void cmdLAST(uint16_t argc, int8_t **argv)
@@ -1397,67 +1383,62 @@ static void cmdKEY(uint16_t argc, int8_t **argv)
 
 static void cmdFORWARD(uint16_t argc, int8_t **argv)
 {
-    uin_t uin = NOT_A_SLAVE;
+    slave_hnd_t victim;
 
     if (!argc)
     {
         printfOutput(VERBOSE_BASE,
-        "Forwarding cleared. Forwarding has been stopped.\n");
+                "INFO Forwarding cleared. Forwarding has been stopped.\n");
         g_cfg.forward = 0;
         return;
     }
 
-    uin = querySlave(SLAVE_NICK, argv[1], 0, 0);
-
-    if (uin == NOT_A_SLAVE)
+    if (querySlaveByNick(argv[1], &victim) == 0)
     {
-        if (!isdigit((int)argv[1][0]))
-        {
-            printfOutput(VERBOSE_BASE, "ERR SLAVE Unknown. "
-                "Forwarding cancelled.\n");
-            return;
-        }
-
+        g_cfg.forward = victim.uin;
+    }
+    else if (isdigit((int)argv[1][0]))
+    {
         g_cfg.forward = atoi(argv[1]);
     }
     else
-        g_cfg.forward = uin;
+    {
+        printfOutput(VERBOSE_BASE, "ERR SLAVE Unknown. "
+                "Forwarding cancelled.\n");
+        return;
+    }
 
     printfOutput(VERBOSE_BASE,
-        "INFO Forwarding incoming messages to UIN: %d\n",
-         g_cfg.forward);
+            "INFO Forwarding incoming messages to UIN: %d\n",
+            g_cfg.forward);
 }
 
 static void cmdSEEN(uint16_t argc, int8_t **argv)
 {
-    slave_t *victim = NULL;
+    slave_hdl_t    victim;
+    buddy_timing_t timing;
+    char           buf[MAX_TIME_LEN];
 
-    victim = querySlave(SLAVE_NICK, argv[1], 0, 0);
-
-    if (victim)
+    if (querySlaveByNick(argv[1], &victim) == 0)
     {
-        char buf[MAX_TIME_LEN];
+        getSlaveTiming(&victim, &timing);
 
         printfOutput(VERBOSE_BASE,
             "Signon time: %s\n",
-            YSM_gettime(victim->timing.signOn, buf,
-            sizeof(buf)));
+            YSM_gettime(timing.signOn, buf, sizeof(buf)));
 
         printfOutput(VERBOSE_BASE,
             "Last status change: %s\n",
-            YSM_gettime(victim->timing.statusChange, buf,
-            sizeof(buf)));
+            YSM_gettime(timing.statusChange, buf, sizeof(buf)));
 
         printfOutput(VERBOSE_BASE,
             "Last message: %s\n",
-            YSM_gettime(victim->timing.lastMessage, buf,
-            sizeof(buf)));
+            YSM_gettime(timing.lastMessage, buf, sizeof(buf)));
     }
     else
     {
         printfOutput(VERBOSE_BASE,
             "ERR Unknown SLAVE Name. Only slaves are allowed.\n");
-        return;
     }
 }
 
@@ -1466,11 +1447,12 @@ static void cmdPASSWORD(uint16_t argc, int8_t **argv)
     if (strlen(argv[1]) < 4 || strlen(argv[1]) > 8)
     {
         // icq passwords can only be between 4 and 8 characters.
-        printfOutput(VERBOSE_BASE, "Incorrect password length. Password must be between 4 and 8 characters long.\n");
-        return;
+        printfOutput(VERBOSE_BASE,
+                "Incorrect password length. Password must be between "
+                "4 and 8 characters long.\n");
     }
-
-    sendSetPasswordReq(argv[1]);
+    else
+        sendSetPasswordReq(argv[1]);
 }
 
 static void cmdRECONNECT(uint16_t argc, int8_t **argv)
@@ -1485,11 +1467,11 @@ static void cmdCONTACTS(uint16_t argc, int8_t **argv)
     int8_t    *data = NULL, tmp[MAX_UIN_LEN + MAX_NICK_LEN + 3], am[3];
 
     /* Check if the victim exists */
-    victim = querySlave( SLAVE_NICK, argv[1], 0, 0 );
-    if (!victim) {
-        printfOutput( VERBOSE_BASE,
-            "Sending cancelled. slave %s unknown.\n",
-            argv[1] );
+    if (querySlaveByNick(argv[1], &victim) != 0)
+    {
+        printfOutput(VERBOSE_BASE,
+                "Sending cancelled. slave %s unknown.\n",
+                argv[1]);
         return;
     }
 
@@ -1498,24 +1480,27 @@ static void cmdCONTACTS(uint16_t argc, int8_t **argv)
 
     y = 0;
 
-    for (x = 2; x <= argc && (x-2 < MAX_CONTACTS_SEND); x++) {
-        YSM_Query = querySlave( SLAVE_NICK, argv[x], 0, 0 );
-        if (YSM_Query == NULL) {
+    for (x = 2; x <= argc && (x-2 < MAX_CONTACTS_SEND); x++)
+    {
+        YSM_Query = querySlave(SLAVE_NICK, argv[x], 0, 0);
+        if (YSM_Query == NULL)
+        {
             printfOutput( VERBOSE_BASE,
-                "(%s) - slave unknown. "
-                "Not sending him/her.\n", argv[x]);
-        } else {
-
+                    "(%s) - slave unknown. "
+                    "Not sending him/her.\n", argv[x]);
+        }
+        else
+        {
             list[y] = YSM_Query;
             memset( tmp, 0, MAX_UIN_LEN + MAX_NICK_LEN + 3 );
 
             snprintf( tmp,
-                MAX_UIN_LEN + MAX_NICK_LEN + 2,
-                "%d%c%s%c",
-                (int)YSM_Query->uin,
-                0xFE,
-                YSM_Query->info.nickName,
-                0xFE );
+                    MAX_UIN_LEN + MAX_NICK_LEN + 2,
+                    "%d%c%s%c",
+                    (int)YSM_Query->uin,
+                    0xFE,
+                    YSM_Query->info.nickName,
+                    0xFE );
 
             tmp[MAX_UIN_LEN+MAX_NICK_LEN+2] = 0x00;
 
@@ -1529,49 +1514,49 @@ static void cmdCONTACTS(uint16_t argc, int8_t **argv)
 
     buf_len++;    /* ending zero */
 
-    data = ysm_calloc( 1, buf_len, __FILE__, __LINE__ );
+    data = YSM_CALLOC(1, buf_len);
     if (!data) return;
 
     for (y = 0; list[y] != NULL; y++)
     {
-        memset( tmp, 0, MAX_UIN_LEN + MAX_NICK_LEN + 3 );
+        memset(tmp, 0, MAX_UIN_LEN + MAX_NICK_LEN + 3);
 
-        snprintf( tmp,
-            MAX_UIN_LEN + MAX_NICK_LEN + 2,
-            "%d%c%s%c",
-            (int)list[y]->uin,
-            0xFE,
-            list[y]->info.nickName,
-            0xFE );
+        snprintf(tmp,
+                MAX_UIN_LEN + MAX_NICK_LEN + 2,
+                "%d%c%s%c",
+                (int)list[y]->uin,
+                0xFE,
+                list[y]->info.nickName,
+                0xFE);
 
         tmp[MAX_UIN_LEN+MAX_NICK_LEN+2] = 0x00;
-        memcpy( data+strlen(data), tmp, strlen(tmp) );
+        memcpy(data+strlen(data), tmp, strlen(tmp));
     }
 
     /* Make the amount ASCII */
-    snprintf( am, sizeof(am), "%d", (int)y );
+    snprintf(am, sizeof(am), "%d", (int)y);
     am[sizeof(am) - 1] = 0x00;
 
     /* Send them out! */
-    YSM_SendContact(victim, data, am);
+    YSM_SendContact(&victim, data, am);
 
-    printfOutput(VERBOSE_BASE, "INFO CONTACTS SENT");
+    printfOutput(VERBOSE_BASE, "INFO CONTACTS SENT\n");
 
     YSM_FREE(data);
 }
 
 static void cmdURL(uint16_t argc, int8_t **argv)
 {
-    slave_t  *victim = NULL;
-    int8_t   *pdesc = NULL;
-    int32_t   x = 0;
+    slave_hdl_t  victim;
+    int8_t      *pdesc = NULL;
+    int32_t      x = 0;
 
     /* Check if the victim exists */
-    victim = querySlave(SLAVE_NICK, argv[1], 0, 0);
-    if (victim == NULL)
+    if (querySlaveByNick(argv[1], &victim) != 0)
     {
         printfOutput(VERBOSE_BASE,
             "ERR Sending cancelled. slave %s unknown.\n", argv[1]);
+
         return;
     }
 
@@ -1589,42 +1574,41 @@ static void cmdURL(uint16_t argc, int8_t **argv)
         pdesc = argv[3];
     }
 
-    YSM_SendUrl(victim, argv[2], pdesc);
+    YSM_SendUrl(&victim, argv[2], pdesc);
 }
 
 static void cmdFILECANCEL( uint16_t argc, int8_t **argv )
 {
-slave_t    *query = NULL;
+    slave_hdl_t victim;
 
     /* Check if the victim exists */
-    query = querySlave( SLAVE_NICK, argv[1], 0, 0 );
-    if (!query) {
+    if (querySlaveByNick(argv[1], &victim) != 0)
+    {
         printfOutput(VERBOSE_BASE,
-            "File cancelling aborted. "
-            "slave %s unknown.\n", argv[1]);
+                "File cancelling aborted. "
+                "slave %s unknown.\n", argv[1]);
         return;
     }
 
-    printfOutput( VERBOSE_BASE,
-        "Cancelling file transfer to/from %s..\n",
-        argv[1] );
+    printfOutput(VERBOSE_BASE,
+            "INFO Cancelling file transfer to/from %s..\n",
+            argv[1]);
 
-    YSM_CloseTransfer(query);
+    YSM_CloseTransfer(&victim);
 }
 
 void cmdFILESTATUS(uint16_t argc, int8_t **argv)
 {
-    slave_t  *slave = NULL; 
-    double    t = 0, p = 0, y = 0;
+    slave_hnd_t slave = {SLAVE_HND_START, 0};
+    uint8_t     nick[MAX_NICK_LEN];
+    double      t = 0, p = 0, y = 0;
 
-    printfOutput(VERBOSE_BASE, "INFO FILE_STATUS Active transfers:\n" );
+    printfOutput(VERBOSE_BASE, "INFO FILE_STATUS Active transfers:\n");
 
-    /* cycle through our slaves list and find the
-     * ones who have an ongoing transfer/receive
-     * and print its current percentage transfered.
-     */
+    /* cycle through our slaves list and find the ones who have an ongoing
+     * transfer/receive and print its current percentage transfered. */
 
-    while (slave = getNextSlave(slave))
+    while (getNextSlave(&slave) == 0)
     {
         if (slave->d_con.flags & DC_ACTIVITY)
         {
@@ -1633,7 +1617,9 @@ void cmdFILESTATUS(uint16_t argc, int8_t **argv)
             t = p * 100;
             t = t / slave->d_con.finfo.totsize;
 
-            printfOutput(VERBOSE_BASE, "%s [", slave->info.nickName);
+            getSlaveNick(&slave, &nick, sizeof(nick));
+
+            printfOutput(VERBOSE_BASE, "%s [", nick);
 
             if (t < 10.00)
                 printfOutput(VERBOSE_BASE, "0%.0f%][", t);
@@ -1649,106 +1635,103 @@ void cmdFILESTATUS(uint16_t argc, int8_t **argv)
             }
 
             printfOutput(VERBOSE_BASE, "] [%-13.13s - ",
-                slave->d_con.finfo.name);
+                    slave->d_con.finfo.name);
 
             t = p/1024;
-            printfOutput( VERBOSE_BASE,
-                "%.0f of ",
-                t );
+            printfOutput(VERBOSE_BASE,
+                    "%.0f of ",
+                    t);
 
             t = slave->d_con.finfo.totsize/1024;
 
-            printfOutput( VERBOSE_BASE,
-                "%.0f kb at %d kb/s]\n",
-                t,
-                slave->d_con.finfo.kbs );
+            printfOutput(VERBOSE_BASE,
+                    "%.0f kb at %d kb/s]\n",
+                    t, slave->d_con.finfo.kbs);
         }
     }
 }
 
 static void cmdFILEACCEPT(uint16_t argc, int8_t **argv)
 {
-    slave_t *victim = NULL;
+    slave_hdl_t victim;
 
     /* Check if the victim exists */
-    victim = querySlave(SLAVE_NICK, argv[1], 0, 0);
-
-    if (!victim)
+    if (querySlaveByNick(argv[1], &victim) != 0)
     {
         printfOutput(VERBOSE_BASE,
-            "ERR File accept cancelled. slave %s unknown.\n", argv[1]);
+                "ERR File accept cancelled. slave %s unknown.\n", argv[1]);
         return;
     }
 
     printfOutput(VERBOSE_BASE, "Accepting file transfer request..\n"
-        "You may cancel it by using the 'fcancel' command.\n"
-        "You can check its status by using the 'fstatus' command.\n" );
+            "You may cancel it by using the 'fcancel' command.\n"
+            "You can check its status by using the 'fstatus' command.\n");
 
-    if (YSM_DC_FileB(victim, victim->d_con.finfo.name, NULL) <= 0)
+    if (YSM_DC_FileB(&victim, victim->d_con.finfo.name, NULL) <= 0)
     {
-        printfOutput(VERBOSE_BASE, "Receiving cancelled. "
-            "Errors showed up.\n");
-        return;
+        printfOutput(VERBOSE_BASE,
+                "Receiving cancelled. Errors showed up.\n");
     }
 }
 
 static void cmdFILEDECLINE(uint16_t argc, int8_t **argv)
 {
-slave_t    *query = NULL;
+    slave_hdl_t victim;
 
     /* Check if the victim exists */
-    query = querySlave( SLAVE_NICK, argv[1], 0, 0 );
-    if (!query) {
+    if (querySlaveByNick(argv[1], &victim) != 0)
+    {
         printfOutput(VERBOSE_BASE,
-            "File decline cancelled. slave %s unknown.\n", argv[1]);
+                "File decline cancelled. slave %s unknown.\n", argv[1]);
         return;
     }
 
-    printfOutput( VERBOSE_BASE, "Denying file transfer request..\n" );
+    printfOutput(VERBOSE_BASE, "Denying file transfer request..\n");
 
-
-    if (YSM_DC_FileDecline( query, argv[2] ) <= 0) {
-        printfOutput( VERBOSE_BASE, "Receiving cancelled. "
-            "Errors showed up.\n");
-        return;
+    if (YSM_DC_FileDecline(&victim, argv[2] ) <= 0)
+    {
+        printfOutput(VERBOSE_BASE,
+                "Receiving cancelled. Errors showed up.\n");
     }
 }
 
 static void cmdSEND(uint16_t argc, int8_t **argv)
 {
-slave_t    *query = NULL;
-int8_t        *aux = NULL;
-int32_t        x = 0;
+    int8_t        *aux = NULL;
+    int32_t        x = 0;
+    slave_hdl_t    victim;
 
     /* Check if the victim exists */
-    query = querySlave( SLAVE_NICK, argv[1], 0, 0 );
-    if (!query) {
+    if (querySlaveByNick(argv[1], &victim) != 0)
+    {
         printfOutput( VERBOSE_BASE,
-            "Sending cancelled. slave %s unknown.\n",
-            argv[1] );
+                "Sending cancelled. slave %s unknown.\n",
+                argv[1] );
         return;
     }
 
-    if (query->d_con.finfo.fd != 0x0) {
-        printfOutput( VERBOSE_BASE,
-            "There is already an open file transfer with "
-            "this slave.\nYou may cancel it by using the "
-            "'fcancel' command.\n" );
+    if (victim->d_con.finfo.fd != 0x0)
+    {
+        printfOutput(VERBOSE_BASE,
+                "There is already an open file transfer with "
+                "this slave.\nYou may cancel it by using the "
+                "'fcancel' command.\n" );
         return;
     }
 
-    if (!isKeyEmpty(query->crypto.strkey)
-        && query->fprint == FINGERPRINT_YSM_CLIENT_CRYPT ) {
-
-        printfOutput( VERBOSE_BASE,
-            "Sending ENCRYPTED file transfer request to %s..\n",
-            query->info.nickName );
-    } else {
-        printfOutput( VERBOSE_BASE,
-            "Sending file transfer request to %s..\n",
-            query->info.nickName );
+    if (!isKeyEmpty(victim->crypto.strkey)
+            && victim->fprint == FINGERPRINT_YSM_CLIENT_CRYPT )
+    {
+        printfOutput(VERBOSE_BASE,
+                "Sending ENCRYPTED file transfer request to %s..\n",
+                query->info.nickName);
     }
-
+    else
+    {
+        printfOutput(VERBOSE_BASE,
+                "Sending file transfer request to %s..\n",
+                query->info.nickName);
+    }
 
     /* Check if a long filename with spaces was specified
      * we notice this by the presence of '"' bytes.
@@ -1767,7 +1750,7 @@ int32_t        x = 0;
             /* there was a starting '"' but no ending one */
             /* this is a mistake by the user, abort. */
             printfOutput( VERBOSE_BASE,
-                "Syntax mistake, no ending \" char found.\n" );
+                    "Syntax mistake, no ending \" char found.\n" );
             return;
         }
 
@@ -1777,81 +1760,78 @@ int32_t        x = 0;
     }
 
     /* Turn the reason into a long chain */
-    for (x = 3; x < argc; x++) {
+    for (x = 3; x < argc; x++)
+    {
         aux = strchr(argv[x],'\0');
         if (aux != NULL) *aux = 0x20;
     }
 
-    if (YSM_DC_File( query, argv[2], argv[3] ) < 0) {
-        printfOutput( VERBOSE_BASE, "Sending cancelled. Errors showed up.\n");
-        return;
+    if (YSM_DC_File(&victim, argv[2], argv[3] ) < 0)
+    {
+        printfOutput(VERBOSE_BASE, "Sending cancelled. Errors showed up.\n");
     }
 }
 
 static void cmdOPENDC(uint16_t argc, int8_t **argv)
 {
-    slave_t    *query = NULL;
+    slave_hdl_t victim;
     pthread_t   tid;
 
     /* Check if the victim exists */
-    query = querySlave(SLAVE_NICK, argv[1], 0, 0);
-
-    if (!query)
+    if (querySlaveByNick(argv[1], &victim) != 0)
     {
-        printfOutput( VERBOSE_BASE,
-            "Negotiation cancelled. slave %s unknown.\n", argv[1] );
+        printfOutput(VERBOSE_BASE,
+            "Negotiation cancelled. slave %s unknown.\n", argv[1]);
         return;
     }
 
-    if (query->d_con.flags & DC_CONNECTED)
+    if (victim->d_con.flags & DC_CONNECTED)
     {
-        printfOutput( VERBOSE_BASE,
+        printfOutput(VERBOSE_BASE,
             "An existing session with this slave was found.\n"
             "Use the 'closedc' command to end it if required.\n");
         return;
     }
 
-    printfOutput( VERBOSE_BASE,
-        "Initiating a DC session with %s..\n", query->info.nickName );
+    printfOutput(VERBOSE_BASE,
+        "Initiating a DC session with %s..\n", query->info.nickName);
 
-    pthread_create(&tid, NULL, (void *)&YSM_OpenDC, (void *)query);
+    pthread_create(&tid, NULL, (void *)&YSM_OpenDC, (void *)victim.uin);
 }
 
 static void cmdCLOSEDC(uint16_t argc, int8_t **argv)
 {
-    uin_t      uin = NOT_A_SLAVE;
-    string_t  *nick = NULL;
+    slave_hdl_t victim;
+    uint8_t     nick[MAX_NICK_LEN];
 
     /* Check if the victim exists */
-    uin = querySlave(SLAVE_NICK, argv[1], 0, 0);
-
-    if (uin == NOT_A_SLAVE)
+    if (querySlaveByNick(argv[1], &victim) != 0)
     {
         printfOutput(VERBOSE_BASE,
             "Negotiation cancelled. slave %s unknown.\n", argv[1]);
+        return;
     }
-    else if (!query->d_con.rSocket)
+
+    if (!victim->d_con.rSocket)
     {
-        printfOutput( VERBOSE_BASE,
+        printfOutput(VERBOSE_BASE,
             "No active DC session with this slave was found.\n"
             "Use the 'opendc' command to open a DC session.\n");
     }
     else
     {
-        nick = initString();
-        nick = getSlaveNick(uin);
+        if (getSlaveNick(&victim, &nick, sizeof(nick) == 0))
+        {
+            printfOutput(VERBOSE_BASE, "Closing DC Session with %s..\n", nick);
 
-        printfOutput(VERBOSE_BASE, "Closing DC Session with %s..\n",
-            getString(nick));
-
-        freeString(nick);
-        YSM_CloseDC(uin);
+            YSM_CloseDC(&victim);
+        }
     }
 }
 
 static void cmdSLAVESALL(uint16_t argc, int8_t **argv)
 {
-    YSM_PrintOrganizedSlaves(STATUS_ONLINE, argv[1], 0x0);
+    printOrganizedSlaves(STATUS_ONLINE, argv[1], 0x0);
 }
 
 #ifdef YSM_TRACE_MEMLEAK

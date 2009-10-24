@@ -18,6 +18,8 @@ void    ysm_error(int32_t level, int8_t verbose, uint8_t *file, int32_t line);
 
 int8_t *YSM_trim(int8_t *str);
 ssize_t YSM_tokenize(char *str, const char *sep, char **arr, ssize_t count);
+int32_t parseSlave(uint8_t *name);
+void printOrganizedSlaves(uint16_t FilterStatus, int8_t *Fstring, int8_t FilterIgnore);
 
 uint32_t Chars_2_DW(const uint8_t *buf);
 uint32_t Chars_2_DWb(const uint8_t *buf);

@@ -711,12 +711,12 @@ int32_t    pos = 0, id_pos = 0, len = 0, ret = TRUE;
     return ret;
 }
 
-int32_t YSM_DC_IncomingMessageFILE( slave_t *victim,
-    msg_type_t m_type,
-    uint8_t    m_flags,
-    int8_t    *m_data,
-    int16_t    m_len,
-    int16_t    m_status)
+int32_t YSM_DC_IncomingMessageFILE(
+    slave_hnd_t *victim,
+    msg_type_t   m_type,
+    uint8_t      m_flags,
+    int8_t      *m_data,
+    int16_t      m_len)
 {
     int32_t        pos = 0, ret = TRUE, fsize = 0;
     uint16_t    rport = 0, fnamelen = 0;

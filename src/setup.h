@@ -13,7 +13,8 @@ void readConfig(FILE *fd, char reload);
 void readSlaves(FILE *fd);
 
 void addSlave(char *name, uin_t uin);
-void addSlaveToDisk(slave_t *victim);
+void addSlaveToDisk(slave_hnd_t *hnd);
+void deleteSlave(slave_hnd_t *hnd);
 void deleteSlaveFromDisk(uin_t uin);
 
 #endif /* _SETUP_H_*/

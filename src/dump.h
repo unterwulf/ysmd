@@ -6,9 +6,6 @@
 void hexDump(string_t *str, const uint8_t *buf, uint32_t len);
 void hexDumpOutput(const uint8_t *buf, uint32_t len);
 
-void dumpPacket(
-    string_t *str,
-    const flap_head_bit_t *flap,
-    const uint8_t *data);
+void dumpPacket(string_t *str, bsd_t bsd);
 
 #endif /* _DUMP_H_ */

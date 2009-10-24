@@ -119,12 +119,12 @@ void bsUpdateWordLELen(bsd_t bsd, bs_pos_t wordle)
     bsUpdateWordLE(bsd, wordPos, len);
 }
 
-uint32_t bsReadByte(bsd_t bsd, uint8_t &byte)
+uint32_t bsReadByte(bsd_t bsd, uint8_t *byte)
 {
     return bsRead(bsd, byte, SIZEOF_BYTE);
 }
 
-uint32_t bsReadWord(bsd_t bsd, uint16_t &word)
+uint32_t bsReadWord(bsd_t bsd, uint16_t *word)
 {
     uint8_t buf[SIZEOF_WORD];
     bs_pos_t retVal;
@@ -135,13 +135,35 @@ uint32_t bsReadWord(bsd_t bsd, uint16_t &word)
     return retVal;
 }
 
-uint32_t bsReadDword(bsd_t bsd, uint32_t &dword)
+uint32_t bsReadWordLE(bsd_t bsd, uint16_t *word)
+{
+    uint8_t buf[SIZEOF_WORD];
+    bs_pos_t retVal;
+
+    retVal = bsRead(bsd, buf, SIZEOF_WORD);
+    *word = Chars_2_Word(buf);
+
+    return retVal;
+}
+
+uint32_t bsReadDword(bsd_t bsd, uint32_t *dword)
 {
     uint8_t buf[SIZEOF_DWORD];
     bs_pos_t retVal;
 
     retVal = bsRead(bsd, buf, SIZEOF_DWORD);
     *dword = Chars_2_DWb(buf);
+
+    return retVal;
+}
+
+uint32_t bsReadDwordLE(bsd_t bsd, uint32_t *dword)
+{
+    uint8_t buf[SIZEOF_DWORD];
+    bs_pos_t retVal;
+
+    retVal = bsRead(bsd, buf, SIZEOF_DWORD);
+    *dword = Chars_2_DW(buf);
 
     return retVal;
 }

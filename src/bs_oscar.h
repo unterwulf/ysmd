@@ -1,13 +1,17 @@
 #ifndef _BS_OSCAR_H_
 #define _BS_OSCAR_H_
 
+#include "ysm.h"
+
 #define SIZEOF_BYTE      1
 #define SIZEOF_WORD      2
 #define SIZEOF_DWORD     4
 
-#define SIZEOF_FLAP_HEAD 6
+#define SIZEOF_FLAP_HEAD 6  /* unaligned FLAP header size */
 #define FLAP_SEQ_OFFSET  2
 #define FLAP_LEN_OFFSET  4
+
+#define SIZEOF_SNAC_HEAD 10 /* unaligned SNAC header size */
 
 #define SIZEOF_TLV_HEAD  4
 #define TLV_LEN_OFFSET   2
@@ -18,6 +22,41 @@ typedef enum {
     ST_ASCIIZ,
     ST_NORMAL
 } str_type_t;
+
+typedef struct
+{
+    uint16_t familyId;
+    uint16_t subTypeId;
+    uint16_t flags;
+    req_id_t reqId;
+} snac_head_t;
+
+typedef struct
+{
+    uint8_t  channelId;
+    uint16_t seq;
+    uint16_t len;
+} flap_head_t;
+
+typedef struct
+{
+    int8_t cmd;
+    int8_t channelID;
+    int8_t seq[2];
+    int8_t dlen[2];
+} flap_head_bit_t;
+
+typedef struct
+{
+    int8_t type[2];
+    int8_t len[2];
+} tlv_bit_t;
+
+typedef struct
+{
+    int16_t type;
+    int16_t len;
+} tlv_t;
 
 #define bsAppendPrintfString08(x, y, args...) \
     bsAppendPrintfType((x), ST_STRING08, (y), ##args);
@@ -41,11 +80,13 @@ void bsUpdateFlapHeadLen(bsd_t bsd, bs_pos_t flapPos);
 void bsUpdateTlvLen(bsd_t bsd, bs_pos_t tlvPos);
 void bsUpdateWordLen(bsd_t bsd, bs_pos_t wordPos);
 void bsUpdateWordLELen(bsd_t bsd, bs_pos_t wordPos);
-uint32_t bsReadByte(bsd_t bsd, uint8_t &byte);
-uint32_t bsReadWord(bsd_t bsd, uint16_t &word);
-uint32_t bsReadDword(bsd_t bsd, uint32_t &dword);
+uint32_t bsReadByte(bsd_t bsd, uint8_t *byte);
+uint32_t bsReadWord(bsd_t bsd, uint16_t *word);
+uint32_t bsReadWordLE(bsd_t bsd, uint16_t *word);
+uint32_t bsReadDword(bsd_t bsd, uint32_t *dword);
+uint32_t bsReadDwordLE(bsd_t bsd, uint32_t *dword);
 uint32_t bsReadFlapHead(bsd_t bsd, flap_head_t *flap);
-int32_t  bsReadSnacHead(bsd_t bsd, snac_head_t *snac)
+int32_t  bsReadSnacHead(bsd_t bsd, snac_head_t *snac);
 int32_t  bsReadTlv(bsd_t bsd, tlv_t *tlv);
 
 bs_pos_t bsAppendPrintfType(bsd_t bsd, str_type_t type, const int8_t *fmt, ...);
