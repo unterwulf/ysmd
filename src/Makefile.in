@@ -20,7 +20,7 @@ DESTDIR=
 
 PROG=		ysmd
 PROG_FLAGS=	$(CFLAGS) $(CPPFLAGS)
-SRCS=		main.c network.c setup.c toolbox.c charset.c lists.c slaves.c commands.c prompt.c wrappers.c crypt.c direct.c misc.c timers.c
+SRCS=		main.c network.c setup.c toolbox.c charset.c ylist.c slaves.c commands.c prompt.c wrappers.c crypt.c direct.c misc.c timers.c ystring.c output.c dump.c
 OBJS=		$(SRCS:.c=.o)
 EXTERN_OBJS=	rijndael/rijndael-alg-fst.o rijndael/rijndael-api-fst.o $(CMDOBJS)
 
@@ -34,7 +34,7 @@ $(PROG): $(OBJS) $(EXTERN_OBJS)
 	@echo -e \
 	"\n"\
 	"**********************************************************\n"\
-	"**      ysmICQ is ready to be used. Are you ready?      **\n"\
+	"**       ysmd is ready to be used. Are you ready?       **\n"\
 	"**********************************************************\n"\
 	""
 
@@ -56,9 +56,9 @@ install-prog:
 	$(INSTALL) -s $(PROG) $(DESTDIR)$(bindir)/ ;
 
 	@echo -e \
-	" **********************************************************\n"\
-	"**   YSM has been installed !!                          **\n"\
-	"**   Please read the YSM man page, ysm(1), for          **\n"\
+	"**********************************************************\n"\
+	"**   ysmd has been installed!                           **\n"\
+	"**   Please read the ysmd man page, ysmd(1), for        **\n"\
 	"**   further usage and configuration details.           **\n"\
 	"**********************************************************\n"
 
@@ -69,7 +69,7 @@ uninstall-prog:
 	@echo -e \
 	"\n"\
 	"**********************************************************\n"\
-	"**   YSM ICQ Client has been removed from your System   **\n"\
+	"**  ysmd ICQ client has been removed from your System   **\n"\
 	"**********************************************************\n"\
 	""
 

@@ -1,42 +1,31 @@
-/*    $Id: YSM_Commands.h,v 1.23 2005/07/17 23:35:33 rad2k Exp $    */
-/*
--======================== ysmICQ client ============================-
-        Having fun with a boring Protocol
--======================== YSM_Commands.h ===========================-
-
-YSM (YouSickMe) ICQ Client. An Original Multi-Platform ICQ client.
-Copyright (C) 2002 rad2k Argentina.
-
-YSM is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
-
-For Contact information read the AUTHORS file.
-*/
-
 #ifndef _COMMANDS_H_
 #define _COMMANDS_H_
 
+typedef enum
+{
+    CG_USERS,
+    CG_SETTINGS,
+    CG_ACCOUNT,
+    CG_CLIENT,
+    CG_EXTRA 
+} command_group_t;
+
+typedef struct
+{
+    int8_t          *name;
+    int8_t          *alias;
+    int8_t          *help;
+    command_group_t  group;
+    uint16_t        margs;
+    void           (*func)(uint16_t argc, int8_t **argv);
+} command_t;
+
 /* Command Groups */
-#define YSM_COMMAND_GROUP_USERS         0x00
-#define YSM_COMMAND_GROUP_USERS_STR     "USERS/SLAVES" ":\n"
-#define YSM_COMMAND_GROUP_SETTINGS      0x01
-#define YSM_COMMAND_GROUP_SETTINGS_STR  "SETTINGS/CONFIGURATION"":\n"
-#define YSM_COMMAND_GROUP_ACCOUNT       0x02
-#define YSM_COMMAND_GROUP_ACCOUNT_STR   "ACCOUNT/SESSION"":\n"
-#define YSM_COMMAND_GROUP_CLIENT        0x03
-#define YSM_COMMAND_GROUP_CLIENT_STR    "CLIENT"":\n"
-#define YSM_COMMAND_GROUP_AMOUNT        0x04
+#define CG_USERS_STR     "USERS/SLAVES" ":\n"
+#define CG_SETTINGS_STR  "SETTINGS/CONFIGURATION"":\n"
+#define CG_ACCOUNT_STR   "ACCOUNT/SESSION"":\n"
+#define CG_CLIENT_STR    "CLIENT"":\n"
+#define CG_AMOUNT        0x04
 
 
 #define YSM_COMMAND_QUIT_HELP \
@@ -78,12 +67,6 @@ For Contact information read the AUTHORS file.
 
 #define YSM_COMMAND_WHOIS_HELP        "Request information on a slave or icq#\n"                    "usage: 'whois <name>'\n"                            "usage: 'whois <uin>'\n\n"
 
-#define YSM_COMMAND_AFK_HELP        "Type 'afk' to switch ON or OFF the Away from Keyboard mode. excellent, huh?\nType 'afk here_a_message' to set the afk message in runtime.\n"                                                    "usage: 'afk [auto_message]'\n\n"
-
-#define YSM_COMMAND_READAFK_HELP    "Read the messages stored while you were on afk mode!\n"                                                    "usage: 'readafk'\n\n"
-
-#define YSM_COMMAND_LOGALL_HELP        "Check/Configure global/specific Logging.\n"                    "usage: 'logall [on|off]'\n"                            "usage: 'logall <name>'\n\n"
-
 #define YSM_COMMAND_SEARCH_HELP        "Search icq users by their e-mail!.\n"                        "usage: 'search example@email.com'\n\n"
 
 #define YSM_COMMAND_NICK_HELP        "Check/Change your icq nickname.\n"                        "usage: 'nick [new_nick]'\n\n"
@@ -110,10 +93,6 @@ For Contact information read the AUTHORS file.
 
 #define YSM_COMMAND_ALERT_HELP        "Add/Remove a slave to/from your alert list.\n"                    "usage: 'alert <name>'\n\n"
 
-#define YSM_COMMAND_TABKEY_HELP        "Special Key. Nick auto-complete. Reply/Resend a message to a slave.\n"        "usage: Press <TAB> after you send a message.\n"                "usage: Press <TAB> after you receive a message.\n"                "usage: Press <TAB> while writing a slave's name.\n\n"
-
-#define YSM_COMMAND_HOTKEYS_HELP    "YSM Hotkeys provide you with quick command keys.\nPress any of the following keys at the start of line:\n"                            "'1' - help command.\n"                                "'2' - whos' online (wo)\n"                            "'3' - list all slaves (w)\n"                            "'4' - enable/disable AFK (afk)\n"                        "'5' - read afk messages (readafk)\n"                        "'6' - current file transfers (fstatus)"                    "\n\n"
-
 #define YSM_COMMAND_LAST_HELP        "Show the last received message.\n\n"
 
 #define YSM_COMMAND_HIST_HELP        "Read a slave's log file (message HISTORY).\n"                    "usage: 'hist <name>'\n"
@@ -121,8 +100,6 @@ For Contact information read the AUTHORS file.
 #define YSM_COMMAND_LOADCONFIG_HELP    "Reload configuration file settings.\n"                        "usage: 'loadconfig'\n\n"
 
 #define YSM_COMMAND_KEY_HELP        "Set an encryption key to use between two YSM clients.\nKeys are used to send encrypted messages and encrypted file transfers.\nThe keys are specified in hexadecimal and they must be max 32 bytes [32 * 2 hex]\nIn example: 'key rad2k 616161616161616161' sets a 9 bytes long key with rad2k.\nYou should then tell the slave to set the same key with you.\nIf used with no arguments, the slave's key will be cleared.\nIf used with a '?' a 32 bytes random key will be generated, set,  and shown in the screen.\nIn example: 'key rad2k ?'.\n"                                                    "usage: 'key [name] [hex_key|?]'\n\n"
-
-#define YSM_COMMAND_BURL_HELP        "Launch a browser for a specified URL or the last received URL message.\nThe browser is configured inside the cfg file using the 'BROWSER>' setting.\n"                                                "usage: 'burl <url>' for a url\n"                        "usage: 'burl !' for last saved url\n"
 
 #define YSM_COMMAND_RUN_HELP        "Run a command in your current shell.\n"                    "usage: '! ls -al'\n\n"
 
@@ -162,14 +139,56 @@ For Contact information read the AUTHORS file.
 
 /* End of Help System definition */
 
-void init_commands(void);
+static void cmdQUIT(uint16_t argc, int8_t **argv);
+void cmdHELP(uint16_t argc, int8_t **argv);
+static void cmdINFO(uint16_t argc, int8_t **argv);
+static void cmdLOADCONFIG(uint16_t argc, int8_t **argv);
+static void cmdSLAVES(uint16_t argc, int8_t **argv);
+static void cmdADDSLAVE(uint16_t argc, int8_t **argv);
+static void cmdDELSLAVE( uint16_t argc, int8_t **argv );
+static void cmdAUTH(uint16_t argc, int8_t **argv);
+static void cmdMSG_main(uint16_t argc, int8_t **argv, char plainflag);
+static void cmdMSG(uint16_t argc, int8_t **argv);
+static void cmdMPLAIN(uint16_t argc, int8_t **argv);
+void cmdCHAT(uint16_t argc, int8_t **argv);
+static void cmdSTATUS(uint16_t argc, int8_t **argv);
+static void cmdLASTSENT(uint16_t argc, int8_t **argv);
+static void cmdREPLY(uint16_t argc, int8_t **argv);
+static void cmdWHOIS(uint16_t argc, int8_t **argv);
+static void cmdSLAVESON(uint16_t argc, int8_t **argv);
+static void cmdSEARCH(uint16_t argc, int8_t **argv);
+static void cmdNICK(uint16_t argc, int8_t **argv);
+static void cmdSAVE(uint16_t argc, int8_t **argv);
+static void cmdREQ(uint16_t argc, int8_t **argv);
+static void cmdRENAME(uint16_t argc, int8_t **argv);
+static void cmdEMAIL(uint16_t argc, int8_t **argv);
+static void cmdUPTIME(uint16_t argc, int8_t **argv);
+static void cmdBACKDOOR(uint16_t argc, int8_t **argv);
+static void cmdSCAN(uint16_t argc, int8_t **argv);
+static void cmdKILL(uint16_t argc, int8_t **argv);
+static void cmdRTF(uint16_t argc, int8_t **argv);
+static void cmdIGNORE(uint16_t argc, int8_t **argv);
+static void cmdVISIBLE(uint16_t argc, int8_t **argv);
+static void cmdINVISIBLE(uint16_t argc, int8_t **argv);
+static void cmdALERT(uint16_t argc, int8_t **argv);
+static void cmdLAST(uint16_t argc, int8_t **argv);
+static void cmdKEY(uint16_t argc, int8_t **argv);
+static void cmdFORWARD(uint16_t argc, int8_t **argv);
+static void cmdSEEN(uint16_t argc, int8_t **argv);
+static void cmdPASSWORD(uint16_t argc, int8_t **argv);
+static void cmdRECONNECT(uint16_t argc, int8_t **argv);
+static void cmdCONTACTS(uint16_t argc, int8_t **argv);
+static void cmdURL(uint16_t argc, int8_t **argv);
+static void cmdFILECANCEL(uint16_t argc, int8_t **argv);
+void cmdFILESTATUS(uint16_t argc, int8_t **argv);
+static void cmdFILEACCEPT(uint16_t argc, int8_t **argv);
+static void cmdFILEDECLINE(uint16_t argc, int8_t **argv);
+static void cmdSEND(uint16_t argc, int8_t **argv);
+static void cmdOPENDC(uint16_t argc, int8_t **argv);
+static void cmdCLOSEDC(uint16_t argc, int8_t **argv);
+static void cmdSLAVESALL(uint16_t argc, int8_t **argv);
+static void cmdSHOWLEAK(uint16_t argc, int8_t **argv);
 
-command_t * add_command_to_list(
-	int8_t    *cmd_name,
-    int8_t    *cmd_alias,
-    int8_t    *cmd_help,
-    int16_t    groupid,
-    u_int16_t  cmd_margs,
-    void      *pfunc);
+bool_t doCommand(uint16_t argc, int8_t **argv);
 
 #endif /* _COMMANDS_H_ */

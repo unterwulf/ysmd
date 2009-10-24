@@ -1,30 +1,3 @@
-/*    $Id: YSM_Charset.c,v 1.32 2005/09/04 01:36:48 rad2k Exp $    */
-/*
--======================== ysmICQ client ============================-
-        Having fun with a boring Protocol
--======================== YSM_Charset.c ============================-
-
-YSM (YouSickMe) ICQ Client. An Original Multi-Platform ICQ client.
-Copyright (C) 2002 rad2k Argentina.
-
-YSM is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
-
-For Contact information read the AUTHORS file.
-
-*/
-
 #include "ysm.h"
 #include "wrappers.h"
 #include "charset.h"
@@ -211,31 +184,29 @@ static int32_t YSM_Iconv(
  * from/to utf8 is required. (inside YSM_Convert())
  */
 
-void init_charset(void)
+void initCharset(void)
 {
     /* Did the user specify a CHARSET_LOCAL? */
-    if (!g_cfg.charset_local[0]) {
+    if (!g_cfg.charsetLocal[0])
+    {
         /* Use CP1252 as the default CHARSET_LOCAL */
-        memset( g_cfg.charset_local, 0, MAX_CHARSET + 4 );
-        strncpy( g_cfg.charset_local,
-            "CP1252",
-            sizeof(g_cfg.charset_local) - 1);
+        memset(g_cfg.charsetLocal, 0, sizeof(g_cfg.charsetLocal));
+        strncpy(g_cfg.charsetLocal, "CP1252", sizeof(g_cfg.charsetLocal) - 1);
     }
 
     /* Did the user specify a CHARSET_TRANS? */
-    if (!g_cfg.charset_trans[0]) {
+    if (!g_cfg.charsetTrans[0])
+    {
         /* Use CP1252 as the default CHARSET_TRANS */
-        memset( g_cfg.charset_trans, 0, MAX_CHARSET + 4 );
-        strncpy( g_cfg.charset_trans,
-            "CP1252",
-            sizeof(g_cfg.charset_trans) - 1);
+        memset(g_cfg.charsetTrans, 0, sizeof(g_cfg.charsetTrans));
+        strncpy(g_cfg.charsetTrans, "CP1252", sizeof(g_cfg.charsetTrans) - 1);
     }
 }
 
 #endif /* YSM_USE_CHARCONV */
 
 /*
- * m_flags may have MFLAGTYPE_UTF8 to decode from or encode to.
+ * flags may have MFLAGTYPE_UTF8 to decode from or encode to.
  * it can also be MFLAGTYPE_UCS2BE, but we only support decoding.
  */
 
@@ -244,7 +215,7 @@ int32_t YSM_Charset(
     int8_t    *buf_from,
     int32_t   *buf_fromlen,
     int8_t   **buf_to,
-    u_int8_t   m_flags )
+    uint8_t   flags)
 {
 #ifndef YSM_USE_CHARCONV
     return 0;
@@ -254,13 +225,13 @@ int32_t YSM_Charset(
 
     if (direction == CHARSET_INCOMING)
     {
-        cfrom = g_cfg.charset_trans;
-        cto   = g_cfg.charset_local;
+        cfrom = g_cfg.charsetTrans;
+        cto   = g_cfg.charsetLocal;
     }
     else if (direction == CHARSET_OUTGOING)
     {
-        cto   = g_cfg.charset_trans;
-        cfrom = g_cfg.charset_local;
+        cto   = g_cfg.charsetTrans;
+        cfrom = g_cfg.charsetLocal;
     }
     else
         return -1;
@@ -269,10 +240,10 @@ int32_t YSM_Charset(
         return -1;
 
     /* Do we have to decode an incoming UTF-8/UCS-2BE message first? */
-    if ((m_flags & MFLAGTYPE_UTF8 || m_flags & MFLAGTYPE_UCS2BE) 
+    if ((flags & MFLAGTYPE_UTF8 || flags & MFLAGTYPE_UCS2BE) 
     && direction == CHARSET_INCOMING)
     {
-        if (m_flags & MFLAGTYPE_UTF8)
+        if (flags & MFLAGTYPE_UTF8)
         {
             ret = YSM_Iconv("UTF-8",
                     cto,
@@ -324,12 +295,9 @@ int32_t YSM_Charset(
                 cbuf = strdup(*buf_to);
                 if (cbuf == NULL) {
                     /* if failed continue normally */
-                    ysm_free(us, __FILE__, __LINE__);
-                    us = NULL;
-                    ysm_free(out_us, __FILE__, __LINE__);
-                    out_us = NULL;
-                    ysm_free(outstring, __FILE__, __LINE__);
-                    outstring = NULL;
+                    YSM_FREE(us);
+                    YSM_FREE(out_us);
+                    YSM_FREE(outstring);
                 } else {
                     base = FRIBIDI_TYPE_N;
                     fribidi_iso8859_8_to_unicode( cbuf,
@@ -347,14 +315,10 @@ int32_t YSM_Charset(
                                 size - 1,
                                 outstring );
 
-                    ysm_free(us, __FILE__, __LINE__);
-                    us = NULL;
-                    ysm_free(out_us, __FILE__, __LINE__);
-                    out_us = NULL;
-                    ysm_free(cbuf, __FILE__, __LINE__);
-                    cbuf = NULL;
-                    ysm_free(*buf_to, __FILE__, __LINE__);
-                    *buf_to = NULL;
+                    YSM_FREE(us);
+                    YSM_FREE(out_us);
+                    YSM_FREE(cbuf);
+                    YSM_FREE(*buf_to);
 
                     *buf_to = outstring;
                 }
@@ -368,15 +332,14 @@ int32_t YSM_Charset(
         else
         {
             if (*buf_to) {
-                ysm_free(*buf_to, __FILE__, __LINE__);
-                *buf_to = NULL;
+                YSM_FREE(*buf_to);
             }
             return ret;
         }
 
     /* Do we have to encode an outgoing UTF-8 message? */
     }
-    else if ((m_flags & MFLAGTYPE_UTF8) && direction == CHARSET_OUTGOING)
+    else if ((flags & MFLAGTYPE_UTF8) && direction == CHARSET_OUTGOING)
     {
         ret = YSM_Iconv(cfrom,
                 "UTF-8",
@@ -413,44 +376,47 @@ int32_t YSM_Charset(
 #endif    /* YSM_USE_CHARCONV */
 }
 
-const int8_t *base64_table =
-"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-
-int8_t *
-YSM_encode64( const int8_t *str )
+uint8_t *encode64(const uint8_t *str)
 {
+    int8_t          *buf;
+    const uint8_t  *src;
+    int8_t          *dst;
+    int32_t          bits = 0, data = 0, srcLen = 0, dstLen = 0;
 
-static int8_t    *buf;
-const u_int8_t    *src;
-int8_t        *dst;
-int32_t        bits = 0, data = 0, src_len = 0, dst_len = 0;
+    static const int8_t *base64_table =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
     /* make base64 string */
-        src_len = strlen(str);
-        dst_len = (src_len+2)/3*4;
-        buf = ysm_malloc( dst_len+1, __FILE__, __LINE__ );
-        src = str; dst = (u_int8_t *)buf;
+    srcLen = strlen(str);
+    dstLen = (srcLen+2)/3*4;
+    buf = YSM_MALLOC(dstLen+1);
+    src = str;
+    dst = (uint8_t *)buf;
 
-        while ( dst_len-- ) {
-            if ( bits < 6 ) {
+    while (dstLen--)
+    {
+        if (bits < 6)
+        {
             data = (data << 8) | *src;
             bits += 8;
-            if ( *src != 0 ) src++;
-            }
-            *dst++ = base64_table[0x3F & (data >> (bits-6))];
-            bits -= 6;
+            if (*src != 0)
+                src++;
         }
+        *dst++ = base64_table[0x3F & (data >> (bits-6))];
+        bits -= 6;
+    }
 
-        *dst = '\0';
-        /* fix-up tail padding */
-        switch ( src_len%3 ) {
-            case 1:
-                   *--dst = '=';
-          case 2:
-                    *--dst = '=';
-        }
+    *dst = '\0';
+    /* fix-up tail padding */
+    switch (srcLen % 3)
+    {
+        case 1:
+            *--dst = '=';
+        case 2:
+            *--dst = '=';
+    }
 
-        return buf;
+    return buf;
 }
 
 
@@ -477,7 +443,7 @@ int8_t * YSM_CharsetConvertOutputString(int8_t **stringp, int8_t fl_dofree)
 int32_t YSM_CharsetConvertString(
     int8_t    **stringp,      /* buffer */
     int8_t      direction,    /* incoming/outgoing */
-    u_int8_t    flags,        /* buffer flags */
+    uint8_t    flags,        /* buffer flags */
     int8_t      fl_dofree )   /* free original buffer */
 {
     int32_t    stringlength = 0;

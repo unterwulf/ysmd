@@ -1,110 +1,111 @@
-/*
-
-YSM (YouSickMe) ICQ Client. An Original Multi-Platform ICQ client.
-Copyright (C) 2002 rad2k Argentina.
-
-YSM is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
-
-For Contact information read the AUTHORS file.
-
-*/
-
 #include "ysm.h"
 #include "toolbox.h"
 #include "wrappers.h"
 #include "prompt.h"
 #include "setup.h"
-#include "timers.h"
+#include "output.h"
 
 static struct timeval tv;
 static fd_set read_fds, dc_fds, net_fds;
 static int max_read_fd, max_dc_fd, max_net_fd;
-
-void YSM_Event(
-    int8_t      event_t,
-    uin_t       r_uin,
-    int8_t     *r_nick,
-    int32_t     m_len,
-    int8_t     *m_data,
-    u_int8_t    m_flags )
-{
-    int8_t  uinstring[MAX_UIN_LEN+1], length[10];
-    int8_t *event_action = NULL, *event_sound = NULL, event_senable = 0;
-
-    snprintf(uinstring, sizeof(uinstring), "%d", (int)r_uin);
-    uinstring[sizeof(uinstring) - 1] = 0x00;
-    snprintf(length, sizeof(length), "%d", (int)m_len);
-    length[sizeof(length) - 1] = 0x00;
-
-    /* do we have to execute a user supplied action? */
-    if (event_action != 0x00 && *event_action != 0x00)
-        YSM_ExecuteLine( event_action,
-                uinstring,
-                r_nick,
-                length,
-                m_data );
-}
 
 void ysm_error(int32_t level, int8_t verbose, uint8_t *file, int32_t line)
 {
     switch (level)
     {
         case ERROR_CODE:
-            PRINTF(VERBOSE_BASE, "%s", ERROR_CODE_M);
+            printfOutput(VERBOSE_BASE, "%s", ERROR_CODE_M);
             break;
 
         case ERROR_NETWORK:
-            PRINTF(VERBOSE_BASE, "%s", ERROR_NETWORK_M);
+            printfOutput(VERBOSE_BASE, "%s", ERROR_NETWORK_M);
             break;
 
         case ERROR_CRITICAL:
-            PRINTF(VERBOSE_BASE, "%s", ERROR_CRITICAL_M);
+            printfOutput(VERBOSE_BASE, "%s", ERROR_CRITICAL_M);
             break;
     }
 
     if (verbose)
-        PRINTF(VERBOSE_BASE,"\nFile: %s Line: %d\n", file, line);
+        printfOutput(VERBOSE_BASE, "File: %s:%d\n", file, line);
 
     exit(-1);
 }
 
-int32_t YSM_LookupStatus( int8_t *name )
+bool_t convertStatus(conv_dir_t direction, uint8_t const **str, uint16_t *val)
 {
-u_int32_t x = 0, y, status = 0;
+    static struct
+    {
+        const uint8_t *str;
+        const uint16_t val; 
+    } table[] = {
+        {"ONLINE",    STATUS_ONLINE},
+        {"OFFLINE",   STATUS_OFFLINE},
+        {"AWAY",      STATUS_AWAY},
+        {"NA",        STATUS_NA},
+        {"NA2",       STATUS_NA2},
+        {"DND",       STATUS_DND},
+        {"OCCUPIED",  STATUS_OCCUPIED},
+        {"FREE4CHAT", STATUS_FREE_CHAT},
+        {"INVISIBLE", STATUS_INVISIBLE},
+        {NULL,        0}
+    };
+    uint16_t x;
 
-    y = strlen(name);
-    for (x = 0; x<y; x++)
-        name[x] = toupper(name[x]);
+    switch (direction)
+    {
+        case TO_STR:
+            for (x = 0; table[x].str != NULL; x++)
+            {
+                if (table[x].val == *val)
+                {
+                    *str = table[x].str;
+                    return TRUE;
+                }
+            }
+            break;
 
-    if (strstr("ONLINE",name)) return STATUS_ONLINE;
-    if (strstr("OFFLINE",name)) return STATUS_OFFLINE;
-    if (strstr("INVISIBLE",name)) return STATUS_INVISIBLE;
-    if (strstr("NA",name)) return STATUS_NA;
-    if (strstr("DND",name)) return STATUS_DND;
-    if (strstr("OCCUPIED",name)) return STATUS_OCCUPIED;
-    if (strstr("FREECHAT",name)) return STATUS_FREE_CHAT;
-    if (strstr("AWAY",name)) return STATUS_AWAY;
-    if (sscanf(name, "0X%x", &status)) return status;
+        case FROM_STR:
+            for (x = 0; table[x].str != NULL; x++)
+            {
+                if (!strcasecmp(*str, table[x].str))
+                {
+                    *val = table[x].val;
+                    return TRUE;
+                }
+            }
+            if (sscanf(*str, "0X%x", val))
+                return TRUE;
+            break;
+    }
 
-    return -2;
+    return FALSE;
 }
 
+const uint8_t *strStatus(uint16_t status)
+{
+    static const uint8_t unknown[] = "UNKNOWN";
+    const uint8_t *str;
+
+    if (!convertStatus(TO_STR, &str, &status))
+    {
+        DEBUG_PRINT("unknown status: 0x%X", status);
+        str = unknown;
+    }
+
+    return str;
+}
+
+bool_t isStatusValid(uint16_t status)
+{
+    const uint8_t *str;
+
+    return convertStatus(TO_STR, &str, &status);
+}
 
 void YSM_WriteFingerPrint(int client, char *buf)
 {
-    switch(client)
+    switch (client)
     {
         case FINGERPRINT_YSM_CLIENT:
             strncpy(buf," YSM client.", MAX_STATUS_LEN - 1);
@@ -186,241 +187,6 @@ void YSM_WriteFingerPrint(int client, char *buf)
     buf[MAX_STATUS_LEN - 1] = '\0';
 }
 
-int32_t YSM_IsValidStatus(u_int16_t status)
-{
-    switch (status)
-    {
-        case STATUS_ONLINE:
-        case STATUS_OFFLINE:
-        case STATUS_INVISIBLE:
-        case STATUS_NA:
-        case STATUS_NA2:
-        case STATUS_DND:
-        case STATUS_OCCUPIED:
-        case STATUS_FREE_CHAT:
-        case STATUS_AWAY:
-            return 1;
-        default:
-            break;
-    }
-
-    return 0;
-}
-
-void YSM_WriteStatus(u_int16_t status, int8_t *buf)
-{
-    switch(status)
-    {
-        case STATUS_ONLINE :
-            strncpy(buf, "ONLINE", MAX_STATUS_LEN - 1);
-            break;
-
-        case STATUS_OFFLINE :
-            strncpy(buf, "OFFLINE", MAX_STATUS_LEN - 1);
-            break;
-
-        case STATUS_INVISIBLE :
-            strncpy(buf, "INVISIBLE", MAX_STATUS_LEN - 1);
-            break;
-
-        case STATUS_NA :
-        case STATUS_NA2 :
-            strncpy(buf, "NA", MAX_STATUS_LEN - 1);
-            break;
-
-        case STATUS_DND :
-            strncpy(buf, "DND", MAX_STATUS_LEN - 1);
-            break;
-
-        case STATUS_OCCUPIED :
-            strncpy(buf, "OCCUPIED", MAX_STATUS_LEN - 1);
-            break;
-
-        case STATUS_FREE_CHAT :
-            strncpy(buf, "FREE4CHAT", MAX_STATUS_LEN - 1);
-            break;
-
-        case STATUS_AWAY :
-            strncpy(buf, "AWAY", MAX_STATUS_LEN - 1);
-            break;
-
-        default:
-            strncpy(buf, "UNK", MAX_STATUS_LEN - 1);
-            snprintf(buf, MAX_STATUS_LEN, "UNK(%04X)", status);
-            break;
-    }
-
-    buf[MAX_STATUS_LEN-1] = '\0';
-}
-
-void YSM_GenerateLogEntry( int8_t    *nick,
-        uin_t        uinA,
-        uin_t        uinB,
-        int8_t        *message,
-        int32_t        mlen )
-{
-char    log_name[MAX_PATH], log_msg[MAX_DATA_LEN+1], *log_data, *aux = NULL;
-time_t    log_time;
-int    log_len = 0, a = 0;
-
-    if (uinA <= 0 || uinB <= 0)
-        return;
-
-    log_time = time(NULL);
-
-    log_len = MAX_DATA_LEN+MAX_NICK_LEN+MAX_UIN_LEN+2;
-    log_data = ysm_calloc(1, log_len, __FILE__, __LINE__);
-    memset(log_name, '\0', MAX_PATH);
-    memset(log_msg, '\0', sizeof(log_msg));
-
-    /* we log AFK and CHAT messages in the AFK file, the AFK way */
-    if ((g_promptstatus.flags & FL_AFKM) ||
-            (g_promptstatus.flags & FL_CHATM)) {
-        snprintf(log_name, MAX_PATH, "%s", YSM_AFKFILENAME);
-    } else
-        snprintf(log_name, MAX_PATH, "%d", (int)uinB);
-
-    log_name[sizeof(log_name) - 1] = 0x00;
-
-    if (mlen >= (int32_t)(sizeof (log_msg) - 1))
-        mlen = (sizeof (log_msg) - 1);
-
-    memcpy( log_msg, message, mlen );
-
-    for(a = 0; a < mlen; a++)
-        if(log_msg[a] == '\r'
-        || log_msg[a] == '\n') log_msg[a] = 0x20;
-
-    do {    /* look for our 2 bytes separator */
-        aux = strstr(log_msg, YSM_LOG_SEPARATOR);
-        if(aux != NULL) *aux = 0x20;
-    } while(aux != NULL);
-
-    snprintf( log_data,
-        log_len,
-        "<%s|%d> %s %s %s %s",
-        nick,
-        (int)uinA,
-        YSM_LOG_SEPARATOR,
-        log_msg,
-        YSM_LOG_SEPARATOR,
-        ctime(&log_time) );
-
-    log_data[log_len - 1] = 0x00;
-
-    /* theres a newline by ctime at the end */
-    YSM_DumpLogFile(log_name,log_data);
-    ysm_free(log_data, __FILE__, __LINE__);
-    log_data = NULL;
-}
-
-int32_t YSM_DumpLogFile(int8_t *fname, int8_t *data)
-{
-    if (fname == NULL || data == NULL)
-        return -1;
-
-    if (g_cfg.newlogsfirst)
-        return YSM_AppendTopFile(fname, data);
-    else
-        return YSM_AppendBotFile(fname, data);
-}
-
-/* YSM_OpenFile: opens fname from ysm's directory.
- * returns a File descriptor.
- */
-
-FILE * YSM_OpenFile(char *fname, char *attr)
-{
-    FILE    *fd = NULL;
-    int8_t  *path = NULL;
-    size_t   size = 0;
-
-    /* 1 byte for / and another for the ending 0! */
-    size = strlen(fname) + strlen(g_state.config_dir) + 2;
-    path = YSM_CALLOC(1, size);
-
-    snprintf(path, size, "%s/%s", g_state.config_dir, fname);
-    path[size-1] = 0x00;
-
-    fd = fopen(path, attr);
-
-    YSM_FREE(path);
-
-    return fd;
-}
-
-int32_t YSM_AppendBotFile(int8_t *filename, int8_t *data)
-{
-    FILE *fd = NULL;
-
-    if (filename == NULL || data == NULL)
-        return -1;
-
-    fd = YSM_OpenFile(filename, "a");
-    if (fd == NULL)
-        return -1;
-
-    fprintf(fd, "%s", data);
-    fclose(fd);
-
-    return 0;
-}
-
-/* AppendTopFile: dumps $data to the top of the file $filename
- * if $filename exists, a temporary fd is created holding
- * its contents and is then appended after the new data.
- */
-
-int32_t YSM_AppendTopFile(int8_t *filename, int8_t *data)
-{
-FILE    *filefd = NULL, *tmpfd = NULL;
-int8_t    buf[MAX_PATH];
-
-    if (filename == NULL || data == NULL)
-        return -1;
-
-    filefd = YSM_OpenFile( filename, "r" );
-    if (filefd != NULL) {
-        /* the file already has contents. we need to keep them */
-        tmpfd = tmpfile();
-        if (tmpfd == NULL)
-            return -1;
-
-        while (!feof(filefd)) {
-            memset(buf, 0, sizeof(buf));
-            fgets(buf, sizeof(buf)-1, filefd);
-            fprintf(tmpfd, "%s", buf);
-        }
-
-        fclose(filefd);
-    }
-
-    /* open the filename for writing now */
-    filefd = YSM_OpenFile( filename, "w" );
-    if (filefd == NULL) {
-        if (tmpfd != NULL) fclose(tmpfd);
-        return -1;
-    }
-
-    /* write whatever it is we wanted to write at the top */
-    fprintf(filefd, "%s", data);
-
-    /* if we have tmpfd open we have old data to append */
-    if (tmpfd != NULL) {
-        rewind(tmpfd);
-        while (!feof(tmpfd)) {
-            memset(buf, 0, sizeof(buf));
-            fgets(buf, sizeof(buf)-1, tmpfd);
-            fprintf(filefd, "%s", buf);
-        }
-
-        fclose(tmpfd);
-    }
-
-    fclose(filefd);
-    return 0;
-}
-
 /*
   Removes leading and trailing whitespace from str if str is non-NULL.
   Returns: str, if str != NULL
@@ -438,7 +204,7 @@ int8_t * YSM_trim(int8_t *str)
     for (str_begin = str; isspace(*str_begin); str_begin++)
         ;
 
-    for (str_end = str_begin + strlen(str_begin);
+    for (str_end = str_begin + strlen(str_begin) - 1;
          str_end != str_begin && isspace(*str_end); str_end--)
         ;
 
@@ -456,46 +222,12 @@ int8_t * YSM_trim(int8_t *str)
     return str;
 }
 
-void YSM_Print_Uptime(void)
-{
-    int days = 0, hours = 0 , minutes = 0, seconds = 0;
-
-    seconds = get_timer(UPTIME);
-    minutes = seconds/60;
-    hours = minutes/60;
-    days = hours/24;
-
-    seconds -= 60*minutes;
-    minutes -= 60*hours;
-    hours -= 24*days;
-
-    PRINTF(VERBOSE_BASE,
-        "Uptime: %d days %d hours %d minutes %d seconds.\n",
-        days,
-        hours,
-        minutes,
-        seconds);
-}
-
-void YSM_CheckSecurity(void)
-{
-    if (!getuid())
-    {
-        PRINTF(VERBOSE_BASE,
-            "HOLD IT! I'm sorry, but i WONT let you run YSM\n"
-            "with uid 0. Don't run ysm as root!. ..fag.\n");
-
-        /* Not using YSM_Exit() here since YSM didn't start */
-        exit(-1);
-    }
-}
-
 /* Thanks a lot to mICQ for these convertion Functions.
-        I made some Big Endian ones out of them */
+   I made some Big Endian ones out of them */
 
-u_int32_t Chars_2_DW( u_int8_t * buf )
+uint32_t Chars_2_DW(const uint8_t *buf)
 {
-    u_int32_t i;
+    uint32_t i;
 
     i = buf[3];
     i <<= 8;
@@ -508,9 +240,9 @@ u_int32_t Chars_2_DW( u_int8_t * buf )
     return i;
 }
 
-u_int32_t Chars_2_DWb( u_int8_t * buf )
+uint32_t Chars_2_DWb(const uint8_t *buf)
 {
-    u_int32_t i;
+    uint32_t i;
 
     i = buf[0];
     i <<= 8;
@@ -523,9 +255,9 @@ u_int32_t Chars_2_DWb( u_int8_t * buf )
     return i;
 }
 
-u_int16_t Chars_2_Word (u_int8_t * buf)
+uint16_t Chars_2_Word(const uint8_t *buf)
 {
-    u_int16_t i;
+    uint16_t i;
 
     i = buf[1];
     i <<= 8;
@@ -535,9 +267,9 @@ u_int16_t Chars_2_Word (u_int8_t * buf)
 }
 
 /* nuevo big endian */
-u_int16_t Chars_2_Wordb (u_int8_t * buf)
+uint16_t Chars_2_Wordb (const uint8_t *buf)
 {
-    u_int16_t i;
+    uint16_t i;
 
     i = buf[0];
     i <<= 8;
@@ -546,47 +278,49 @@ u_int16_t Chars_2_Wordb (u_int8_t * buf)
     return i;
 }
 
-void DW_2_Chars (u_int8_t * buf, u_int32_t num)
+void DW_2_Chars (uint8_t * buf, uint32_t num)
 {
-    buf[3] = (u_int8_t) ((num) >> 24) & 0x000000FF;
-    buf[2] = (u_int8_t) ((num) >> 16) & 0x000000FF;
-    buf[1] = (u_int8_t) ((num) >> 8) & 0x000000FF;
-    buf[0] = (u_int8_t) (num) & 0x000000FF;
+    buf[3] = (uint8_t) ((num) >> 24) & 0x000000FF;
+    buf[2] = (uint8_t) ((num) >> 16) & 0x000000FF;
+    buf[1] = (uint8_t) ((num) >> 8) & 0x000000FF;
+    buf[0] = (uint8_t) (num) & 0x000000FF;
 }
 
-void DW_2_Charsb(u_int8_t * buf, u_int32_t num)
+void DW_2_Charsb(uint8_t * buf, uint32_t num)
 {
-    buf[0] = (u_int8_t) ((num) >> 24) & 0x000000FF;
-    buf[1] = (u_int8_t) ((num) >> 16) & 0x000000FF;
-    buf[2] = (u_int8_t) ((num) >> 8) & 0x000000FF;
-    buf[3] = (u_int8_t) (num) & 0x000000FF;
+    buf[0] = (uint8_t) ((num) >> 24) & 0x000000FF;
+    buf[1] = (uint8_t) ((num) >> 16) & 0x000000FF;
+    buf[2] = (uint8_t) ((num) >> 8) & 0x000000FF;
+    buf[3] = (uint8_t) (num) & 0x000000FF;
 }
 
 /* intel little endian */
-void Word_2_Chars (u_int8_t * buf, const int num)
+void Word_2_Chars (uint8_t * buf, const int num)
 {
-    buf[1] = (u_int8_t) (((unsigned) num) >> 8) & 0x00FF;
-    buf[0] = (u_int8_t) ((unsigned) num) & 0x00FF;
+    buf[1] = (uint8_t) (((unsigned) num) >> 8) & 0x00FF;
+    buf[0] = (uint8_t) ((unsigned) num) & 0x00FF;
 }
 
 /* big endian code */
-void Word_2_Charsb (u_int8_t * buf, const int num)
+void Word_2_Charsb (uint8_t * buf, const int num)
 {
-    buf[0] = (u_int8_t) (((unsigned) num) >> 8) & 0x00FF;
-    buf[1] = (u_int8_t) ((unsigned) num) & 0x00FF;
+    buf[0] = (uint8_t) (((unsigned) num) >> 8) & 0x00FF;
+    buf[1] = (uint8_t) ((unsigned) num) & 0x00FF;
 }
 
-void EncryptPassword (char *Password, char *output)
+void EncryptPassword(char *Password, char *output)
 {
-    unsigned int x;
-    static const u_int8_t tablilla[] =
+    uint8_t x;
+    static const uint8_t tablilla[] =
     {
-            0xF3, 0x26, 0x81, 0xC4, 0x39, 0x86, 0xDB, 0x92, 0x71, 0xA3, 0xB9, 0xE6,
-            0x53, 0x7A, 0x95, 0x7C,
+        0xF3, 0x26, 0x81, 0xC4, 0x39, 0x86, 0xDB, 0x92,
+        0x71, 0xA3, 0xB9, 0xE6, 0x53, 0x7A, 0x95, 0x7C,
     };
 
-    for(x=0;x<strlen(Password);x++)
-        *(output+x) =  Password[x] ^ tablilla[x];
+    for (x = 0; x < strlen(Password); x++)
+    {
+        output[x] = Password[x] ^ tablilla[x];
+    }
 }
 
 
@@ -621,7 +355,7 @@ void FD_Init(int8_t fd)
     }
 }
 
-void FD_Timeout(u_int32_t sec, u_int32_t usec)
+void FD_Timeout(uint32_t sec, uint32_t usec)
 {
     tv.tv_sec = sec;
     tv.tv_usec = usec;
@@ -656,7 +390,7 @@ void FD_Add(int32_t sock, int8_t fd)
     }
 }
 
-void FD_Del( int32_t sock, int8_t whichfd )
+void FD_Del(int32_t sock, int8_t whichfd)
 {
     if (sock < 0) return;
 
@@ -736,28 +470,12 @@ int FD_Select(int8_t fd)
     return res;
 }
 
-/* Get Time in MicroSeconds, and if value is smaller than the MicroSeconds
- * at the very moment, then return -1
- */
-
-long YSM_GetMicroTime(long input)
-{
-    struct timeval rtimeout;
-
-    if (!gettimeofday(&rtimeout, NULL))
-    {
-        if (!input || rtimeout.tv_usec < input)
-            return rtimeout.tv_usec;
-    }
-    return -1;
-}
-
-void YSM_Thread_Sleep(unsigned long seconds, unsigned long ms)
+void threadSleep(unsigned long seconds, unsigned long ms)
 {
     struct timeval  now;
     struct timespec expected;
-    pthread_mutex_t    condition_mutex;
-    pthread_cond_t    condition_cond;
+    pthread_mutex_t condition_mutex;
+    pthread_cond_t  condition_cond;
 
     /* Unix function */
     gettimeofday(&now, NULL);
@@ -765,36 +483,38 @@ void YSM_Thread_Sleep(unsigned long seconds, unsigned long ms)
     expected.tv_sec = now.tv_sec + seconds;
     expected.tv_nsec = (now.tv_usec * 1000) + (ms * 1000000);
 
-    /*** don't let nsec become seconds ***/
+    /* don't let nsec become seconds */
     if (expected.tv_nsec >= 1000000000)
     {
         expected.tv_sec += 1;
         expected.tv_nsec -= 1000000000;
     }
 
-    pthread_mutex_init( &condition_mutex, NULL );
-    pthread_mutex_lock( &condition_mutex );
+    pthread_mutex_init(&condition_mutex, NULL);
+    pthread_mutex_lock(&condition_mutex);
 
     /* Now! Go to sleep for a second, y0 arent paid for nuthn boy */
-    pthread_cond_init( &condition_cond, NULL );
-    pthread_cond_timedwait( &condition_cond, &condition_mutex, &expected );
-    pthread_cond_destroy( &condition_cond );
+    pthread_cond_init(&condition_cond, NULL);
+    pthread_cond_timedwait(&condition_cond, &condition_mutex, &expected);
+    pthread_cond_destroy(&condition_cond);
 
-    pthread_mutex_unlock( &condition_mutex );
-    pthread_mutex_destroy( &condition_mutex );
+    pthread_mutex_unlock(&condition_mutex);
+    pthread_mutex_destroy(&condition_mutex);
 }
 
-char * YSM_gettime(time_t Time, char *Buffer, size_t Length)
+char *YSM_gettime(time_t timestamp, char *buf, size_t len)
 {
-    if (Time) {
-        struct tm *tp;
+    struct tm *tp;
 
-        tp = localtime(&Time);    /* FIXME: not thread safe */
-        strftime(Buffer, Length, "%d %b %Y %H:%M:%S", tp);
-    } else
-        strcpy(Buffer, "Unknown");
+    if (timestamp)
+    {
+        tp = localtime(&timestamp);    /* FIXME: not thread safe */
+        strftime(buf, len, "%d %b %Y %H:%M:%S", tp);
+    }
+    else
+        strcpy(buf, "Unknown");
 
-    return (Buffer);
+    return buf;
 }
 
 /*

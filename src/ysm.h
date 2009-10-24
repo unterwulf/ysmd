@@ -1,36 +1,21 @@
-/*
--======================== ysmICQ client ============================-
-        Having fun with a boring Protocol
--============================ YSM.h ================================-
-
-YSM (YouSickMe) ICQ Client. An Original Multi-Platform ICQ client.
-Copyright (C) 2002 rad2k Argentina.
-
-YSM is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
-
-For Contact information read the AUTHORS file.
-
-*/
-
 #ifndef _YSM_H_
 #define _YSM_H_
 
 #include "config.h"
 #include "compat.h"
-#include "lists.h"
 #include "misc.h"
+#include "bytestream.h"
+
+#ifdef DEBUG
+
+#define DEBUG_PRINT(fmt, args...) \
+    printf("DEBUG: [%s:%d] %s " fmt "\n", __FILE__, __LINE__, __FUNCTION__, ## args)
+
+#else
+
+#define DEBUG_PRINT(fmt, args...)
+
+#endif
 
 #define MAX_PATH               256
 #define MAX_SEQS_FILED         50
@@ -60,14 +45,10 @@ For Contact information read the AUTHORS file.
 /* Required for log files parsing watch out for MAX_LOGSEP_LEN  */
 #define YSM_LOG_SEPARATOR      "$YSM$"
 
-/* AFK definitions */
-#define YSM_AFKFILENAME        "afk-log"
-#define YSM_AFK_MESSAGE        "I'm AFK (away from keyboard) right now. "\
-                               "Your message has been saved. I'll be back shortly! :)"
-/* Seconds to wait before re-sending an afk message (skip flooding) */
-#define MINIMUM_AFK_WAIT       30
-
 #define YSM_CHAT_MESSAGE       "I'm busy in a conversation. Your message has been logged. I'll get back to you ASAP."
+
+#define NOT_A_SLAVE            (uint8_t *)"[not a slave]"
+/* cast to uint8_t* is needed to avoid compiler warning */
 
 /* Authorization Request definitions */
 
@@ -126,7 +107,6 @@ For Contact information read the AUTHORS file.
 #define STATUS_OCCUPIED    0x0011
 #define STATUS_FREE_CHAT   0x0020
 #define STATUS_AWAY        0x0001
-#define STATUS_AFK         0xfed0
 #define STATUS_UNKNOWN     0xdead
 
 #define STATUS_FLWEBAWARE  0x0001
@@ -135,38 +115,30 @@ For Contact information read the AUTHORS file.
 #define STATUS_FLDC_AUTH   0x1000
 #define STATUS_FLDC_CONT   0x2000
 
-/* Definition of Queries */
-#define SLAVE_NAME         0x01
-#define SLAVE_UIN          0x02
-#define SLAVE_REQID        0x03
-
 #define INFO_MAIN          0x01
 #define INFO_HP            0x02
 #define INFO_WORK          0x03
 #define INFO_ABOUT         0x04
 
-#define UPDATE_SLAVE       0x00
-#define UPDATE_NICK        0x01
-
-#define YSM_INFO_NICK      0x00
-#define YSM_INFO_EMAIL     0x01
-
 /* Definition of Message Types for Displaying functions */
-#define YSM_MESSAGE_         0x01
-#define YSM_MESSAGE_FILE     0x03
-#define YSM_MESSAGE_URL      0x04
-#define YSM_MESSAGE_AUTH     0x06
-#define YSM_MESSAGE_AUTHNOT  0x07
-#define YSM_MESSAGE_AUTHOK   0x08
-#define YSM_MESSAGE_ADDED    0x0c
-#define YSM_MESSAGE_PAGER    0x0d
-#define YSM_MESSAGE_CONTACTS 0x13
-#define YSM_MESSAGE_GREET    0x1a
-#define YSM_MESSAGE_GETAWAY  0xe8
-#define YSM_MESSAGE_GETOCC   0xe9
-#define YSM_MESSAGE_GETNA    0xea
-#define YSM_MESSAGE_GETDND   0xeb
-#define YSM_MESSAGE_GETFFC   0xec
+typedef enum {
+    YSM_MESSAGE_UNDEF    = 0x00,
+    YSM_MESSAGE_NORMAL   = 0x01,
+    YSM_MESSAGE_FILE     = 0x03,
+    YSM_MESSAGE_URL      = 0x04,
+    YSM_MESSAGE_AUTH     = 0x06,
+    YSM_MESSAGE_AUTHNOT  = 0x07,
+    YSM_MESSAGE_AUTHOK   = 0x08,
+    YSM_MESSAGE_ADDED    = 0x0C,
+    YSM_MESSAGE_PAGER    = 0x0D,
+    YSM_MESSAGE_CONTACTS = 0x13,
+    YSM_MESSAGE_GREET    = 0x1A,
+    YSM_MESSAGE_GETAWAY  = 0xE8,
+    YSM_MESSAGE_GETOCC   = 0xE9,
+    YSM_MESSAGE_GETNA    = 0xEA,
+    YSM_MESSAGE_GETDND   = 0xEB,
+    YSM_MESSAGE_GETFFC   = 0xEC,
+} msg_type_t;
 
 /* Definition of ERROR standards */
 #define ERROR_CODE        0
@@ -177,62 +149,63 @@ For Contact information read the AUTHORS file.
 #define ERROR_CRITICAL_M  "There has been a CRITICAL ERROR. duck!\n"
 
 typedef int32_t uin_t;
+typedef int8_t  bool_t;
 
-struct YSM_TIMING_INFO
+typedef struct
 {
-    time_t LastMessage;
-    time_t Signon;
-    time_t StatusChange;
-};
+    time_t signOn;
+    time_t lastMessage;
+    time_t statusChange;
+} buddy_timing_t;
 
-struct YSM_MAIN_INFO
+typedef struct
 {
-    char  NickName[MAX_NICK_LEN+1];
-    char  FirstName[MAX_NICK_LEN+1];
-    char  LastName[MAX_NICK_LEN+1];
-    char  email[MAX_NICK_LEN+1];
-    char  city[MAX_NICK_LEN+1];
-    char  state[MAX_NICK_LEN+1];
-    char  gender;
-    u_int8_t age;
-};
+    uint8_t nickName[MAX_NICK_LEN+1];
+    uint8_t firstName[MAX_NICK_LEN+1];
+    uint8_t lastName[MAX_NICK_LEN+1];
+    uint8_t email[MAX_NICK_LEN+1];
+    uint8_t city[MAX_NICK_LEN+1];
+    uint8_t state[MAX_NICK_LEN+1];
+    uint8_t gender;
+    uint8_t age;
+} buddy_main_info_t;
 
-struct YSM_NETWORK_CONNECTION
+typedef struct
 {
-    int32_t   rSocket;
-    int8_t    auth_host[MAX_PATH];
-    int8_t    cookie_host[MAX_PATH];
-    u_int16_t auth_port;
-    u_int16_t cookie_port;
-};
+    int32_t  rSocket;
+    int8_t   authHost[MAX_PATH];
+    int8_t   cookieHost[MAX_PATH];
+    uint16_t authPort;
+    uint16_t cookiePort;
+} network_connection_t;
 
 struct YSM_DIRECT_CONNECTION_FILETINFO
 {
-    u_int32_t size;
-    u_int32_t totsize;
-    int8_t    name[MAX_PEER_FILENAMEL];
-    u_int16_t num;
-    u_int16_t totnum;
-    u_int16_t rPort;
-    int32_t   speed;
-    int32_t   kbs;
-    time_t    statstime;
-    int32_t   statsbytes;
-    int32_t   rSocket;
-    u_int16_t lPort;
+    uint32_t size;
+    uint32_t totsize;
+    int8_t   name[MAX_PEER_FILENAMEL];
+    uint16_t num;
+    uint16_t totnum;
+    uint16_t rPort;
+    int32_t  speed;
+    int32_t  kbs;
+    time_t   statstime;
+    int32_t  statsbytes;
+    int32_t  rSocket;
+    uint16_t lPort;
 #define DC_TRANSFERTIMEOUT    30    /* seconds */
     FILE     *fd;
 };
 
-struct YSM_DIRECT_CONNECTION
+typedef struct
 {
-    u_int16_t                seq_in;
-    u_int16_t                seq_out;
+    uint16_t                seq_in;
+    uint16_t                seq_out;
     int32_t                  rSocket;
-    u_int16_t                rPort;
-    u_int32_t                rIP_int;
-    u_int32_t                rIP_ext;
-    u_int16_t                version;
+    uint16_t                rPort;
+    uint32_t                rIP_int;
+    uint32_t                rIP_ext;
+    uint16_t                version;
     int32_t                  rCookie;
 #define DC_EXPECTDATA    0x01
 #define DC_EXPECTNEG    0x02
@@ -243,19 +216,19 @@ struct YSM_DIRECT_CONNECTION
 #define DC_RECEIVING    0x40
 #define DC_ACTIVITY    0x80
 
-    u_int8_t                 flags;
+    uint8_t                 flags;
     struct YSM_DIRECT_CONNECTION_FILETINFO    finfo;
-};
+} direct_connection_t;
 
-struct YSM_SPECIAL_STATUS
+typedef struct
 {
     int8_t  birthday;
-    int32_t IgnoreID;
-    int32_t VisibleID;
-    int32_t InvisibleID;
-    int32_t BudID;
-    int32_t grpID;
-};
+    int32_t ignoreId;
+    int32_t visibleId;
+    int32_t invisibleId;
+    int32_t budId;
+    int32_t grpId;
+} buddy_special_status_t;
 
 #define YSM_PROXY_HTTPS      0x01
 #define YSM_PROXY_AUTH       0x02
@@ -265,154 +238,113 @@ typedef struct
 {
     int8_t      username[MAX_PATH];
     int8_t      password[MAX_PATH];
-    int8_t      proxy_host[MAX_PATH];
-    u_int16_t   proxy_port;
-    u_int8_t    proxy_flags;
-} ysm_proxy_info_t;
-
-typedef struct
-{
-#define FL_OVERWRITTEN  0x01
-#define FL_RAW          0x02
-#define FL_BUSYDISPLAY  0x04
-#define FL_COMFORTABLEM 0x08
-#define FL_AFKM         0x10
-#define FL_CHATM        0x20
-#define FL_AUTOAWAY     0x40
-    u_int8_t    flags;
-} ysm_prompt_status_t;
+    int8_t      host[MAX_PATH];
+    uint16_t   port;
+    uint8_t    flags;
+} proxy_info_t;
 
 #define FL_LOGGEDIN          0x01
 #define FL_DOWNLOADEDSLAVES  0x02
 
 typedef struct
 {
-    u_int16_t    seqnum;
-    u_int32_t    onlineslaves;
+    uint16_t    seqnum;
 
     /* queued slave scans */
-    int32_t      scanqueue;
+    int32_t     scanqueue;
 
     /* buddy list information */
-    int32_t      blentries;
-    int32_t      blgroupsidentries;
-    int8_t      *blgroupsid;
-    int32_t      blusersidentries;
-    int8_t      *blusersid;
-    u_int32_t    blysmgroupid;
-    u_int16_t    blprivacygroupid;
-    u_int8_t     flags;
+    int32_t     blentries;
+    int32_t     blgroupsidentries;
+    bsd_t       blgroupsid;
+    int32_t     blusersidentries;
+    bsd_t       blusersid;
+    uint32_t    blysmgroupid;
+    uint16_t    blprivacygroupid;
+    uint8_t     flags;
 } ysm_server_info_t;
 
-struct ENCRYPTION_INFO
+typedef struct
 {
 #define MAX_KEY_LEN    64 /* 512 bits */
     int8_t       strkey[MAX_KEY_LEN+1];
     keyInstance  key_out;
     keyInstance  key_in;
-};
+} encryption_info_t;
 
 typedef struct
 {
-    uin_t                Uin;
-    u_int16_t            status;
-    u_int16_t            status_flags;
+    uin_t                uin;
+    uint16_t             status;
+    uint16_t             status_flags;
     int8_t               password[MAX_PWD_LEN];
-    u_int8_t             flags;
+    uint8_t              flags;
     time_t               delta;
 
-    struct YSM_MAIN_INFO          info;
-    struct YSM_TIMING_INFO        timing;
-    ysm_proxy_info_t              proxy;
-    struct YSM_DIRECT_CONNECTION  d_con;
-    struct YSM_NETWORK_CONNECTION network;
+    buddy_main_info_t    info;
+    buddy_timing_t       timing;
+    proxy_info_t         proxy;
+    direct_connection_t  d_con;
+    network_connection_t network;
 } ysm_model_t;
 
 /* list types declaration */
 
-typedef struct
-{
-    COMMON_LIST
-
-    int8_t        *cmd_name;
-    int8_t        *cmd_alias;
-    int8_t        *cmd_help;
-    u_int16_t      cmd_groupid;
-    u_int16_t      cmd_margs;
-    void         (*cmd_func)(int32_t argc, int8_t **argv);
-} command_t;
-
 #define FL_SCANNED       0x01
-#define FL_LOG           0x02
-#define FL_ALERT         0x04
 #define FL_CHAT          0x08
+#define FL_DOWNLOADED    0x10
+#define FL_AUTHREQ       0x20
 
-typedef struct
-{
-    COMMON_LIST
-
-    uin_t                uin;
-    u_int32_t            fprint;
-    u_int8_t             caps;
-    u_int32_t            ReqID;
-    u_int16_t            status;
-    u_int16_t            status_flags;
-    int8_t               DownloadedFlag;
-    u_int8_t             flags;
-    time_t               LastAFK;
-    struct YSM_SPECIAL_STATUS    BudType;
-    struct YSM_TIMING_INFO       timing;
-    struct YSM_DIRECT_CONNECTION d_con;
-    struct YSM_MAIN_INFO         info;
-    struct ENCRYPTION_INFO       crypto;
-} slave_t;
+#define IS_DOWNLOADED(x) ((x)->flags & FL_DOWNLOADED)
 
 typedef struct {
-    u_int8_t   logall;
-    u_int8_t   newlogsfirst;
-    u_int8_t   verbose;
-    u_int8_t   afkmaxshown;
-    u_int8_t   afkminimumwait;
-    u_int8_t   awaytime;
-    u_int8_t   spoof;
-    u_int8_t   antisocial;
-    u_int8_t   updatenicks;
-    u_int8_t   dcdisable;
-    u_int8_t   dclan;
-    u_int16_t  dcport1;
-    u_int16_t  dcport2;
-    int32_t    forward;
-    char       charset_trans[MAX_CHARSET + 4];
-    char       charset_local[MAX_CHARSET + 4];
+    uint8_t   verbose;
+    uint8_t   awaytime;
+    uint8_t   spoof;
+    uint8_t   antisocial;
+    uint8_t   updateNicks;
+    uint8_t   dcdisable;
+    uint8_t   dclan;
+    uint16_t  dcport1;
+    uint16_t  dcport2;
+    uin_t     forward;
+    char      charsetTrans[MAX_CHARSET + 4];
+    char      charsetLocal[MAX_CHARSET + 4];
 
-    int8_t     AFKMessage[MAX_DATA_LEN+1];
-    int8_t     CHATMessage[MAX_DATA_LEN+1];
-    int8_t     BrowserPath[MAX_DATA_LEN+1];
+    int8_t    CHATMessage[MAX_DATA_LEN+1];
+    enum {OT_FIFO, OT_STDIN, OT_STDOUT} outputType;
+    int8_t    outputPath[MAX_DATA_LEN+1];
 } ysm_config_t;
 
 typedef struct {
-    u_int8_t reason_to_suicide;
-    u_int8_t reconnecting;
-    slave_t *last_read;
-    slave_t *last_sent;
-    int8_t   last_message[MAX_DATA_LEN + 1];
-    int8_t   last_url[MAX_DATA_LEN + 1];
-    int8_t   config_file[MAX_PATH];
-    int8_t   slaves_file[MAX_PATH];
-    int8_t   config_dir[MAX_PATH];
+    uint8_t  reasonToSuicide;
+    uint8_t  reconnecting;
+    uin_t    lastRead;
+    uin_t    lastSent;
+    uint8_t  lastMessage[MAX_DATA_LEN + 1];
+    uint8_t  lastUrl[MAX_DATA_LEN + 1];
+    uint8_t  configFile[MAX_PATH];
+    uint8_t  slavesFile[MAX_PATH];
+    uint8_t  configDir[MAX_PATH];
+
+#define FL_OVERWRITTEN  0x01
+#define FL_RAW          0x02
+#define FL_BUSYDISPLAY  0x04
+#define FL_COMFORTABLEM 0x08
+#define FL_CHATM        0x20
+#define FL_AUTOAWAY     0x40
+
+    uint8_t  promptFlags;
 } ysm_state_t;
 
 /* exports */
 extern ysm_model_t           YSM_USER;
 extern ysm_server_info_t     g_sinfo;
-extern ysm_prompt_status_t   g_promptstatus;
 extern ysm_config_t          g_cfg;
 extern ysm_state_t           g_state;
+extern sem_t                 semOutput;
 #ifdef YSM_TRACE_MEMLEAK
 extern int unfreed_blocks;
 #endif
-
-extern dl_list_t g_slave_list;
-extern dl_list_t g_command_list;
 
 #endif /* _YSM_H_ */

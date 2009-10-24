@@ -1,30 +1,3 @@
-/*    $Id: YSM_Compat.h,v 1.3 2005/02/06 01:10:20 rad2k Exp $    */
-/*
--======================== ysmICQ client ============================-
-        Having fun with a boring Protocol
--======================== YSM_Compat.h ================================-
-
-YSM (YouSickMe) ICQ Client. An Original Multi-Platform ICQ client.
-Copyright (C) 2002 rad2k Argentina.
-
-YSM is free software; you can redistribute it and/or
-modify it under the terms of the GNU General Public License
-as published by the Free Software Foundation; either version 2
-of the License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
-
-For Contact information read the AUTHORS file.
-
-*/
-
 #ifndef _COMPAT_H_
 #define _COMPAT_H_
 
@@ -51,9 +24,8 @@ For Contact information read the AUTHORS file.
 
 #define THREADS_COUNT    0x3
 
-#if defined(YSM_WITH_THREADS)
 #include <pthread.h>
-#endif
+#include <semaphore.h>
 
 /* used in *nix systems lacking posix data types */
 #ifdef MISSING_SIGNED
@@ -63,9 +35,9 @@ typedef signed int     int32_t;
 #endif
 
 #ifdef MISSING_UNSIGNED
-typedef unsigned char  u_int8_t;
-typedef unsigned short u_int16_t;
-typedef unsigned int   u_int32_t;
+typedef unsigned char  uint8_t;
+typedef unsigned short uint16_t;
+typedef unsigned int   uint32_t;
 #endif
 
 #include <sys/types.h>

@@ -21,16 +21,6 @@
 #define YSM_COMMANDSTIME       15
 #define YSM_FIFO               "/tmp/ysm"
 
-/* YSM_SILENT_SLAVES_STATUS:
- * if active, only 'x to offline' and 'offline to x' status changes are shown.
- *********************************************************/
-#define YSM_SILENT_SLAVES_STATUS
-
-/* COMPACT_DISPLAY:
- * if active, YSM output (status changes, listings, etc) is more compact.
- *********************************************************/
-#undef COMPACT_DISPLAY
-
 /* YSM_WAR_MODE:
  * Undocumented 
  *********************************************************/
