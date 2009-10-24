@@ -7,7 +7,7 @@
 CC=		@CC@
 CFLAGS=		-W -Wno-unused -Wbad-function-cast -Wcast-qual -Wshadow -Wnested-externs -Wstrict-prototypes -Waggregate-return @CFLAGS@
 DEFS=		@DEFS@
-CPPFLAGS=	-I. -Irijndael @CPPFLAGS@
+CPPFLAGS=	-I. -Irijndael -I../include @CPPFLAGS@
 LIBS=		@LIBS@ @LDFLAGS@
 CMDOBJS=	@CMDOBJS@
 
